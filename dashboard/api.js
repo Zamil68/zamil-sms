@@ -2,10 +2,9 @@
 "use strict";
 
 // 🔥 LIVE DEPLOYMENT URL SWITCHER
-// Change this URL to your actual Render/Vercel backend URL when deploying live!
 const BACKEND_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') 
     ? 'http://localhost:3000' 
-    : 'https://YOUR-LIVE-BACKEND-URL.onrender.com'; 
+    : ''; // <-- EMPTY STRING for Vercel (same domain)
 
 // ── cli-search body obfuscation ───────────────────────────────
 var CLI_BODY_KEY = "LaMixSMS-CliBody-v1";
