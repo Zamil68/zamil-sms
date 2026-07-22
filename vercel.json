@@ -9,6 +9,9 @@
   ],
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/index.js" },
+    { "src": "/login/(.*)", "dest": "/login/$1" },
+    { "src": "/dashboard/(.*)", "dest": "/dashboard/$1" },
+    { "src": "/branding/(.*)", "dest": "/branding/$1" },
     { "src": "/(.*)", "dest": "/$1" }
   ]
 }
