@@ -56,16 +56,24 @@ module.exports = async (req, res) => {
   const url = req.url.replace(/^\/api/, '');
   
   try {
-    if (url === '/login' && req.method === 'POST') {
+   if (url === '/login' && req.method === 'POST') {
       const { username, password } = req.body;
+      console.log("Login attempt:", username, password); // DEBUG LOG
+      
       if (!username || !password) return error(res, 400, 'Username and password required');
+      
       const users = loadJSON('users.json');
+      console.log("Loaded users:", users); // DEBUG LOG
+      
       const user = users.find(u => u.username.toLowerCase() === username.toLowerCase() && u.password === password);
+      
       if (user) {
         const token = generateToken();
         sessions[token] = { username: user.username, clientId: user.clientId, assignedNumbers: user.assignedNumbers || [], createdAt: Date.now() };
         return ok(res, { session: token, username: user.username, clientId: user.clientId, redirect: '/dashboard/dashboard.html' });
       }
+      
+      console.log("Login failed: User not found in", users); // DEBUG LOG
       return error(res, 401, 'Invalid username or password');
     }
 
