@@ -4,5 +4,11 @@
     "password": "12345",
     "clientId": "101",
     "assignedNumbers": ["255651498861", "96893010505"]
+  },
+  {
+    "username": "test",
+    "password": "test",
+    "clientId": "102",
+    "assignedNumbers": []
   }
 ]
