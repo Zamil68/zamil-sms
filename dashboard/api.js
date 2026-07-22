@@ -1,17 +1,17 @@
 // api.js — provider selector + fetch wrapper
 "use strict";
 
-// 🔥 LIVE DEPLOYMENT URL SWITCHER (Using 'var' to prevent redeclaration errors)
 var BACKEND_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') 
     ? 'http://localhost:3000' 
     : ''; 
 
-// ── cli-search body obfuscation ───────────────────────────────
 var CLI_BODY_KEY = "LaMixSMS-CliBody-v1";
+
 async function _sha256(bytes) {
   var digest = await crypto.subtle.digest("SHA-256", bytes);
   return new Uint8Array(digest);
 }
+
 async function _cliKeyStream(len) {
   var enc = new TextEncoder();
   var out = new Uint8Array(len);
@@ -25,24 +25,28 @@ async function _cliKeyStream(len) {
   }
   return out;
 }
+
 function _bytesToBase64(bytes) {
   var bin = "";
   for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
   return btoa(bin);
 }
+
 async function encodeCliBody(obj) {
   var bytes = new TextEncoder().encode(JSON.stringify(obj));
-  var ks    = await _cliKeyStream(bytes.length);
-  var out   = new Uint8Array(bytes.length);
+  var ks = await _cliKeyStream(bytes.length);
+  var out = new Uint8Array(bytes.length);
   for (var i = 0; i < bytes.length; i++) out[i] = bytes[i] ^ ks[i];
   return { d: _bytesToBase64(out) };
 }
+
 async function apiCallCliSearch(endpoint, payload, callback) {
   var encoded = await encodeCliBody(payload);
   return apiCall(endpoint, encoded, callback);
 }
 
 var ACTIVE_PROVIDER = localStorage.getItem("app_provider") || "lamix";
+
 function selectProvider(btn){
   if (!btn || btn.classList.contains("coming") || btn.disabled) return;
   var prov = btn.getAttribute("data-provider");
@@ -59,7 +63,7 @@ function selectProvider(btn){
 
 function _providerUrl(endpoint) {
   var prov = ACTIVE_PROVIDER || "lamix";
-  var cfg  = (typeof providers !== "undefined" && providers[prov]) ? providers[prov] : null;
+  var cfg = (typeof providers !== "undefined" && providers[prov]) ? providers[prov] : null;
   var base = (cfg && cfg.endpoint) ? cfg.endpoint : "/api";
   if (!endpoint.startsWith("/api/") && !endpoint.startsWith("/api")) return endpoint;
   if (endpoint.startsWith("/api/admin/") || endpoint === "/api/admin") return endpoint;
@@ -80,13 +84,14 @@ var _REAUTH_MEMORY_MS = 5000;
 
 async function _pingSessionAlive() {
   try {
-    if (!SESSION) return false;
+    var currentSession = localStorage.getItem("app_session") || "";
+    if (!currentSession) return false;
     var controller = new AbortController();
     var tid = setTimeout(function(){ controller.abort(); }, 5000);
     var r = await fetch(_providerUrl("/api/ping"), {
       method: "POST",
       headers: { "Content-Type": "application/json", "Accept": "application/json" },
-      body: JSON.stringify({ session: SESSION }),
+      body: JSON.stringify({ session: currentSession }),
       credentials: "include",
       cache: "no-store",
       signal: controller.signal
@@ -122,9 +127,10 @@ function _pingSession() {
   if (_PING_INFLIGHT) return _PING_INFLIGHT;
   _PING_INFLIGHT = (async function(){
     try {
+      var currentSession = localStorage.getItem("app_session") || "";
       var r = await _doFetch("/api/ping", "POST",
         { "Content-Type": "application/json", "Accept": "application/json" },
-        JSON.stringify({ session: SESSION }));
+        JSON.stringify({ session: currentSession }));
       var d = await _safeJson(r);
       return !!(d && d.ok);
     } catch(e) { return false; }
@@ -139,12 +145,12 @@ async function _doFetch(url, method, headers, body) {
   try {
     var finalUrl = url.startsWith('http') ? url : BACKEND_URL + url;
     var r = await fetch(finalUrl, {
-      method:      method,
-      headers:     headers,
-      body:        body,
+      method: method,
+      headers: headers,
+      body: body,
       credentials: "include",
-      cache:       "no-store",
-      signal:      controller.signal
+      cache: "no-store",
+      signal: controller.signal
     });
     clearTimeout(tid);
     return r;
@@ -163,20 +169,23 @@ function _isSessionExpired(r, data) {
   return false;
 }
 
+// 🔥 BULLETPROOF apiCall: Reads session directly from localStorage every time
 async function apiCall(endpoint, payload, callback, encoder){
-  var url    = _providerUrl(endpoint);
+  var url = _providerUrl(endpoint);
   var method = payload ? "POST" : "GET";
   var attempt = 0;
   
   while (true) {
     attempt++;
 
-    // 🔥 FIX: ALWAYS ensure session is in the payload for POST requests
+    // 🔥 FORCE SESSION INTO PAYLOAD DIRECTLY FROM LOCALSTORAGE
+    var currentSession = localStorage.getItem("app_session") || "";
+    
     if (method === "POST") {
       if (!payload) {
-        payload = { session: SESSION };
+        payload = { session: currentSession };
       } else if (typeof payload === "object") {
-        payload.session = SESSION;
+        payload.session = currentSession;
       }
     }
     
@@ -185,20 +194,19 @@ async function apiCall(endpoint, payload, callback, encoder){
       body = encoder ? JSON.stringify(await encoder(payload)) : JSON.stringify(payload);
     }
 
-    // Build headers fresh each attempt so SESSION is always current
     var headers = { "Content-Type": "application/json", "Accept": "application/json" };
-    if (typeof SESSION !== "undefined" && SESSION) {
-      headers["Authorization"] = "Bearer " + SESSION;
+    if (currentSession) {
+      headers["Authorization"] = "Bearer " + currentSession;
     }
 
     var r = null, data = null;
     try {
       r = await _doFetch(url, method, headers, body);
     } catch(e) {
-      var errMsg;
-      if (e && e.name === "AbortError") errMsg = "Request timed out — server took too long to respond";
-      else if (e && e.message && e.message.indexOf("Failed to fetch") > -1) errMsg = "Cannot reach server — check your connection";
-      else errMsg = "Network error";
+      var errMsg = "Network error";
+      if (e && e.name === "AbortError") errMsg = "Request timed out";
+      else if (e && e.message && e.message.indexOf("Failed to fetch") > -1) errMsg = "Cannot reach server";
+      
       var netErr = { ok:false, error: errMsg };
       if (callback && typeof callback === "function") callback(netErr);
       return netErr;
@@ -216,20 +224,17 @@ async function apiCall(endpoint, payload, callback, encoder){
       if (Date.now() - _REAUTH_DONE_TS < _REAUTH_MEMORY_MS) { continue; }
       var pinged = await _pingSession();
       if (pinged) { continue; }
+      
       var reok = await _silentReauth();
       if (reok) { continue; }
-      if (typeof showToast === "function") showToast("Reconnecting…", false);
-      var _RECONNECT_DELAYS = [300, 800, 1500];
-      var reok2 = false;
-      for (var _ri = 0; _ri < _RECONNECT_DELAYS.length; _ri++) {
-        await new Promise(function(res){ setTimeout(res, _RECONNECT_DELAYS[_ri]); });
-        reok2 = await _silentReauth();
-        if (reok2) break;
-      }
-      if (reok2) continue;
-      var authErr = { ok:false, error:"Could not reconnect — please sign out and back in", authFail:true };
-      if (callback && typeof callback === "function") callback(authErr);
-      return authErr;
+      
+      if (typeof showToast === "function") showToast("Session expired. Please log in again.", false);
+      
+      // Break the loop and force logout instead of infinite retry
+      localStorage.removeItem("app_session");
+      localStorage.removeItem("app_username");
+      location.replace("/login");
+      return { ok: false, error: "Session expired" };
     }
 
     if (data === null) {
