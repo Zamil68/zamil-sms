@@ -239,7 +239,7 @@ async function apiCall(endpoint, payload, callback, encoder){
       return { ok: false, error: "Session expired" };
     }
 
-    if (data === null) {
+   if (data === null) {
       var ct = (r.headers && r.headers.get) ? (r.headers.get("content-type") || "") : "";
       if (ct.indexOf("html") > -1) {
         data = { ok:false, error:"Server returned unexpected response (HTTP " + r.status + ")" };
@@ -247,6 +247,14 @@ async function apiCall(endpoint, payload, callback, encoder){
         data = { ok:false, error:"Unexpected response from server (HTTP " + r.status + ")" };
       }
     }
+
+    // 🔥 FRONTEND RESPONSE LOG
+    console.log("✅ API RESPONSE for", endpoint, ":", data);
+
+    if (callback && typeof callback === "function") callback(data);
+    return data;
+  }
+}
 
     if (callback && typeof callback === "function") callback(data);
     return data;
