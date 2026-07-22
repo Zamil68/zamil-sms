@@ -1,10 +1,10 @@
 // api.js — provider selector + fetch wrapper
 "use strict";
 
-// 🔥 LIVE DEPLOYMENT URL SWITCHER
-const BACKEND_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') 
+// 🔥 LIVE DEPLOYMENT URL SWITCHER (Using 'var' to prevent redeclaration errors)
+var BACKEND_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') 
     ? 'http://localhost:3000' 
-    : ''; // <-- EMPTY STRING for Vercel (same domain)
+    : ''; 
 
 // ── cli-search body obfuscation ───────────────────────────────
 var CLI_BODY_KEY = "LaMixSMS-CliBody-v1";
@@ -133,14 +133,11 @@ function _pingSession() {
   return _PING_INFLIGHT;
 }
 
-// 🔥 UPDATED FETCH FOR LIVE DEPLOYMENT
 async function _doFetch(url, method, headers, body) {
   var controller = new AbortController();
   var tid = setTimeout(function(){ controller.abort(); }, 20000);
   try {
-    // Automatically route to live backend if not on localhost
     var finalUrl = url.startsWith('http') ? url : BACKEND_URL + url;
-    
     var r = await fetch(finalUrl, {
       method:      method,
       headers:     headers,
