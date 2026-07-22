@@ -1,14 +1,17 @@
 // api.js — provider selector + fetch wrapper
 "use strict";
 
+// 🔥 LIVE DEPLOYMENT URL SWITCHER
+const BACKEND_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') 
+    ? 'http://localhost:3000' 
+    : ''; // <-- EMPTY STRING for Vercel (same domain)
+
 // ── cli-search body obfuscation ───────────────────────────────
 var CLI_BODY_KEY = "LaMixSMS-CliBody-v1";
-
 async function _sha256(bytes) {
   var digest = await crypto.subtle.digest("SHA-256", bytes);
   return new Uint8Array(digest);
 }
-
 async function _cliKeyStream(len) {
   var enc = new TextEncoder();
   var out = new Uint8Array(len);
@@ -22,13 +25,11 @@ async function _cliKeyStream(len) {
   }
   return out;
 }
-
 function _bytesToBase64(bytes) {
   var bin = "";
   for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
   return btoa(bin);
 }
-
 async function encodeCliBody(obj) {
   var bytes = new TextEncoder().encode(JSON.stringify(obj));
   var ks    = await _cliKeyStream(bytes.length);
@@ -36,14 +37,12 @@ async function encodeCliBody(obj) {
   for (var i = 0; i < bytes.length; i++) out[i] = bytes[i] ^ ks[i];
   return { d: _bytesToBase64(out) };
 }
-
 async function apiCallCliSearch(endpoint, payload, callback) {
   var encoded = await encodeCliBody(payload);
   return apiCall(endpoint, encoded, callback);
 }
 
 var ACTIVE_PROVIDER = localStorage.getItem("app_provider") || "lamix";
-
 function selectProvider(btn){
   if (!btn || btn.classList.contains("coming") || btn.disabled) return;
   var prov = btn.getAttribute("data-provider");
@@ -105,10 +104,7 @@ function _silentReauth() {
   _REAUTH_INFLIGHT = (async function(){
     try {
       var alive = await _pingSessionAlive();
-      if (alive) {
-        _REAUTH_DONE_TS = Date.now();
-        return true;
-      }
+      if (alive) { _REAUTH_DONE_TS = Date.now(); return true; }
       if (typeof tryReauth === "function") {
         var ok = await tryReauth();
         if (ok) _REAUTH_DONE_TS = Date.now();
@@ -124,38 +120,32 @@ function _silentReauth() {
 var _PING_INFLIGHT = null;
 function _pingSession() {
   if (_PING_INFLIGHT) return _PING_INFLIGHT;
-  
   _PING_INFLIGHT = (async function(){
     try {
       var r = await _doFetch("/api/ping", "POST",
         { "Content-Type": "application/json", "Accept": "application/json" },
-        JSON.stringify({ session: SESSION })
-      );
+        JSON.stringify({ session: SESSION }));
       var d = await _safeJson(r);
       return !!(d && d.ok);
-    } catch(e) { 
-      return false; 
-    } finally { 
-      setTimeout(function(){ _PING_INFLIGHT = null; }, 0); 
-    }
+    } catch(e) { return false; }
+    finally { setTimeout(function(){ _PING_INFLIGHT = null; }, 0); }
   })();
-  
   return _PING_INFLIGHT;
 }
 
-// ── CORE FETCH WITH BACKEND URL FIX ──
+// 🔥 UPDATED FETCH FOR LIVE DEPLOYMENT
 async function _doFetch(url, method, headers, body) {
   var controller = new AbortController();
   var tid = setTimeout(function(){ controller.abort(); }, 20000);
   try {
-    // ✅ FIX: Route API calls to the Node.js backend running on port 3000
-    var backendUrl = url.startsWith('http') ? url : 'http://localhost:3000' + url;
+    // Automatically route to live backend if not on localhost
+    var finalUrl = url.startsWith('http') ? url : BACKEND_URL + url;
     
-    var r = await fetch(backendUrl, {
+    var r = await fetch(finalUrl, {
       method:      method,
       headers:     headers,
       body:        body,
-      credentials: "include", // ✅ Changed to "include" for cross-port localhost development
+      credentials: "include",
       cache:       "no-store",
       signal:      controller.signal
     });
@@ -180,21 +170,15 @@ async function apiCall(endpoint, payload, callback, encoder){
   var url    = _providerUrl(endpoint);
   var method = payload ? "POST" : "GET";
   var attempt = 0;
-  
   while (true) {
     attempt++;
-
-    // ✅ Keep payload.session in sync with the live SESSION var on every attempt
     if (payload && typeof payload === "object" && "session" in payload) {
       payload.session = SESSION;
     }
-    
     var body = null;
     if (payload) {
       body = encoder ? JSON.stringify(await encoder(payload)) : JSON.stringify(payload);
     }
-
-    // Build headers fresh each attempt so SESSION is always current
     var headers = { "Content-Type": "application/json", "Accept": "application/json" };
     if (typeof SESSION !== "undefined" && SESSION) headers["Authorization"] = "Bearer " + SESSION;
 
@@ -203,13 +187,9 @@ async function apiCall(endpoint, payload, callback, encoder){
       r = await _doFetch(url, method, headers, body);
     } catch(e) {
       var errMsg;
-      if (e && e.name === "AbortError") {
-        errMsg = "Request timed out — server took too long to respond";
-      } else if (e && e.message && e.message.indexOf("Failed to fetch") > -1) {
-        errMsg = "Cannot reach server — check your connection";
-      } else {
-        errMsg = "Network error";
-      }
+      if (e && e.name === "AbortError") errMsg = "Request timed out — server took too long to respond";
+      else if (e && e.message && e.message.indexOf("Failed to fetch") > -1) errMsg = "Cannot reach server — check your connection";
+      else errMsg = "Network error";
       var netErr = { ok:false, error: errMsg };
       if (callback && typeof callback === "function") callback(netErr);
       return netErr;
@@ -227,14 +207,9 @@ async function apiCall(endpoint, payload, callback, encoder){
       if (Date.now() - _REAUTH_DONE_TS < _REAUTH_MEMORY_MS) { continue; }
       var pinged = await _pingSession();
       if (pinged) { continue; }
-
       var reok = await _silentReauth();
-      if (reok) {
-        continue;
-      }
-      
+      if (reok) { continue; }
       if (typeof showToast === "function") showToast("Reconnecting…", false);
-      
       var _RECONNECT_DELAYS = [300, 800, 1500];
       var reok2 = false;
       for (var _ri = 0; _ri < _RECONNECT_DELAYS.length; _ri++) {
@@ -243,7 +218,6 @@ async function apiCall(endpoint, payload, callback, encoder){
         if (reok2) break;
       }
       if (reok2) continue;
-      
       var authErr = { ok:false, error:"Could not reconnect — please sign out and back in", authFail:true };
       if (callback && typeof callback === "function") callback(authErr);
       return authErr;
