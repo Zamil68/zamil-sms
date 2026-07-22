@@ -1,7 +1,7 @@
 "use strict";
 
-// 🔥 LIVE DEPLOYMENT URL SWITCHER
-const BACKEND_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') 
+// 🔥 LIVE DEPLOYMENT URL SWITCHER (Using 'var' to prevent redeclaration errors)
+var BACKEND_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') 
     ? 'http://localhost:3000' 
     : ''; 
 
@@ -78,7 +78,6 @@ async function doLogin() {
   showLoad("Authenticating…");
   
   try {
-    // 🔥 UPDATED: Route to live backend
     var loginUrl = login.url.startsWith('http') ? login.url : BACKEND_URL + login.url;
 
     var _loginRes = await fetch(loginUrl, {
@@ -203,7 +202,6 @@ async function tryReauth() {
     if (!user || !pass) return false;
     
     var login = _loginEndpoint();
-    // 🔥 UPDATED: Route to live backend
     var loginUrl = login.url.startsWith('http') ? login.url : BACKEND_URL + login.url;
 
     var res = await fetch(loginUrl, {
