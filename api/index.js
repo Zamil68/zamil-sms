@@ -1,8 +1,10 @@
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
+const jwt = require('jsonwebtoken');
 
 const ALLOWED_ORIGIN = process.env.CORS_ORIGIN || '*';
+const JWT_SECRET = process.env.JWT_SECRET || 'zamil-sms-super-secret-key-2024';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
@@ -11,67 +13,30 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
 };
 
-// 🔥 HARD CODED USERS AND RANGES (Vercel-proof)
 const loadJSON = (file) => {
-  // Hardcoded users for login
   if (file === 'users.json') {
     return [
-      { 
-        username: "ZML_Ahsan", 
-        password: "12345", 
-        clientId: "101", 
-        assignedNumbers: ["255651498861", "96893010505"] 
-      },
-      { 
-        username: "test", 
-        password: "test", 
-        clientId: "102", 
-        assignedNumbers: [] 
-      }
+      { username: "ZML_Ahsan", password: "12345", clientId: "101", assignedNumbers: ["255651498861", "96893010505"] },
+      { username: "test", password: "test", clientId: "102", assignedNumbers: [] }
     ];
   }
-  
-  // Hardcoded ranges for dashboard
   if (file === 'ranges.json') {
     return [
-      {
-        "id": "range_1",
-        "title": "Tanzania LX 20Apr",
-        "country": "Tanzania",
-        "numbers": ["255651498861", "255651498862", "255651498863"]
-      },
-      {
-        "id": "range_2",
-        "title": "Oman LX 04Jul",
-        "country": "Oman",
-        "numbers": ["96893010505", "96893010506"]
-      }
+      { id: "range_1", title: "Tanzania LX 20Apr", country: "Tanzania", numbers: ["255651498861", "255651498862", "255651498863"] },
+      { id: "range_2", title: "Oman LX 04Jul", country: "Oman", numbers: ["96893010505", "96893010506"] }
     ];
-  }
-  
-  // Fallback for other files (shouldn't be needed)
-  try {
-    const filePath = path.join(process.cwd(), file);
-    if (fs.existsSync(filePath)) {
-      return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    }
-  } catch (e) {
-    console.error(`Error loading ${file}:`, e.message);
   }
   return [];
 };
 
-const sessions = {};
-function generateToken() {
-  return Math.random().toString(36).substring(2) + Date.now().toString(36);
-}
+// 🔥 STATELESS SESSION VERIFICATION (No memory needed!)
 function getUserFromSession(token) {
-  if (!token || !sessions[token]) return null;
-  if (Date.now() - sessions[token].createdAt > 24 * 60 * 60 * 1000) {
-    delete sessions[token];
+  if (!token) return null;
+  try {
+    return jwt.verify(token, JWT_SECRET);
+  } catch (e) {
     return null;
   }
-  return sessions[token];
 }
 
 const LAMIX_API_KEY = process.env.LAMIX_API_KEY || 'Z4tzfFyChH/commented intentionally/ZIpURFSTgkI=';
@@ -94,35 +59,20 @@ module.exports = async (req, res) => {
   try {
     if (url === '/login' && req.method === 'POST') {
       const { username, password } = req.body;
-      console.log("Login attempt:", username, password);
-      
       if (!username || !password) return error(res, 400, 'Username and password required');
       
       const users = loadJSON('users.json');
-      console.log("Loaded users:", users);
-      
-      const user = users.find(u => 
-        u.username.toLowerCase() === username.toLowerCase() && 
-        u.password === password
-      );
+      const user = users.find(u => u.username.toLowerCase() === username.toLowerCase() && u.password === password);
       
       if (user) {
-        const token = generateToken();
-        sessions[token] = { 
-          username: user.username, 
-          clientId: user.clientId, 
-          assignedNumbers: user.assignedNumbers || [], 
-          createdAt: Date.now() 
-        };
-        return ok(res, { 
-          session: token, 
-          username: user.username, 
-          clientId: user.clientId, 
-          redirect: '/dashboard/dashboard.html' 
-        });
+        // 🔥 CREATE A STATELESS JWT TOKEN
+        const token = jwt.sign(
+          { username: user.username, clientId: user.clientId, assignedNumbers: user.assignedNumbers || [] },
+          JWT_SECRET,
+          { expiresIn: '7d' } // Token valid for 7 days
+        );
+        return ok(res, { session: token, username: user.username, clientId: user.clientId, redirect: '/dashboard/dashboard.html' });
       }
-      
-      console.log("Login failed: User not found in", users);
       return error(res, 401, 'Invalid username or password');
     }
 
@@ -139,8 +89,7 @@ module.exports = async (req, res) => {
       const userRanges = ranges
         .filter(r => r.numbers && r.numbers.some(n => user.assignedNumbers && user.assignedNumbers.includes(n)))
         .map(r => ({
-          id: r.id, 
-          title: r.title,
+          id: r.id, title: r.title,
           count: r.numbers ? r.numbers.filter(n => user.assignedNumbers.includes(n)).length : 0,
           minsAgo: Math.floor(Math.random() * 60)
         }));
@@ -161,34 +110,15 @@ module.exports = async (req, res) => {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
       const today = new Date().toISOString().split('T')[0];
-      const response = await axios.get(LAMIX_API_URL, { 
-        params: { 
-          apikey: LAMIX_API_KEY, 
-          date_from: `${today} 00:00:00`, 
-          date_to: `${today} 23:59:59`, 
-          limit: 100 
-        } 
-      });
+      const response = await axios.get(LAMIX_API_URL, { params: { apikey: LAMIX_API_KEY, date_from: `${today} 00:00:00`, date_to: `${today} 23:59:59`, limit: 100 } });
       
       let allSms = [];
       if (Array.isArray(response.data.records)) allSms = response.data.records;
       else if (Array.isArray(response.data)) allSms = response.data;
       else if (response.data && Array.isArray(response.data.data)) allSms = response.data.data;
       
-      const userSms = Array.isArray(allSms) 
-        ? allSms.filter(sms => user.assignedNumbers && user.assignedNumbers.includes(sms.num || sms.number)) 
-        : [];
-        
-      return ok(res, { 
-        count: userSms.length,
-        recent: userSms.map(s => ({
-          time: s.dt ? s.dt.split(' ')[1] : (s.time || ''),
-          number: s.num || s.number, 
-          cli: s.cli || s.sender,
-          message: s.message || s.text, 
-          range: 'Unknown'
-        }))
-      });
+      const userSms = Array.isArray(allSms) ? allSms.filter(sms => user.assignedNumbers && user.assignedNumbers.includes(sms.num || sms.number)) : [];
+      return ok(res, { count: userSms.length, recent: userSms.map(s => ({ time: s.dt ? s.dt.split(' ')[1] : (s.time || ''), number: s.num || s.number, cli: s.cli || s.sender, message: s.message || s.text, range: 'Unknown' })) });
     }
 
     if (url === '/smscount-range' && req.method === 'POST') {
@@ -200,72 +130,31 @@ module.exports = async (req, res) => {
     if (url === '/leaderboard' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
-      return ok(res, { 
-        users: [{ username: 'ZML_Ahsan', count: 45 }, { username: 'User_B', count: 32 }] 
-      });
+      return ok(res, { users: [{ username: 'ZML_Ahsan', count: 45 }, { username: 'User_B', count: 32 }] });
     }
 
     if (url === '/number-smscount' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
-      return ok(res, { 
-        number: req.body.number, 
-        count: Math.floor(Math.random() * 5), 
-        recent: [] 
-      });
+      return ok(res, { number: req.body.number, count: Math.floor(Math.random() * 5), recent: [] });
     }
 
     if (url === '/dor' && req.method === 'POST') {
       const today = new Date().toISOString().split('T')[0];
-      const response = await axios.get(LAMIX_API_URL, { 
-        params: { 
-          apikey: LAMIX_API_KEY, 
-          date_from: `${today} 00:00:00`, 
-          date_to: `${today} 23:59:59`, 
-          limit: 200 
-        } 
-      });
+      const response = await axios.get(LAMIX_API_URL, { params: { apikey: LAMIX_API_KEY, date_from: `${today} 00:00:00`, date_to: `${today} 23:59:59`, limit: 200 } });
       
       let allSms = [];
       if (Array.isArray(response.data.records)) allSms = response.data.records;
       else if (Array.isArray(response.data)) allSms = response.data;
       else if (response.data && Array.isArray(response.data.data)) allSms = response.data.data;
       
-      return ok(res, { 
-        total: Array.isArray(allSms) ? allSms.length : 0,
-        recent: Array.isArray(allSms) 
-          ? allSms.slice(0, 50).map(s => ({
-              time: s.dt ? s.dt.split(' ')[1] : (s.time || ''),
-              number: s.num || s.number, 
-              cli: s.cli || s.sender,
-              message: s.message || s.text, 
-              range: 'Global'
-            })) 
-          : [] 
-      });
+      return ok(res, { total: Array.isArray(allSms) ? allSms.length : 0, recent: Array.isArray(allSms) ? allSms.slice(0, 50).map(s => ({ time: s.dt ? s.dt.split(' ')[1] : (s.time || ''), number: s.num || s.number, cli: s.cli || s.sender, message: s.message || s.text, range: 'Global' })) : [] });
     }
 
-    if (url === '/alloc/verify-client' && req.method === 'POST') {
-      return ok(res, { id: '101', name: 'ZML_Ahsan', panelNum: 1 });
-    }
-
-    if (url === '/alloc/search-ranges' && req.method === 'POST') {
-      const ranges = loadJSON('ranges.json');
-      return ok(res, { ranges: ranges.map(r => ({ id: r.id, title: r.title })) });
-    }
-
-    if (url === '/alloc/check-availability' && req.method === 'POST') {
-      return ok(res, { available: 500, total: 500 });
-    }
-
-    if (url === '/alloc/allocate' && req.method === 'POST') {
-      return ok(res, { 
-        allocated: req.body.qty || 5, 
-        used: 1, 
-        limit: 2, 
-        remaining: 1 
-      });
-    }
+    if (url === '/alloc/verify-client' && req.method === 'POST') return ok(res, { id: '101', name: 'ZML_Ahsan', panelNum: 1 });
+    if (url === '/alloc/search-ranges' && req.method === 'POST') return ok(res, { ranges: loadJSON('ranges.json').map(r => ({ id: r.id, title: r.title })) });
+    if (url === '/alloc/check-availability' && req.method === 'POST') return ok(res, { available: 500, total: 500 });
+    if (url === '/alloc/allocate' && req.method === 'POST') return ok(res, { allocated: req.body.qty || 5, used: 1, limit: 2, remaining: 1 });
 
     return error(res, 404, 'Route not found');
   } catch (err) {
