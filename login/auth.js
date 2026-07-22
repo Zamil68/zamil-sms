@@ -1,8 +1,7 @@
 "use strict";
 
-// 🔥 LIVE DEPLOYMENT URL SWITCHER
-// For a single Vercel deployment, production URL is just '' (relative path)
-const BACKEND_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') 
+// 🔥 LIVE DEPLOYMENT URL SWITCHER (Using 'var' to prevent crashes)
+var BACKEND_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') 
     ? 'http://localhost:3000' 
     : ''; 
 
