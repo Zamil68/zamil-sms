@@ -178,9 +178,10 @@ async function apiCall(endpoint, payload, callback, encoder){
   while (true) {
     attempt++;
 
-    // 🔥 FORCE SESSION INTO PAYLOAD DIRECTLY FROM LOCALSTORAGE
+    // 🔥 DIAGNOSTIC: Check exactly what is in localStorage
     var currentSession = localStorage.getItem("app_session") || "";
-    
+    console.log("🔥 API CALL:", endpoint, "| Session:", currentSession ? "EXISTS (" + currentSession.substring(0,15) + "...)" : "MISSING/EMPTY");
+
     if (method === "POST") {
       if (!payload) {
         payload = { session: currentSession };
@@ -221,6 +222,7 @@ async function apiCall(endpoint, payload, callback, encoder){
     data = await _safeJson(r);
 
     if (_isSessionExpired(r, data)) {
+      console.warn("⚠️ Session expired detected for", endpoint);
       if (Date.now() - _REAUTH_DONE_TS < _REAUTH_MEMORY_MS) { continue; }
       var pinged = await _pingSession();
       if (pinged) { continue; }
@@ -230,7 +232,7 @@ async function apiCall(endpoint, payload, callback, encoder){
       
       if (typeof showToast === "function") showToast("Session expired. Please log in again.", false);
       
-      // Break the loop and force logout instead of infinite retry
+      // 🔥 BREAK THE LOOP: Force logout instead of infinite retry
       localStorage.removeItem("app_session");
       localStorage.removeItem("app_username");
       location.replace("/login");
