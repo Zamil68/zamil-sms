@@ -169,7 +169,6 @@ function _isSessionExpired(r, data) {
   return false;
 }
 
-// 🔥 BULLETPROOF apiCall: Reads session directly from localStorage every time
 async function apiCall(endpoint, payload, callback, encoder){
   var url = _providerUrl(endpoint);
   var method = payload ? "POST" : "GET";
@@ -178,10 +177,8 @@ async function apiCall(endpoint, payload, callback, encoder){
   while (true) {
     attempt++;
 
-    // 🔥 DIAGNOSTIC: Check exactly what is in localStorage
     var currentSession = localStorage.getItem("app_session") || "";
-    console.log("🔥 API CALL:", endpoint, "| Session:", currentSession ? "EXISTS (" + currentSession.substring(0,15) + "...)" : "MISSING/EMPTY");
-
+    
     if (method === "POST") {
       if (!payload) {
         payload = { session: currentSession };
@@ -222,7 +219,6 @@ async function apiCall(endpoint, payload, callback, encoder){
     data = await _safeJson(r);
 
     if (_isSessionExpired(r, data)) {
-      console.warn("⚠️ Session expired detected for", endpoint);
       if (Date.now() - _REAUTH_DONE_TS < _REAUTH_MEMORY_MS) { continue; }
       var pinged = await _pingSession();
       if (pinged) { continue; }
@@ -232,14 +228,13 @@ async function apiCall(endpoint, payload, callback, encoder){
       
       if (typeof showToast === "function") showToast("Session expired. Please log in again.", false);
       
-      // 🔥 BREAK THE LOOP: Force logout instead of infinite retry
       localStorage.removeItem("app_session");
       localStorage.removeItem("app_username");
       location.replace("/login");
       return { ok: false, error: "Session expired" };
     }
 
-   if (data === null) {
+    if (data === null) {
       var ct = (r.headers && r.headers.get) ? (r.headers.get("content-type") || "") : "";
       if (ct.indexOf("html") > -1) {
         data = { ok:false, error:"Server returned unexpected response (HTTP " + r.status + ")" };
@@ -248,13 +243,7 @@ async function apiCall(endpoint, payload, callback, encoder){
       }
     }
 
-    // 🔥 FRONTEND RESPONSE LOG
     console.log("✅ API RESPONSE for", endpoint, ":", data);
-
-    if (callback && typeof callback === "function") callback(data);
-    return data;
-  }
-}
 
     if (callback && typeof callback === "function") callback(data);
     return data;
