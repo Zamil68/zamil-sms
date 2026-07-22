@@ -85,14 +85,22 @@ module.exports = async (req, res) => {
     if (url === '/ranges' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
+      
+      console.log("🔥 BACKEND /ranges: User =", user.username, "| Assigned Numbers =", user.assignedNumbers);
+      
       const ranges = loadJSON('ranges.json');
+      console.log("🔥 BACKEND /ranges: All Ranges Loaded =", ranges.length);
+      
       const userRanges = ranges
         .filter(r => r.numbers && r.numbers.some(n => user.assignedNumbers && user.assignedNumbers.includes(n)))
         .map(r => ({
-          id: r.id, title: r.title,
+          id: r.id, 
+          title: r.title,
           count: r.numbers ? r.numbers.filter(n => user.assignedNumbers.includes(n)).length : 0,
           minsAgo: Math.floor(Math.random() * 60)
         }));
+        
+      console.log("🔥 BACKEND /ranges: Returning User Ranges =", userRanges.length, userRanges);
       return ok(res, { ranges: userRanges });
     }
 
