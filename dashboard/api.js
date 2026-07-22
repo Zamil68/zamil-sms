@@ -167,17 +167,29 @@ async function apiCall(endpoint, payload, callback, encoder){
   var url    = _providerUrl(endpoint);
   var method = payload ? "POST" : "GET";
   var attempt = 0;
+  
   while (true) {
     attempt++;
-    if (payload && typeof payload === "object" && "session" in payload) {
-      payload.session = SESSION;
+
+    // 🔥 FIX: ALWAYS ensure session is in the payload for POST requests
+    if (method === "POST") {
+      if (!payload) {
+        payload = { session: SESSION };
+      } else if (typeof payload === "object") {
+        payload.session = SESSION;
+      }
     }
+    
     var body = null;
     if (payload) {
       body = encoder ? JSON.stringify(await encoder(payload)) : JSON.stringify(payload);
     }
+
+    // Build headers fresh each attempt so SESSION is always current
     var headers = { "Content-Type": "application/json", "Accept": "application/json" };
-    if (typeof SESSION !== "undefined" && SESSION) headers["Authorization"] = "Bearer " + SESSION;
+    if (typeof SESSION !== "undefined" && SESSION) {
+      headers["Authorization"] = "Bearer " + SESSION;
+    }
 
     var r = null, data = null;
     try {
