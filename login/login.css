@@ -1,0 +1,98 @@
+/* HYDER SMS — Login Page */
+html,body{height:100%}
+#loginScreen{
+display:flex;align-items:center;justify-content:center;
+min-height:100vh;padding:20px 16px;
+background:
+radial-gradient(ellipse 70% 55% at 50% -5%,rgba(34,211,238,.07) 0%,transparent 65%),
+radial-gradient(ellipse 50% 35% at 15% 85%,rgba(129,140,248,.05) 0%,transparent 60%),
+var(--bg);
+position:relative;overflow:hidden;
+}
+#loginScreen::before{
+content:'';position:absolute;inset:0;
+background-image:
+linear-gradient(var(--border) 1px,transparent 1px),
+linear-gradient(90deg,var(--border) 1px,transparent 1px);
+background-size:44px 44px;opacity:.3;pointer-events:none;
+}
+.login-card{
+width:100%;max-width:400px;
+background:var(--card);
+border:1px solid var(--border);
+border-radius:18px;
+padding:28px 24px 24px;
+box-shadow:0 28px 70px rgba(0,0,0,.45);
+position:relative;z-index:1;
+}
+[data-theme="light"] .login-card{box-shadow:0 16px 50px rgba(0,0,0,.1)}
+.login-brand{display:flex;align-items:center;justify-content:center;margin-bottom:8px}
+.login-logo-svg{display:block;max-width:100%;height:auto}
+.login-brand img.logo-login-light{display:none}
+[data-theme="light"] .login-brand img.logo-login-dark{display:none}
+[data-theme="light"] .login-brand img.logo-login-light{display:block}
+.login-sub{color:var(--muted);font-size:.78rem;font-weight:500;margin-bottom:22px;text-align:center}
+.provider-label{font-size:.68rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:9px}
+.provider-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px}
+.provider-btn{
+position:relative;display:flex;align-items:center;gap:8px;
+padding:10px 11px;
+background:var(--surface);border:1.5px solid var(--border);
+border-radius:10px;cursor:pointer;font-family:inherit;
+color:var(--muted);font-size:.8rem;font-weight:600;
+transition:all .15s;width:100%;text-align:left;
+}
+.provider-btn:hover:not(.coming){border-color:var(--accent);color:var(--text)}
+.provider-btn.selected{
+border-color:var(--accent);background:rgba(34,211,238,.07);color:var(--accent);
+}
+.prov-icon{font-size:1.05rem;flex-shrink:0;line-height:1}
+.prov-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prov-check{
+width:15px;height:15px;border-radius:50%;
+border:1.5px solid var(--border);
+display:flex;align-items:center;justify-content:center;
+flex-shrink:0;font-size:.58rem;transition:all .15s;
+}
+.provider-btn.selected .prov-check{background:var(--accent);border-color:var(--accent);color:#06080F}
+.provider-btn.coming{opacity:.35;cursor:not-allowed;pointer-events:none}
+.provider-btn.coming .prov-check{display:none}
+.provider-badge{
+position:absolute;top:-6px;right:-3px;
+background:var(--accent2);color:#fff;
+font-size:.44rem;font-weight:700;padding:2px 5px;
+border-radius:5px;letter-spacing:.04em;
+}
+.field{margin-bottom:13px}
+.field label{display:block;font-size:.67rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+.field input{
+width:100%;padding:11px 13px;
+background:var(--surface);border:1.5px solid var(--border);
+border-radius:9px;color:var(--text);font-family:inherit;
+font-size:.9rem;outline:none;transition:border-color .15s,box-shadow .15s;
+}
+.field input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.1)}
+[data-theme="light"] .field input{background:var(--bg)}
+.pwd-wrap{position:relative}
+.pwd-wrap input{padding-right:42px}
+.pwd-toggle{
+position:absolute;right:6px;top:50%;transform:translateY(-50%);
+width:30px;height:30px;background:transparent;border:0;
+cursor:pointer;color:var(--muted);font-size:.9rem;border-radius:7px;
+display:flex;align-items:center;justify-content:center;transition:all .15s;
+}
+.pwd-toggle:hover{color:var(--accent)}
+.caps-hint{display:none;margin-top:5px;font-size:.68rem;font-weight:600;color:var(--yellow)}
+.caps-hint.show{display:block}
+.err-box{
+font-size:.78rem;font-weight:600;color:var(--red);
+background:rgba(248,113,113,.07);border:1px solid rgba(248,113,113,.2);
+border-radius:8px;padding:9px 12px;margin-bottom:11px;display:none;
+}
+.err-box.show{display:block}
+.btn.btn-primary{width:100%;padding:13px;font-size:.9rem;border-radius:10px;margin-top:4px}
+.login-foot{margin-top:14px;font-size:.68rem;color:var(--muted);text-align:center}
+@media(max-width:420px){
+.login-card{padding:22px 17px 20px;border-radius:15px}
+.provider-btn{padding:9px 9px;font-size:.76rem}
+}
