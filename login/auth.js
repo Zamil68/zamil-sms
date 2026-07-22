@@ -1,9 +1,10 @@
 "use strict";
 
 // 🔥 LIVE DEPLOYMENT URL SWITCHER
+// For a single Vercel deployment, production URL is just '' (relative path)
 const BACKEND_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') 
     ? 'http://localhost:3000' 
-    : 'https://YOUR-LIVE-BACKEND-URL.onrender.com';
+    : ''; 
 
 var SESSION  = localStorage.getItem("app_session")  || "";
 var USERNAME = localStorage.getItem("app_username") || "";
@@ -78,7 +79,6 @@ async function doLogin() {
   showLoad("Authenticating…");
   
   try {
-    // 🔥 UPDATED: Route to live backend
     var loginUrl = login.url.startsWith('http') ? login.url : BACKEND_URL + login.url;
 
     var _loginRes = await fetch(loginUrl, {
@@ -91,6 +91,7 @@ async function doLogin() {
     var r = null;
     try { r = await _loginRes.json(); } catch(e) { r = null; }
     hideLoad();
+    
     if (r && (r.ok || r.success)) {
       USERNAME = r.username || user;
       var respRole = r.role || "";
@@ -202,8 +203,6 @@ async function tryReauth() {
     if (!user || !pass) return false;
     
     var login = _loginEndpoint();
-    
-    // 🔥 UPDATED: Route to live backend
     var loginUrl = login.url.startsWith('http') ? login.url : BACKEND_URL + login.url;
 
     var res = await fetch(loginUrl, {
