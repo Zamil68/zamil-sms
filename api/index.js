@@ -13,13 +13,28 @@ const corsHeaders = {
 
 const loadJSON = (file) => {
   try {
-    const filePath = path.join(process.cwd(), file);
-    if (!fs.existsSync(filePath)) {
-      fs.writeFileSync(filePath, '[]', 'utf8');
-      return [];
+    // Try multiple possible paths for Vercel compatibility
+    const possiblePaths = [
+      path.join(process.cwd(), file),
+      path.join(__dirname, '..', file),
+      path.join(process.cwd(), '..', file),
+      file
+    ];
+    
+    for (const filePath of possiblePaths) {
+      if (fs.existsSync(filePath)) {
+        const content = fs.readFileSync(filePath, 'utf8');
+        return JSON.parse(content);
+      }
     }
-    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    
+    // If file doesn't exist, create it and return empty array
+    const defaultPath = path.join(process.cwd(), file);
+    fs.writeFileSync(defaultPath, '[]', 'utf8');
+    console.log(`Created default ${file}`);
+    return [];
   } catch (e) {
+    console.error(`Error loading ${file}:`, e.message);
     return [];
   }
 };
