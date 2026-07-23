@@ -349,3 +349,33 @@ module.exports = async (req, res) => {
     return error(res, 500, 'Internal Server Error');
   }
 };
+// ... (end of your module.exports function)
+    return error(res, 404, 'Route not found');
+  } catch (err) {
+    console.error('API Error:', err.message);
+    return error(res, 500, 'Internal Server Error');
+  }
+};
+
+// ==========================================
+// 🔥 BACKGROUND CLEANUP (Runs independently)
+// ==========================================
+setInterval(() => {
+  try {
+    const now = new Date();
+    const keepDate = new Date(now.setDate(now.getDate() - 7));
+    const keepStr = keepDate.toISOString().split('T')[0];
+    
+    // Vercel uses /tmp for writable storage
+    const tmpDir = '/tmp';
+    if (fs.existsSync(tmpDir)) {
+      fs.readdirSync(tmpDir).forEach(file => {
+        if (file.startsWith('dor-') && file < `dor-${keepStr}.json`) {
+          fs.unlinkSync(path.join(tmpDir, file));
+        }
+      });
+    }
+  } catch (e) {
+    // Silently fail if directory doesn't exist or permissions issue
+  }
+}, 24 * 60 * 60 * 1000); // Runs once every 24 hours
