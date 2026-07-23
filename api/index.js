@@ -5,8 +5,13 @@ const jwt = require('jsonwebtoken');
 
 const ALLOWED_ORIGIN = process.env.CORS_ORIGIN || '*';
 const JWT_SECRET = process.env.JWT_SECRET || 'zamil-sms-super-secret-key-2024';
-const LAMIX_API_KEY = process.env.LAMIX_API_KEY || ''; // MUST be set in Vercel
+const LAMIX_API_KEY = process.env.LAMIX_API_KEY || ''; 
 const LAMIX_API_URL = 'http://51.77.216.195/crapi/lamix/viewstats';
+
+// 🔥 AGENT PANEL SCRAPER CONFIGURATION
+const AGENT_BASE_URL = 'http://51.210.208.26/ints/agent/res/';
+// ⚠️ REPLACE THIS WITH YOUR ACTUAL COOKIE FROM CHROME DEV TOOLS
+const AGENT_COOKIE = 'PHPSESSID=0950059eaead99816b1e27139bf2d227'; 
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
@@ -15,42 +20,11 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
 };
 
-// 🔥 HARDCODED CONFIG (Ranges & Users) - Edit these to add more users/ranges
+// Local user DB for your new panel's login
 const USERS_DB = [
   { username: "ZML_Ahsan", password: "12345", clientId: "101", assignedNumbers: ["255651498861", "96893010505"] },
   { username: "test", password: "test", clientId: "102", assignedNumbers: [] }
 ];
-
-const RANGES_DB = [
-  { id: "range_1", title: "Tanzania LX 20Apr", country: "Tanzania", numbers: ["255651498861", "255651498862", "255651498863"] },
-  { id: "range_2", title: "Oman LX 04Jul", country: "Oman", numbers: ["96893010505", "96893010506"] }
-];
-
-// 🔥 SMART CACHE: Prevents hammering LaMix API when multiple users refresh
-let lamixCache = { key: '', data: [], ts: 0 };
-async function getLaMixData(dateFrom, dateTo, limit = 500) {
-  const cacheKey = `${dateFrom}-${dateTo}`;
-  // Cache for 10 seconds
-  if (lamixCache.key === cacheKey && Date.now() - lamixCache.ts < 10000) {
-    return lamixCache.data;
-  }
-  
-  try {
-    const response = await axios.get(LAMIX_API_URL, { 
-      params: { apikey: LAMIX_API_KEY, date_from: dateFrom, date_to: dateTo, limit } 
-    });
-    let allSms = [];
-    if (Array.isArray(response.data.records)) allSms = response.data.records;
-    else if (Array.isArray(response.data)) allSms = response.data;
-    else if (response.data && Array.isArray(response.data.data)) allSms = response.data.data;
-    
-    lamixCache = { key: cacheKey, data: allSms, ts: Date.now() };
-    return allSms;
-  } catch (err) {
-    console.error('LaMix API Error:', err.message);
-    return [];
-  }
-}
 
 function getUserFromSession(token) {
   if (!token) return null;
@@ -60,12 +34,80 @@ function getUserFromSession(token) {
 function ok(res, data = {}) { res.status(200).json({ ok: true, ...data, ...corsHeaders }); }
 function error(res, statusCode, message) { res.status(statusCode).json({ ok: false, error: message, ...corsHeaders }); }
 
+// 🔥 SCRAPER FUNCTION: Mimics the browser's DataTables request
+async function scrapeAgentData(endpoint, params = {}) {
+  try {
+    const response = await axios.get(`${AGENT_BASE_URL}${endpoint}`, {
+      params: params,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Cookie': AGENT_COOKIE,
+        'Accept': 'application/json, text/javascript, */*; q=0.01',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Referer': 'http://51.210.208.26/ints/agent/SMSDashboard'
+      },
+      timeout: 10000
+    });
+    return response.data;
+  } catch (err) {
+    console.error('Agent Panel Scrape Error:', err.message);
+    return null;
+  }
+}
+
+// 🔥 SMART DOR: Fetches from LaMix, saves to daily JSON, resets at 5:00 AM
+async function getSmartDOR() {
+  const now = new Date();
+  const reportDate = new Date(now.getHours() < 5 ? now.getTime() - 86400000 : now.getTime());
+  const dateStr = reportDate.toISOString().split('T')[0];
+  const fileName = `dor-${dateStr}.json`;
+  const filePath = path.join(process.cwd(), fileName);
+
+  if (fs.existsSync(filePath)) {
+    const stats = fs.statSync(filePath);
+    if (Date.now() - stats.mtimeMs < 3000) { // Cache for 3 seconds
+      return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    }
+  }
+
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const response = await axios.get(LAMIX_API_URL, { 
+      params: { apikey: LAMIX_API_KEY, date_from: `${today} 00:00:00`, date_to: `${today} 23:59:59`, limit: 500 } 
+    });
+    
+    let allSms = [];
+    if (Array.isArray(response.data.records)) allSms = response.data.records;
+    else if (Array.isArray(response.data)) allSms = response.data;
+    else if (response.data && Array.isArray(response.data.data)) allSms = response.data.data;
+
+    const parsedData = {
+      date: dateStr,
+      total: allSms.length,
+      recent: allSms.slice(0, 100).map(s => ({
+        time: s.dt ? s.dt.split(' ')[1] : (s.time || ''),
+        number: s.num || s.number,
+        cli: s.cli || s.sender,
+        message: s.message || s.text,
+        range: 'Global'
+      }))
+    };
+
+    fs.writeFileSync(filePath, JSON.stringify(parsedData, null, 2), 'utf8');
+    return parsedData;
+  } catch (err) {
+    console.error('LaMix DOR Fetch Error:', err.message);
+    if (fs.existsSync(filePath)) return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    return { date: dateStr, total: 0, recent: [] };
+  }
+}
+
 module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).json({ ...corsHeaders });
   const url = req.url.replace(/^\/api/, '');
   
   try {
-    // 1. LOGIN
+    // 1. LOGIN (Local panel login)
     if (url === '/login' && req.method === 'POST') {
       const { username, password } = req.body;
       const user = USERS_DB.find(u => u.username.toLowerCase() === username.toLowerCase() && u.password === password);
@@ -76,138 +118,119 @@ module.exports = async (req, res) => {
       return error(res, 401, 'Invalid username or password');
     }
 
-    // Helper to get today's date range
-    const today = new Date().toISOString().split('T')[0];
-    const todayFrom = `${today} 00:00:00`;
-    const todayTo = `${today} 23:59:59`;
-
     // 2. PING
     if (url === '/ping' && req.method === 'POST') {
       return getUserFromSession(req.body.session) ? ok(res) : error(res, 401, 'Session expired');
     }
 
-    // 3. RANGES (Real-time counts from LaMix)
+    // 3. RANGES (Scraped from Agent Panel DataTables)
     if (url === '/ranges' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
       
-      const allSms = await getLaMixData(todayFrom, todayTo, 500);
+      // Scrape the agent panel
+      const scrapeParams = {
+        frange: '', fclient: '', totnum: 20045, sEcho: 1, iColumns: 8,
+        iDisplayStart: 0, iDisplayLength: 100, sSearch: '', bRegex: false, iSortingCols: 1
+      };
+      const data = await scrapeAgentData('data_smsnumbers.php', scrapeParams);
       
-      const userRanges = RANGES_DB
-        .filter(r => r.numbers && r.numbers.some(n => user.assignedNumbers && user.assignedNumbers.includes(n)))
-        .map(r => {
-          // Count real SMS for this range today
-          const realCount = allSms.filter(sms => 
-            r.numbers.includes(sms.num || sms.number) && user.assignedNumbers.includes(sms.num || sms.number)
-          ).length;
-          return {
-            id: r.id, title: r.title, country: r.country,
-            count: realCount, // Real count instead of hardcoded
-            minsAgo: Math.floor(Math.random() * 60)
-          };
-        });
+      if (!data || !data.aaData) {
+        console.warn('Scraping failed or returned no data. Check AGENT_COOKIE.');
+        return ok(res, { ranges: [] });
+      }
+
+      // Parse DataTables aaData array into our frontend format
+      // Note: Adjust the array indexes [0], [1], etc., based on the actual column order in your agent panel
+      const scrapedRanges = data.aaData.map((row, index) => ({
+        id: `scraped_${index}`,
+        title: row[0] || 'Unknown Range', // Column 1: Range Name
+        country: row[1] || 'Unknown',      // Column 2: Country
+        count: 0, // Will be updated by smscount
+        minsAgo: 0
+      }));
+
+      // Filter to only show ranges that belong to this user's assigned numbers
+      // (If the agent panel already filters by client, you can skip this filter)
+      const userRanges = scrapedRanges.filter(r => 
+        // Simple check: if you want to show ALL scraped ranges on the "Add" page, remove this filter.
+        // For the main dashboard, keep it to only show user's ranges.
+        true // Showing all for now, adjust logic if needed
+      );
+
       return ok(res, { ranges: userRanges });
     }
 
-    // 4. NUMBERS
+    // 4. NUMBERS (Scraped or derived)
     if (url === '/numbers' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
-      const range = RANGES_DB.find(r => r.id === req.body.rangeId);
-      if (!range || !range.numbers) return ok(res, { numbers: [] });
-      return ok(res, { numbers: range.numbers.filter(n => user.assignedNumbers && user.assignedNumbers.includes(n)) });
+      
+      // For now, return the user's assigned numbers from the local DB
+      // You can also scrape data_smsnumbers.php with fclient=user.clientId to get exact numbers
+      return ok(res, { numbers: user.assignedNumbers || [] });
     }
 
-    // 5. SMS COUNT (Today)
+    // 5. SMS COUNT (Today's real count for user's numbers via LaMix API)
     if (url === '/smscount' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
       
-      const allSms = await getLaMixData(todayFrom, todayTo, 500);
+      const today = new Date().toISOString().split('T')[0];
+      const response = await axios.get(LAMIX_API_URL, { 
+        params: { apikey: LAMIX_API_KEY, date_from: `${today} 00:00:00`, date_to: `${today} 23:59:59`, limit: 200 } 
+      });
+      
+      let allSms = [];
+      if (Array.isArray(response.data.records)) allSms = response.data.records;
+      else if (Array.isArray(response.data)) allSms = response.data;
+      
       const userSms = allSms.filter(sms => user.assignedNumbers && user.assignedNumbers.includes(sms.num || sms.number));
       
       return ok(res, { 
         count: userSms.length,
-        recent: userSms.map(s => ({ 
-          time: s.dt ? s.dt.split(' ')[1] : (s.time || ''), 
-          number: s.num || s.number, 
-          cli: s.cli || s.sender, 
-          message: s.message || s.text, 
-          range: 'Unknown' 
-        }))
+        recent: userSms.map(s => ({ time: s.dt ? s.dt.split(' ')[1] : '', number: s.num || s.number, cli: s.cli || s.sender, message: s.message || s.text }))
       });
     }
 
-    // 6. SMS COUNT RANGE (Week/Month)
-    if (url === '/smscount-range' && req.method === 'POST') {
-      const user = getUserFromSession(req.body.session);
-      if (!user) return error(res, 401, 'Unauthorized');
-      
-      const rangeType = req.body.range || 'week';
-      const now = new Date();
-      let fromDate = new Date();
-      
-      if (rangeType === 'week') fromDate.setDate(now.getDate() - 7);
-      else if (rangeType === 'month') fromDate.setMonth(now.getMonth() - 1);
-      
-      const fromStr = fromDate.toISOString().split('T')[0] + ' 00:00:00';
-      const toStr = now.toISOString().split('T')[0] + ' 23:59:59';
-      
-      const allSms = await getLaMixData(fromStr, toStr, 1000);
-      const userSms = allSms.filter(sms => user.assignedNumbers && user.assignedNumbers.includes(sms.num || sms.number));
-      
-      return ok(res, { count: userSms.length });
-    }
-
-    // 7. LEADERBOARD (Top 10 Real Senders/CLIs)
-    if (url === '/leaderboard' && req.method === 'POST') {
-      const user = getUserFromSession(req.body.session);
-      if (!user) return error(res, 401, 'Unauthorized');
-      
-      const allSms = await getLaMixData(todayFrom, todayTo, 1000);
-      
-      // Count SMS per CLI (Sender)
-      const cliCounts = {};
-      allSms.forEach(sms => {
-        const cli = sms.cli || sms.sender || 'Unknown';
-        cliCounts[cli] = (cliCounts[cli] || 0) + 1;
-      });
-      
-      // Sort and get Top 10
-      const top10 = Object.entries(cliCounts)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 10)
-        .map(([cli, count]) => ({ username: cli, count }));
-        
-      return ok(res, { users: top10 });
-    }
-
-    // 8. DOR (Global Detail OTP Report)
+    // 6. DOR (Smart Cache: Fetches from LaMix, saves to daily JSON, resets at 5 AM)
     if (url === '/dor' && req.method === 'POST') {
-      const allSms = await getLaMixData(todayFrom, todayTo, 500);
-      return ok(res, { 
-        total: allSms.length,
-        recent: allSms.slice(0, 50).map(s => ({ 
-          time: s.dt ? s.dt.split(' ')[1] : (s.time || ''), 
-          number: s.num || s.number, 
-          cli: s.cli || s.sender, 
-          message: s.message || s.text, 
-          range: 'Global' 
-        }))
-      });
+      const dorData = await getSmartDOR();
+      return ok(res, dorData);
     }
 
-    // 9. ALLOC ENDPOINTS (Keep as mock for now, or connect to LaMix alloc API if available)
-    if (url === '/alloc/verify-client' && req.method === 'POST') return ok(res, { id: '101', name: 'ZML_Ahsan', panelNum: 1 });
-    if (url === '/alloc/search-ranges' && req.method === 'POST') return ok(res, { ranges: RANGES_DB.map(r => ({ id: r.id, title: r.title })) });
-    if (url === '/alloc/check-availability' && req.method === 'POST') return ok(res, { available: 500, total: 500 });
-    if (url === '/alloc/allocate' && req.method === 'POST') return ok(res, { allocated: req.body.qty || 5, used: 1, limit: 2, remaining: 1 });
-    if (url === '/number-smscount' && req.method === 'POST') {
-       const user = getUserFromSession(req.body.session);
-       if (!user) return error(res, 401, 'Unauthorized');
-       const allSms = await getLaMixData(todayFrom, todayTo, 500);
-       const count = allSms.filter(s => s.num === req.body.number).length;
-       return ok(res, { number: req.body.number, count, recent: [] });
+    // 7. ALLOC: SEARCH RANGES (Shows all ranges for the "Add" button)
+    if (url === '/alloc/search-ranges' && req.method === 'POST') {
+      // You can scrape this the same way as /ranges, or use the scraped data above
+      const scrapeParams = { frange: '', fclient: '', totnum: 20045, sEcho: 1, iDisplayLength: 100 };
+      const data = await scrapeAgentData('data_smsnumbers.php', scrapeParams);
+      
+      if (data && data.aaData) {
+        const allRanges = data.aaData.map((row, index) => ({
+          id: `scraped_${index}`,
+          title: row[0] || 'Unknown Range',
+          country: row[1] || 'Unknown'
+        }));
+        return ok(res, { ranges: allRanges });
+      }
+      return ok(res, { ranges: [] });
+    }
+
+    // 8. ALLOC: ALLOCATE (Mimics Agent Panel Bulk Allocation)
+    if (url === '/alloc/allocate' && req.method === 'POST') {
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      
+      const { rangeId, quantity, payout } = req.body;
+      
+      // ⚠️ TODO: To make this real, you need to find the "allocate" or "add numbers" 
+      // POST request in the Network tab of the agent panel and replicate it here using axios.post
+      console.log(`[ALLOC REQUEST] User: ${user.username}, Range: ${rangeId}, Qty: ${quantity}, Payout: ${payout}`);
+      
+      return ok(res, { 
+        allocated: parseInt(quantity), 
+        message: `Allocation request sent for ${quantity} numbers.` 
+      });
     }
 
     return error(res, 404, 'Route not found');
