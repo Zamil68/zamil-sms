@@ -9,7 +9,6 @@ const JWT_SECRET = process.env.JWT_SECRET || 'zamil-sms-super-secret-key-2024';
 const LAMIX_API_KEY = process.env.LAMIX_API_KEY || ''; 
 const LAMIX_API_URL = 'http://51.77.216.195/crapi/lamix/viewstats';
 
-// ✅ FIXED: corsHeaders is now properly defined
 const corsHeaders = {
   'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
   'Access-Control-Allow-Credentials': 'true',
@@ -33,13 +32,12 @@ function getUserFromSession(token) {
 function ok(res, data = {}) { res.status(200).json({ ok: true, ...data, ...corsHeaders }); }
 function error(res, statusCode, message) { res.status(statusCode).json({ ok: false, error: message, ...corsHeaders }); }
 
-// 🔥 SMART DOR: Fetches from LaMix, saves to daily JSON, resets at 5:00 AM
 async function getSmartDOR() {
   const now = new Date();
   const reportDate = new Date(now.getHours() < 5 ? now.getTime() - 86400000 : now.getTime());
   const dateStr = reportDate.toISOString().split('T')[0];
   const fileName = `dor-${dateStr}.json`;
-  const filePath = path.join('/tmp', fileName); // Use /tmp for Vercel
+  const filePath = path.join('/tmp', fileName);
 
   if (fs.existsSync(filePath)) {
     const stats = fs.statSync(filePath);
@@ -80,7 +78,6 @@ async function getSmartDOR() {
   }
 }
 
-// 🔥 SESSION REFRESHER: Auto-refreshes agent panel session every 15m
 setInterval(async () => {
   try {
     await axios.post(`${AGENT_BASE_URL}signin`, {
@@ -96,7 +93,6 @@ setInterval(async () => {
   }
 }, 15 * 60 * 1000);
 
-// 🔥 SCRAPER FUNCTION
 async function scrapeAgentData(endpoint, params = {}) {
   try {
     const response = await axios.get(`${AGENT_BASE_URL}${endpoint}`, {
@@ -117,9 +113,7 @@ async function scrapeAgentData(endpoint, params = {}) {
   }
 }
 
-// 🔥 SMART HTML/JSON PARSER
 function parseNumbersData(data) {
-  // If the server returns JSON (DataTables format)
   if (data && typeof data === 'object' && data.aaData) {
     return data.aaData.map(row => ({
       range: (row[0] || '').replace(/<[^>]*>/g, '').trim(),
@@ -130,7 +124,6 @@ function parseNumbersData(data) {
     }));
   }
   
-  // Fallback: If the server returns raw HTML
   const $ = cheerio.load(data);
   const numbers = [];
   $('tr').each((i, row) => {
@@ -152,7 +145,6 @@ module.exports = async (req, res) => {
   const url = req.url.replace(/^\/api/, '');
   
   try {
-    // 1. LOGIN
     if (url === '/login' && req.method === 'POST') {
       const { username, password } = req.body;
       const user = USERS_DB.find(u => u.username.toLowerCase() === username.toLowerCase() && u.password === password);
@@ -163,21 +155,28 @@ module.exports = async (req, res) => {
       return error(res, 401, 'Invalid username or password');
     }
 
-    // 2. PING
     if (url === '/ping' && req.method === 'POST') {
       return getUserFromSession(req.body.session) ? ok(res) : error(res, 401, 'Session expired');
     }
 
-    // 3. RANGES
+    // 🔥 RANGES WITH DEBUG LOGS
     if (url === '/ranges' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
       
       const data = await scrapeAgentData('MySMSNumbers');
+      console.log('🔍 SCRAPE DEBUG: Data type =', typeof data, data ? (data.aaData ? 'JSON' : 'HTML') : 'NULL');
+      
       if (!data) return ok(res, { ranges: [] });
       
       const allNumbers = parseNumbersData(data);
+      console.log('🔍 SCRAPE DEBUG: Total numbers parsed =', allNumbers.length);
+      if (allNumbers.length > 0) {
+        console.log('🔍 SCRAPE DEBUG: First number object =', JSON.stringify(allNumbers[0]));
+      }
+      
       const userNumbers = allNumbers.filter(n => user.assignedNumbers.includes(n.number));
+      console.log('🔍 SCRAPE DEBUG: User matched numbers =', userNumbers.length);
       
       const rangesMap = new Map();
       userNumbers.forEach(n => {
@@ -193,7 +192,6 @@ module.exports = async (req, res) => {
       return ok(res, { ranges: Array.from(rangesMap.values()).map(r => ({ ...r, minsAgo: Math.floor(Math.random() * 60) })) });
     }
 
-    // 4. NUMBERS
     if (url === '/numbers' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
@@ -207,7 +205,6 @@ module.exports = async (req, res) => {
       return ok(res, { numbers: userNumbers });
     }
 
-    // 5. SMS COUNT
     if (url === '/smscount' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
@@ -229,12 +226,18 @@ module.exports = async (req, res) => {
       });
     }
 
-    // 6. DOR
+    // 🔥 ADDED MISSING ENDPOINT
+    if (url === '/smscount-range' && req.method === 'POST') {
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      // Returning safe default for now to stop the 404 loop
+      return ok(res, { count: 0 }); 
+    }
+
     if (url === '/dor' && req.method === 'POST') {
       return ok(res, await getSmartDOR());
     }
 
-    // 7. ALLOC: SEARCH RANGES
     if (url === '/alloc/search-ranges' && req.method === 'POST') {
       const data = await scrapeAgentData('SMSBulkAllocations');
       if (!data) return ok(res, { ranges: [] });
@@ -251,7 +254,6 @@ module.exports = async (req, res) => {
       return ok(res, { ranges });
     }
 
-    // 8. ALLOC: ALLOCATE
     if (url === '/alloc/allocate' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
@@ -270,7 +272,6 @@ module.exports = async (req, res) => {
       }
     }
 
-    // 9. LEADERBOARD
     if (url === '/leaderboard' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
@@ -290,9 +291,6 @@ module.exports = async (req, res) => {
   }
 };
 
-// ==========================================
-// 🔥 BACKGROUND CLEANUP (Runs independently)
-// ==========================================
 setInterval(() => {
   try {
     const now = new Date();
