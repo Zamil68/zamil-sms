@@ -140,67 +140,56 @@ module.exports = async (req, res) => {
     if (url === '/login' && req.method === 'POST') {
       const rawUsername = (req.body.username || '').trim();
       const password = (req.body.password || '').trim();
-      
       if (!rawUsername || !password) return error(res, 400, 'Username and password required');
-      
-      // Step 1: Check hardcoded users first (fast)
-      const hardcodedUsers = {
-        'muzammil62': { clientId: '0', clientName: 'Agent', panelNum: 1 }
+
+      const cleanStrip = s => (s || '').replace(/<[^>]*>/g, '').trim();
+      const want = rawUsername.toLowerCase();
+
+      // Fallback for known test/agent accounts (only used if LaMix lookup fails)
+      const fallback = {
+        'muzammil62': { clientId: '0', clientName: 'Agent', panelNum: 1 },
+        'zml_ahsan':  { clientId: '169269', clientName: 'ZML_Ahsan', panelNum: 1 },
+        'zml_anns':   { clientId: '169270', clientName: 'ZML_Anns', panelNum: 1 }
       };
-      
-      if (hardcodedUsers[rawUsername.toLowerCase()]) {
-        const u = hardcodedUsers[rawUsername.toLowerCase()];
-        const token = jwt.sign({ username: rawUsername, clientId: u.clientId, clientName: u.clientName, panelNum: u.panelNum }, JWT_SECRET, { expiresIn: '7d' });
-        return ok(res, { session: token, username: rawUsername, clientId: u.clientId, clientName: u.clientName, redirect: '/dashboard/dashboard.html' });
-      }
-      
-      // Step 2: Check real LaMix clients dynamically
+
+      // 1) Dynamic lookup of REAL LaMix clients (uses exact browser headers so LaMix won't redirect to /login)
       try {
         const clientsRes = await axios.get(`${AGENT_BASE_URL}res/data_clients.php`, {
-          params: { sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 1000, sSearch: rawUsername },
-          headers: { 
-            'Cookie': AGENT_COOKIE, 
-            'X-Requested-With': 'XMLHttpRequest',
+          params: { sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 1000, sSearch: '' },
+          headers: {
+            'Accept': 'application/json, text/javascript, */*; q=0.01',
+            'Accept-Encoding': 'gzip, deflate',
+            'Accept-Language': 'en-US,en;q=0.9,ja;q=0.8',
+            'Connection': 'keep-alive',
+            'Cookie': AGENT_COOKIE,
+            'Host': '51.210.208.26',
+            'Referer': 'http://51.210.208.26/ints/agent/Clients',
             'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36',
-            'Referer': 'http://51.210.208.26/ints/agent/Clients'
+            'X-Requested-With': 'XMLHttpRequest'
           },
           timeout: 10000
         });
-        
-        if (clientsRes.data && clientsRes.data.aaData) {
-          // Columns: 0=Checkbox(ID), 1=Username, 2=Name, 3=Email, 4=Contact, 5=Skype, 6=Active, 7=Action
-          const found = clientsRes.data.aaData.find(c => 
-            (c[1] || '').toLowerCase().trim() === rawUsername.toLowerCase()
-          );
-          
+        if (clientsRes.data && Array.isArray(clientsRes.data.aaData)) {
+          const found = clientsRes.data.aaData.find(c => cleanStrip(c[1]).toLowerCase() === want);
           if (found) {
             const idMatch = (found[0] || '').match(/value="(\d+)"/);
             const clientId = idMatch ? idMatch[1] : '0';
-            const clientName = (found[2] || found[1] || rawUsername).trim();
-            
-            const token = jwt.sign({ 
-              username: rawUsername, 
-              clientId: clientId, 
-              clientName: clientName,
-              panelNum: 1 
-            }, JWT_SECRET, { expiresIn: '7d' });
-            
-            return ok(res, { 
-              session: token, 
-              username: rawUsername, 
-              clientId: clientId, 
-              clientName: clientName,
-              redirect: '/dashboard/dashboard.html' 
-            });
+            const clientName = cleanStrip(found[2]) || cleanStrip(found[1]) || rawUsername;
+            const token = jwt.sign({ username: rawUsername, clientId, clientName, panelNum: 1 }, JWT_SECRET, { expiresIn: '7d' });
+            return ok(res, { session: token, username: rawUsername, clientId, clientName, redirect: '/dashboard/dashboard.html' });
           }
         }
-      } catch (e) {
-        console.error('Dynamic client lookup failed:', e.message);
-      }
-      
-      return error(res, 401, 'Invalid username or password');
-    }
+      } catch (e) { console.error('Dynamic client lookup failed:', e.message); }
 
+      // 2) Fallback map
+      if (fallback[want]) {
+        const u = fallback[want];
+        const token = jwt.sign({ username: rawUsername, clientId: u.clientId, clientName: u.clientName, panelNum: u.panelNum }, JWT_SECRET, { expiresIn: '7d' });
+        return ok(res, { session: token, username: rawUsername, clientId: u.clientId, clientName: u.clientName, redirect: '/dashboard/dashboard.html' });
+      }
+
+      return error(res, 401, 'Client not found in LaMix. Check the username.');
+    }
     // ═══════════════════════════════════════════════════════════
     // 2. PING
     // ═══════════════════════════════════════════════════════════
