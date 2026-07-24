@@ -414,8 +414,8 @@ module.exports = async (req, res) => {
       const payoutCtl  = findCtl(/payout|price|rate/i);
 
       const clientValue = String(user.clientId || '');
-      const targetNames = new Set([rangeCtl, clientCtl, paytermCtl, qtyCtl, payoutCtl].filter(Boolean).map(c => c.name));
 
+      // payterm: never empty
       let paytermValue = '';
       if (paytermCtl) {
         const reqPT = String(req.body.payterm || '');
@@ -423,31 +423,48 @@ module.exports = async (req, res) => {
         const numeric = paytermCtl.opts.filter(o => /^[1-9][0-9]*$/.test(String(o.value)));
         paytermValue = (reqPT && byVal(reqPT) && byVal(reqPT).value) || (byVal('2') && byVal('2').value) || (numeric[0] && numeric[0].value) || paytermCtl.def || (paytermCtl.opts[0] && paytermCtl.opts[0].value) || '';
       }
+      if (!paytermValue) paytermValue = '2';
+
+      const isFakeRange = /^alloc_\d+$/.test(rangeId) || !rangeId;
+
+      // field names (fallback to common names if label match failed)
+      const fRange   = rangeCtl   ? rangeCtl.name   : 'range';
+      const fClient  = clientCtl  ? clientCtl.name  : 'client';
+      const fPayterm = paytermCtl ? paytermCtl.name : 'payterm';
+      const fQty     = qtyCtl     ? qtyCtl.name     : 'qty';
+      const fPayout  = payoutCtl  ? payoutCtl.name  : 'payout';
+
+      // build fields: hidden inputs first, then our 5 fields
+      const fields = {};
+      if (form) C.forEach(c => { if (c.type === 'hidden' && c.name) fields[c.name] = c.value || ''; });
+      fields[fRange]   = rangeId;
+      fields[fClient]  = clientValue;
+      fields[fPayterm] = paytermValue;
+      fields[fQty]     = String(quantity);
+      fields[fPayout]  = String(payout);
 
       let reason = 'POSTED';
       if (!form) reason = 'FORM_NOT_FOUND';
-      else if (!rangeCtl) reason = 'RANGE_FIELD_NOT_FOUND';
-      else if (!clientCtl) reason = 'CLIENT_FIELD_NOT_FOUND';
+      else if (isFakeRange) reason = 'RANGE_ID_NOT_MAPPED';
 
-      const params = new URLSearchParams();
-      if (form) {
-        C.forEach(c => { if (c.type === 'hidden' && c.name && !targetNames.has(c.name)) params.append(c.name, c.value || ''); });
-        if (rangeCtl)  params.set(rangeCtl.name, rangeId);
-        if (clientCtl) params.set(clientCtl.name, clientValue);
-        if (paytermCtl) params.set(paytermCtl.name, paytermValue);
-        if (qtyCtl) params.set(qtyCtl.name, String(quantity)); else params.append('qty', String(quantity));
-        if (payoutCtl) params.set(payoutCtl.name, String(payout)); else params.append('payout', String(payout));
-      }
-
+      // BEFORE count
       let beforeAny = 0;
       try { const d = await scrapeAgentData('res/data_smsnumbers.php', { frange: '', fclient: clientValue, totnum: 100000, sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1 }); if (d && d.aaData) beforeAny = parseNumbersData(d).length; } catch (e) {}
 
       let serverStatus = null, serverBody = '';
-      if (form && rangeCtl && clientCtl) {
+      // 🔥 POST as multipart/form-data — EXACTLY like the browser form (only if range id is real)
+      if (form && !isFakeRange) {
         try {
           await ensureAgentSession();
-          const postRes = await axios.post(resolveUrl(form.action || 'SMSBulkAllocations'), params, {
-            headers: Object.assign({}, browserHeaders('http://51.210.208.26/ints/agent/SMSBulkAllocations'), { 'Content-Type': 'application/x-www-form-urlencoded' }),
+          const boundary = '----ZamilFormBoundary' + Date.now().toString(16) + Math.random().toString(16).slice(2);
+          let body = '';
+          for (const [k, v] of Object.entries(fields)) {
+            body += `--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`;
+          }
+          body += `--${boundary}--\r\n`;
+          const postRes = await axios.post(resolveUrl(form.action || 'SMSBulkAllocations'), body, {
+            headers: Object.assign({}, browserHeaders('http://51.210.208.26/ints/agent/SMSBulkAllocations'), { 'Content-Type': 'multipart/form-data; boundary=' + boundary }),
+            transformRequest: [(d) => d],
             maxRedirects: 5, validateStatus: () => true, timeout: 20000
           });
           serverStatus = postRes.status;
@@ -456,6 +473,7 @@ module.exports = async (req, res) => {
         } catch (e) { reason = 'POST_ERROR_' + (e.code || e.message); serverBody = String(e.message || ''); }
       }
 
+      // AFTER count + delta = real proof
       let afterAny = 0;
       try { const d = await scrapeAgentData('res/data_smsnumbers.php', { frange: '', fclient: clientValue, totnum: 100000, sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1 }); if (d && d.aaData) afterAny = parseNumbersData(d).length; } catch (e) {}
       const allocatedReal = Math.max(0, afterAny - beforeAny);
@@ -465,18 +483,22 @@ module.exports = async (req, res) => {
       let total = 0, available = 0;
       try { const d = await scrapeAgentData('res/data_smsnumbers.php', { frange: rangeId, fclient: '', totnum: 100000, sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1 }); if (d && d.aaData) { const ns = parseNumbersData(d); total = ns.length; available = ns.filter(n => isAvailableClient(n.client)).length; } } catch (e) {}
 
+      // 🔥 Diagnostic that shows in the collapsed console line (via _server) when the real body is empty
+      const sentCompact = Object.entries(fields).map(([k, v]) => k + '=' + v).join('&');
+      const fieldsCompact = C.map(c => c.name + ':' + c.type + ':"' + c.label + '"').join(' | ');
+      const diag = 'RANGE=' + rangeId + (isFakeRange ? '(FAKE!)' : '') + ' CLIENT=' + clientValue + ' PAYTERM=' + paytermValue + ' QTY=' + quantity + ' PAYOUT=' + payout + ' || NAMES r=' + fRange + ' c=' + fClient + ' pt=' + fPayterm + ' q=' + fQty + ' p=' + fPayout + ' || SENT ' + sentCompact + ' || FORM ' + fieldsCompact;
+      const serverInfo = (serverBody && serverBody.trim()) ? ('SERVER[' + serverStatus + ']: ' + serverBody.replace(/\s+/g, ' ').slice(0, 180)) : diag.slice(0, 320);
+
       return ok(res, {
-        reason, _server: serverBody.replace(/\s+/g, ' ').slice(0, 200),
+        reason, _server: serverInfo,
         allocatedReal, beforeAny, afterAny,
         allocated: quantity, used: afterAny - beforeAny, remaining: available, limit: total,
-        message: allocatedReal > 0 ? `Allocated ${allocatedReal} to ${user.clientName}` : `Posted but no change detected`,
-        _debug: { rangeId, quantity, payout, paytermValue, clientId: user.clientId, clientName: user.clientName, clientValue,
-          fieldMap: { range: rangeCtl && rangeCtl.name, client: clientCtl && clientCtl.name, payterm: paytermCtl && paytermCtl.name, qty: qtyCtl && qtyCtl.name, payout: payoutCtl && payoutCtl.name },
-          sent: Object.fromEntries(params.entries()),
-          allControls: C.map(c => c.name + ' [' + c.type + '] = "' + c.label + '"') }
+        message: allocatedReal > 0 ? `Allocated ${allocatedReal} to ${user.clientName}` : (isFakeRange ? 'Range id not mapped to a real LaMix range' : 'Posted but no change detected'),
+        _debug: { rangeId, isFakeRange, quantity, payout, paytermValue, clientId: user.clientId, clientName: user.clientName, clientValue,
+          fieldMap: { range: fRange, client: fClient, payterm: fPayterm, qty: fQty, payout: fPayout },
+          sent: fields, allControls: C.map(c => c.name + ' [' + c.type + '] = "' + c.label + '"') }
       });
     }
-
     // 9. LEADERBOARD
     if (url === '/leaderboard' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
