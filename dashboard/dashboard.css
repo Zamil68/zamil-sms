@@ -250,11 +250,9 @@
 .lb-podium-wrap{
   padding:44px 10px 26px;
   border-radius:13px;position:relative;overflow:hidden;margin-bottom:12px;
-  /* DARK MODE */
   background:linear-gradient(180deg,rgba(11,14,26,.9),rgba(15,19,34,.7));
   border:1px solid rgba(34,211,238,.1);
 }
-/* Light mode podium: clean white card */
 [data-theme="light"] .lb-podium-wrap{
   background:#FFFFFF;
   border:1px solid var(--border);
@@ -281,7 +279,6 @@
   box-shadow:0 0 22px rgba(34,211,238,.12),inset 0 0 22px rgba(34,211,238,.03);
   display:flex;flex-direction:column;align-items:center;
 }
-/* Light mode frame */
 [data-theme="light"] .lb-frame{
   border-color:rgba(8,145,178,.35);
   background:rgba(34,211,238,.05);
@@ -333,7 +330,6 @@
 .b-strat{background:rgba(129,140,248,.1);color:var(--accent2)}
 .b-dom{background:rgba(248,113,113,.1);color:var(--red)}
 .b-speed{background:rgba(34,211,238,.1);color:var(--accent)}
-/* Light mode badge text — ensure readable */
 [data-theme="light"] .b-elite{background:rgba(8,145,178,.1);color:#0E7490}
 [data-theme="light"] .b-fast{background:rgba(79,70,229,.1);color:#4F46E5}
 [data-theme="light"] .b-fire{background:rgba(194,65,12,.1);color:#C2410C}
@@ -403,7 +399,7 @@
 .sms-report-msg{font-size:.76rem;color:var(--text);margin-top:4px;line-height:1.4}
 .sms-report-range{font-size:.63rem;color:var(--accent);background:rgba(34,211,238,.06);border:1px solid rgba(34,211,238,.13);padding:1px 6px;border-radius:5px;display:inline-block;margin-top:3px;font-weight:600}
 
-/* ── RESPONSIVE ── */
+/* ── RESPONSIVE (legacy) ── */
 @media(max-width:480px){
   .num-val{font-size:.92rem}
   .sms-big-num{font-size:2.5rem}
@@ -418,13 +414,11 @@
    V4 POLISH — Fit-to-screen layout + responsive grids + recent SMS colors
    ───────────────────────────────────────────────────────────────── */
 
-/* Wider, fit-to-screen container on all sizes */
 .container{
   max-width:1280px;
   padding:0 16px 90px;
 }
 
-/* ── MOBILE: tighter padding, slightly larger type for readability ── */
 @media (max-width:600px){
   .container{padding:0 10px 80px}
   .section-title{font-size:1rem}
@@ -443,7 +437,6 @@
   .sms-stat-num{font-size:1.7rem}
 }
 
-/* ── TABLET / DESKTOP: grid layouts ── */
 @media (min-width:768px){
   .ranges-list{
     display:grid;
@@ -486,18 +479,15 @@
   box-shadow:0 8px 24px -8px rgba(33,150,243,.28);
 }
 
-/* Dark mode card */
 [data-theme="dark"] .recent-item{
   background:rgba(30,55,90,.72);
   border-color:rgba(100,160,230,.2);
 }
 
-/* ── Inner card padding wrapper ── */
 .rsms-inner{
   padding:13px 14px 11px;
 }
 
-/* ── Top row: service name + time ── */
 .rsms-head-row{
   display:flex;
   align-items:center;
@@ -549,7 +539,6 @@
   color:#5580aa;
 }
 
-/* ── Range pill ── */
 .rsms-range{
   font-size:.62rem;
   font-weight:700;
@@ -563,7 +552,6 @@
   color:#7eb8f7;
 }
 
-/* ── Message bubble box ── */
 .rsms-msg-box{
   background:rgba(255,255,255,0.58);
   border-radius:12px;
@@ -597,7 +585,6 @@
   color:#b8d4ee;
 }
 
-/* ── Phone number row ── */
 .rsms-num-line{
   text-align:center;
   font-family:ui-monospace,"SF Mono","Cascadia Code",monospace;
@@ -611,7 +598,6 @@
   color:#4a6f90;
 }
 
-/* ── LATEST first card highlight ── */
 .recent-item.rsms-first{
   background:#b8daf5;
   border-color:rgba(33,150,243,.45);
@@ -623,12 +609,9 @@
   box-shadow:0 4px 18px -6px rgba(33,150,243,.3);
 }
 
-
-/* Flash animation for new messages */
 .recent-item.rsms-new-flash{animation:_newFlash .9s ease;}
 @keyframes _newFlash{0%{box-shadow:0 0 0 4px rgba(33,150,243,.45)}100%{box-shadow:none}}
 
-/* Recent list grid on desktop — 2 columns for compactness */
 @media (min-width:900px){
   #smsRecentList{
     display:grid;
@@ -640,7 +623,6 @@
   #smsRecentList{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
 
-/* Loosen sms-big-card so colored recent items breathe */
 .sms-big-card:has(#smsRecentList){background:transparent;border:none;overflow:visible}
 #smsRecentList{padding:4px 0}
 
@@ -732,9 +714,7 @@
 .shr-state{text-align:center;padding:32px 0;color:var(--muted);font-size:.85rem}
 .shr-error{color:#e05555}
 .shr-content{display:flex;flex-direction:column;gap:12px}
-/* Step hint */
 .shr-step-hint{font-size:.78rem;color:var(--muted);font-weight:600;margin-bottom:4px}
-/* Range list */
 .shr-range-list{display:flex;flex-direction:column;gap:8px}
 .shr-range-item{
   display:flex;align-items:center;justify-content:space-between;
@@ -748,7 +728,6 @@
   background:var(--card);border:1px solid var(--border);
   border-radius:20px;padding:2px 10px;
 }
-/* Back button */
 .shr-back-btn{
   background:none;border:1px solid var(--border);color:var(--muted);
   border-radius:8px;padding:6px 12px;cursor:pointer;
@@ -756,10 +735,8 @@
   transition:all .15s;
 }
 .shr-back-btn:hover{color:var(--text);border-color:var(--text)}
-/* Quick-select row */
 .shr-sel-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .shr-count{margin-left:auto;font-size:.78rem;color:var(--muted)}
-/* Numbers list */
 .shr-num-list{
   max-height:200px;overflow-y:auto;
   border:1px solid var(--border);border-radius:10px;background:var(--bg);
@@ -792,7 +769,6 @@
   font-weight:700;font-size:.84rem;opacity:.45;transition:opacity .2s;
 }
 .shr-confirm-btn:not([disabled]){opacity:1;cursor:pointer}
-/* Number items */
 .share-num-item{
   display:flex;align-items:center;gap:10px;
   padding:9px 12px;border-bottom:1px solid var(--border);
@@ -806,7 +782,6 @@
 }
 .share-num-phone{font-size:.85rem;font-weight:700;color:var(--text);font-family:monospace}
 .share-num-label{font-size:.75rem;color:var(--muted);margin-top:1px}
-/* Search box */
 .shr-search-wrap{margin-bottom:6px}
 .shr-search-input{
   width:100%;box-sizing:border-box;
@@ -816,7 +791,6 @@
 }
 .shr-search-input:focus{border-color:var(--accent,#6c63ff)}
 .shr-search-input::placeholder{color:var(--muted)}
-/* Quick-select buttons */
 .share-sel-btn{
   background:var(--bg);border:1px solid var(--border);color:var(--text);
   border-radius:7px;padding:5px 12px;cursor:pointer;
@@ -951,4 +925,127 @@
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   margin-top: 20px;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   V5 — MOBILE + DESKTOP RESPONSIVE OVERHAUL / FLAG POLISH
+   Additive layer only. No selector renamed, no JS hook touched —
+   every id/class the JS uses (onclick targets, getElementById refs)
+   stays exactly as-is. This section only tunes sizing, spacing,
+   touch targets and the flag chip so it scales cleanly from a small
+   phone up to a wide desktop monitor.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* --- Base hygiene --- */
+*{-webkit-tap-highlight-color:transparent}
+html{-webkit-text-size-adjust:100%}
+button,input{font-family:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+}
+
+/* --- Safe-area support (notch / home-indicator devices) --- */
+.bottom-nav{
+  height:calc(58px + env(safe-area-inset-bottom));
+  padding-bottom:env(safe-area-inset-bottom);
+}
+.container{padding-bottom:calc(80px + env(safe-area-inset-bottom))}
+
+/* ═══════════ COUNTRY FLAG — consistent chip, mobile + desktop ═══════════
+   Works whether the JS drops in an emoji character (current behaviour)
+   or an <img src="https://flagcdn.com/w40/xx.png"> — both are sized and
+   centred identically so the flag never looks stretched or misaligned. */
+.range-flag{
+  width:34px;height:34px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.4rem;line-height:1;flex-shrink:0;
+  border-radius:9px;overflow:hidden;
+  background:rgba(34,211,238,.07);
+  border:1px solid rgba(34,211,238,.14);
+}
+[data-theme="light"] .range-flag{background:rgba(8,145,178,.06);border-color:rgba(8,145,178,.12)}
+.range-flag img{
+  width:100%;height:100%;object-fit:cover;display:block;border-radius:8px;
+}
+/* Small inline flags used elsewhere (leaderboard avatars, list rows) */
+.lb-avatar img,.lb-podium-avatar img,.lp-init img{
+  width:100%;height:100%;object-fit:cover;border-radius:50%;
+}
+
+@media (min-width:768px){
+  .range-flag{width:38px;height:38px;font-size:1.55rem;border-radius:10px}
+}
+
+/* ═══════════ TOUCH TARGETS — comfortable tap size on phones ═══════════ */
+@media (max-width:767px){
+  .btn,button{min-height:40px}
+  .bn-item{min-height:56px}
+  .search-bar,.alloc-input,.shr-input,.shr-search-input,.cpwModal input,#cpwOld,#cpwNew,#cpwConfirm{
+    min-height:44px;font-size:16px; /* 16px prevents iOS auto-zoom on focus */
+  }
+  .range-card,.num-item,.alloc-range-item,.shr-range-item{min-height:48px}
+  .panel-back{padding:6px 0;min-height:32px}
+}
+
+/* ═══════════ HEADER — scale gracefully, avoid crowding on small phones ═══════════ */
+@media (max-width:380px){
+  .profile-name{display:none} /* keeps avatar + theme toggle usable on very narrow screens */
+}
+
+/* ═══════════ BOTTOM NAV — clearer active state + spacing on all sizes ═══════════ */
+.bn-item{padding:6px 2px}
+@media (min-width:768px){
+  .bottom-nav{
+    position:sticky; /* still docks to viewport bottom via container flow, but reads better anchored inside wide layouts */
+    max-width:1280px;margin:0 auto;left:0;right:0;
+    border-radius:16px 16px 0 0;
+  }
+  .bn-item{font-size:.62rem}
+  .bn-icon{font-size:1.25rem}
+}
+
+/* ═══════════ MODALS — bottom-sheet on phones, centered card on desktop ═══════════ */
+@media (max-width:600px){
+  .shr-overlay,#numSmsModal{align-items:flex-end;padding:0}
+  .shr-box{
+    max-width:100%;width:100%;max-height:88vh;
+    border-radius:20px 20px 0 0;
+    animation:sheetUp .22s cubic-bezier(.2,.8,.3,1);
+  }
+  #numSmsModal .shr-box{border-radius:20px 20px 0 0}
+}
+@keyframes sheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+
+/* ═══════════ RANGES / NUMBERS GRIDS — refine column counts per breakpoint ═══════════ */
+@media (min-width:480px) and (max-width:767px){
+  .ranges-list{display:grid;grid-template-columns:1fr;gap:8px}
+}
+@media (min-width:1536px){
+  .ranges-list{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .num-list{grid-template-columns:repeat(5,minmax(0,1fr))}
+  .container{max-width:1520px}
+}
+
+/* ═══════════ LEADERBOARD — prevent overflow on very small phones (<360px) ═══════════ */
+@media (max-width:360px){
+  .lb-podium{gap:4px}
+  .lb-podium-name{max-width:66px;font-size:clamp(.6rem,2.4vw,.71rem)}
+  .lb-podium-score{font-size:clamp(.85rem,3.4vw,1.05rem)}
+  .lb-podium-col.p1 .lb-podium-score{font-size:clamp(1rem,4vw,1.3rem)}
+  .lb-title{font-size:1.05rem}
+}
+
+/* ═══════════ CARDS — slightly stronger elevation + smoother hover on desktop pointers ═══════════ */
+@media (hover:hover) and (pointer:fine){
+  .range-card,.num-item,.recent-item,.alloc-range-item,.shr-range-item{
+    transition:border-color .12s,transform .12s,box-shadow .18s;
+  }
+  .recent-item:hover{box-shadow:0 10px 26px -10px rgba(33,150,243,.32)}
+}
+
+/* ═══════════ WIDE DESKTOP — comfortable line length, breathing room ═══════════ */
+@media (min-width:1024px){
+  .search-bar{max-width:520px}
+  .an-header,.lb-hdr,.section-hdr{padding-left:2px;padding-right:2px}
 }
