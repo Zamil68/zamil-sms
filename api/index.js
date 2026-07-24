@@ -20,8 +20,9 @@ const AGENT_BASE_URL = 'http://51.210.208.26/ints/agent/';
 const AGENT_COOKIE = 'PHPSESSID=0950059eaead99816b1e27139bf2d227';
 
 const USERS_DB = [
-  { username: "ZML_Ahsan", password: "12345", clientId: "101" },
-  { username: "test", password: "test", clientId: "102" }
+  { username: "ZML_Ahsan", password: "12345", clientId: "169269", clientName: "ZML_Ahsan", panelNum: 1 },
+  { username: "test", password: "test", clientId: "102", clientName: "Test User", panelNum: 1 },
+  { username: "muzammil62", password: "muzammil62", clientId: "0", clientName: "Agent", panelNum: 1 }
 ];
 
 function getUserFromSession(token) {
@@ -135,46 +136,34 @@ module.exports = async (req, res) => {
   
   try {
     // 1. LOGIN (Dynamic Client Lookup from Agent Panel)
+   // 1. LOGIN (Local Password Check + LaMix Client ID)
     if (url === '/login' && req.method === 'POST') {
       const { username, password } = req.body;
       if (!username || !password) return error(res, 400, 'Username and password required');
       
-      try {
-        // Fetch clients from agent panel to find the matching username
-        const clientsRes = await axios.get(`${AGENT_BASE_URL}res/data_clients.php`, {
-          params: { sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 1000, sSearch: username },
-          headers: { 'Cookie': AGENT_COOKIE, 'X-Requested-With': 'XMLHttpRequest' },
-          timeout: 10000
+      // 🔥 Step 1: Check against our local database (USERS_DB)
+      const localUser = USERS_DB.find(u => u.username.toLowerCase() === username.toLowerCase() && u.password === password);
+      
+      if (localUser) {
+        // 🔥 Step 2: Create JWT token with the real LaMix clientId
+        const token = jwt.sign({ 
+          username: localUser.username, 
+          clientId: localUser.clientId, 
+          clientName: localUser.clientName || localUser.username,
+          panelNum: localUser.panelNum || 1
+        }, JWT_SECRET, { expiresIn: '7d' });
+        
+        return ok(res, { 
+          session: token, 
+          username: localUser.username, 
+          clientId: localUser.clientId, 
+          clientName: localUser.clientName || localUser.username,
+          redirect: '/dashboard/dashboard.html' 
         });
-        
-        let foundClient = null;
-        if (clientsRes.data && clientsRes.data.aaData) {
-          // Columns: 0=Checkbox(ID), 1=Username, 2=Name, 3=Email, 4=Contact, 5=Skype, 6=Active, 7=Action
-          foundClient = clientsRes.data.aaData.find(c => (c[1] || '').toLowerCase() === username.toLowerCase());
-        }
-        
-        if (foundClient) {
-          // Extract numeric ID from checkbox HTML (e.g., value="169269") or fallback to username
-          const idMatch = (foundClient[0] || '').match(/value="(\d+)"/);
-          const clientId = idMatch ? idMatch[1] : username; 
-          const clientName = foundClient[2] || username;
-          
-          // Create JWT token with real client data
-          const token = jwt.sign({ 
-            username: username, 
-            clientId: clientId, 
-            clientName: clientName,
-            panelNum: 1 
-          }, JWT_SECRET, { expiresIn: '7d' });
-          
-          return ok(res, { 
-            session: token, 
-            username: username, 
-            clientId: clientId, 
-            clientName: clientName,
-            redirect: '/dashboard/dashboard.html' 
-          });
-        }
+      }
+
+      return error(res, 401, 'Invalid username or password');
+    }
         
         // Fallback: Allow agent (muzammil62) to login
         if (username.toLowerCase() === 'muzammil62' && password === 'muzammil62') {
@@ -388,54 +377,38 @@ if (url === '/alloc/search-ranges' && req.method === 'POST') {
 
     // 🔥 FIXED: USE CLIENT ID FOR ALLOCATION
 if (url === '/alloc/allocate' && req.method === 'POST') {
-  const user = getUserFromSession(req.body.session);
-  if (!user) return error(res, 401, 'Unauthorized');
-  const { rangeId, quantity, payout } = req.body;
-  
-  // 🔥 GET REAL CLIENT ID FROM SESSION
-  const clientId = user.clientId;
-  
-  try {
-    await axios.post(`${AGENT_BASE_URL}SMSBulkAllocations`, {
-      range: rangeId.replace('alloc_', ''), // Clean ID
-      qty: quantity, 
-      payout: payout || 0.01, 
-      client: clientId // 🔥 MUST USE CLIENT ID
-    }, {
-      headers: { 
-        'Cookie': AGENT_COOKIE, 
-        'Content-Type': 'application/x-www-form-urlencoded', 
-        'Referer': 'http://51.210.208.26/ints/agent/SMSBulkAllocations' 
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      
+      const { rangeId, quantity, payout } = req.body;
+      
+      try {
+        // 🔥 Use the real clientId from the logged-in user's session
+        const clientId = user.clientId;
+        
+        await axios.post(`${AGENT_BASE_URL}SMSBulkAllocations`, {
+          range: rangeId.replace('alloc_', ''), // Clean the ID
+          qty: quantity, 
+          payout: payout || 0.01, 
+          client: clientId // 🔥 This is the magic key that links it to the right user in LaMix
+        }, {
+          headers: { 
+            'Cookie': AGENT_COOKIE, 
+            'Content-Type': 'application/x-www-form-urlencoded', 
+            'Referer': 'http://51.210.208.26/ints/agent/SMSBulkAllocations' 
+          }
+        });
+        
+        return ok(res, { 
+          allocated: parseInt(quantity), 
+          message: 'Allocation successful',
+          clientId: clientId
+        });
+      } catch (err) {
+        console.error('Allocation Error:', err.message);
+        return error(res, 400, 'Allocation failed on agent panel');
       }
-    });
-    
-    // 🔥 VERIFY ALLOCATION HAPPENED
-    const verifyRes = await axios.get(`${AGENT_BASE_URL}res/data_smsnumbers.php`, {
-      params: { 
-        frange: rangeId.replace('alloc_', ''), 
-        fclient: clientId,
-        totnum: 100000, 
-        sEcho: 1, 
-        iColumns: 8,
-        iDisplayStart: 0, 
-        iDisplayLength: 100000
-      },
-      headers: { 'Cookie': AGENT_COOKIE }
-    });
-    
-    const allocatedCount = (verifyRes.data?.aaData || []).length;
-    return ok(res, { 
-      allocated: parseInt(quantity), 
-      message: 'Allocation successful', 
-      used: allocatedCount,
-      limit: 100,
-      remaining: 100 - allocatedCount
-    });
-  } catch (err) {
-    console.error('Allocation Error:', err.message);
-    return error(res, 400, 'Allocation failed on agent panel');
-  }
-}
+    }
 
     if (url === '/leaderboard' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
