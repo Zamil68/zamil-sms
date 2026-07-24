@@ -1499,30 +1499,58 @@ function aBackToSearch(){
 // 🔥 UPDATED: Allocate and refresh ranges automatically
 function doAllocate(){
   if(!ASTATE.selectedRangeId){showToast("Range select karein","error");return;}
-  ASTATE.payterm=ASTATE.payterm||"2"; ASTATE.payout=ASTATE.payout||"0.01";
-  var qty=parseInt(document.getElementById("aQtyInput").value)||3;
-  if(qty<1||qty>25){showToast("Qty 1–25 hona chahiye","error");return;}
-  var btn=document.getElementById("aAllocBtn"); var sp=document.getElementById("aAllocSpinner"); var res=document.getElementById("aAllocResult");
-  btn.disabled=true; sp.style.display=""; res.style.display="none";
-  apiCall("/api/alloc/allocate",{session:SESSION,rangeId:ASTATE.selectedRangeId,quantity:qty,payout:ASTATE.payout},function(d){
-    btn.disabled=false; sp.style.display=""; res.style.display="block";
-    if(!d){ res.className="alloc-result err"; res.innerHTML="❌ No response — please retry"; sp.style.display="none"; return; }
-    if(d.limitReached){ res.className="alloc-result err"; res.innerHTML="⚠️ Daily limit reached! "+d.used+"/"+d.limit+" used today."; showToast("⚠️ Daily limit reached","error"); return; }
+  ASTATE.payterm = ASTATE.payterm || "2"; 
+  ASTATE.payout = ASTATE.payout || "0.01";
+  var qty = parseInt(document.getElementById("aQtyInput").value) || 3;
+  if(qty<1 || qty>25){showToast("Qty 1–25 hona chahiye","error");return;}
+  
+  var btn = document.getElementById("aAllocBtn"); 
+  var sp = document.getElementById("aAllocSpinner"); 
+  var res = document.getElementById("aAllocResult");
+  
+  btn.disabled = true; 
+  sp.style.display = "inline-block"; 
+  res.style.display = "none";
+  
+  // 🔥 Send dynamic client info to backend
+  apiCall("/api/alloc/allocate", {
+    session: SESSION,
+    rangeId: ASTATE.selectedRangeId,
+    quantity: qty,
+    payout: ASTATE.payout,
+    clientId: ASTATE.clientId,       // Dynamic from login
+    clientName: ASTATE.clientName    // Dynamic from login
+  }, function(d){
+    btn.disabled = false; 
+    sp.style.display = "none"; 
+    res.style.display = "block";
+    
+    if(!d){ 
+      res.className = "alloc-result err"; 
+      res.innerHTML = "❌ No response — please retry"; 
+      return; 
+    }
+    if(d.limitReached){ 
+      res.className = "alloc-result err"; 
+      res.innerHTML = "⚠️ Daily limit reached! "+d.used+"/"+d.limit+" used today."; 
+      showToast("⚠️ Daily limit reached","error"); 
+      return; 
+    }
     if(d.ok){
-      var ptLabel=PAYTERM_OPTS[ASTATE.payterm]||ASTATE.payterm;
-      res.className="alloc-result ok";
-      res.innerHTML="✅ Allocated!<br/>Client: <b>"+escHtml(ASTATE.clientName)+"</b><br/>Range: <b>"+escHtml(ASTATE.selectedRangeTitle)+"</b><br/>Qty: <b>"+qty+"</b> • Payterm: <b>"+escHtml(ptLabel)+"</b><br/><span style=\"font-size:.75rem;opacity:.8\">Daily: "+d.used+"/"+d.limit+" used — "+d.remaining+" remaining</span>";
+      var ptLabel = PAYTERM_OPTS[ASTATE.payterm] || ASTATE.payterm;
+      res.className = "alloc-result ok";
+      res.innerHTML = "✅ Allocated!<br/>Client: <b>"+escHtml(ASTATE.clientName)+"</b><br/>Range: <b>"+escHtml(ASTATE.selectedRangeTitle)+"</b><br/>Qty: <b>"+qty+"</b> • Payterm: <b>"+escHtml(ptLabel)+"</b><br/><span style=\"font-size:.75rem;opacity:.8\">Daily: "+d.used+"/"+d.limit+" used — "+d.remaining+" remaining</span>";
       showToast("✓ Allocated!","success");
-      document.getElementById("aLimitBar").innerHTML=" Daily: <strong>"+d.used+"/"+d.limit+"</strong> — <strong>"+d.remaining+"</strong> remaining";
-      // Auto-refresh ranges (mirrors the unassign flow) so newly assigned
-      // numbers show up immediately when user goes back to the ranges list.
+      document.getElementById("aLimitBar").innerHTML = "📅 Daily: <strong>"+d.used+"/"+d.limit+"</strong> — <strong>"+d.remaining+"</strong> remaining";
+      
+      // Auto-refresh ranges so newly assigned numbers show up immediately
       try{ localStorage.removeItem(CACHE_KEY_RANGES); }catch(e){}
       try{ loadRanges(true); }catch(e){}
     } else {
-      res.className="alloc-result err"; res.innerHTML=" Failed: "+(d.error||"Service issue — retry");
+      res.className = "alloc-result err"; 
+      res.innerHTML = "❌ Failed: "+(d.error || "Service issue — retry");
       showToast("❌ Allocation failed","error");
     }
-    sp.style.display="none";
   });
 }
 
