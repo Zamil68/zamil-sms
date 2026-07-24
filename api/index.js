@@ -509,7 +509,7 @@ module.exports = async (req, res) => {
     // ═══════════════════════════════════════════════════════════
     // 8. ALLOCATE — Real-time with verification
     // ═══════════════════════════════════════════════════════════
-   if (url === '/alloc/allocate' && req.method === 'POST') {
+  if (url === '/alloc/allocate' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
       const rangeId = String(req.body.rangeId || '').trim();
@@ -519,14 +519,23 @@ module.exports = async (req, res) => {
       const form = await getAllocForm();
       const C = form ? form.controls : [];
       const findCtl = (re, excl) => C.find(c => re.test(c.label) && (!excl || !excl.test(c.label)));
-      const rangeCtl  = findCtl(/range/i, /qty|each|payout|quantity|client/i);
-      const clientCtl = findCtl(/client/i);
+      const rangeCtl   = findCtl(/range/i, /qty|each|payout|quantity|client/i);
+      const clientCtl  = findCtl(/client/i);
       const paytermCtl = C.find(c => c.isSelect && /payterm|term/i.test(c.label)) || C.find(c => c.isSelect && c.opts && c.opts.length > 0 && c.opts.length <= 12);
-      const qtyCtl    = findCtl(/qty|quantity|each/i);
-      const payoutCtl = findCtl(/payout|price|rate/i);
+      const qtyCtl     = findCtl(/qty|quantity|each/i);
+      const payoutCtl  = findCtl(/payout|price|rate/i);
 
       const clientValue = String(user.clientId || '');
       const targetNames = new Set([rangeCtl, clientCtl, paytermCtl, qtyCtl, payoutCtl].filter(Boolean).map(c => c.name));
+
+      // 🔥 Robust payterm: NEVER send an empty placeholder (classic cause of the 500)
+      let paytermValue = '';
+      if (paytermCtl) {
+        const reqPT = String(req.body.payterm || '');
+        const byVal = v => paytermCtl.opts.find(o => String(o.value) === String(v));
+        const numeric = paytermCtl.opts.filter(o => /^[1-9][0-9]*$/.test(String(o.value)));
+        paytermValue = (reqPT && byVal(reqPT) && byVal(reqPT).value) || (byVal('2') && byVal('2').value) || (numeric[0] && numeric[0].value) || paytermCtl.def || (paytermCtl.opts[0] && paytermCtl.opts[0].value) || '';
+      }
 
       let reason = 'POSTED';
       if (!form) reason = 'FORM_NOT_FOUND';
@@ -538,37 +547,45 @@ module.exports = async (req, res) => {
         C.forEach(c => { if (c.type === 'hidden' && c.name && !targetNames.has(c.name)) params.append(c.name, c.value || ''); });
         if (rangeCtl)  params.set(rangeCtl.name, rangeId);
         if (clientCtl) params.set(clientCtl.name, clientValue);
-        if (paytermCtl) params.set(paytermCtl.name, paytermCtl.def);
+        if (paytermCtl) params.set(paytermCtl.name, paytermValue);
         if (qtyCtl) params.set(qtyCtl.name, String(quantity)); else params.append('qty', String(quantity));
         if (payoutCtl) params.set(payoutCtl.name, String(payout)); else params.append('payout', String(payout));
       }
 
+      // 🔥 BEFORE count (truth source: how many numbers this client owns, all ranges)
+      let beforeAny = 0;
+      try { const d = await scrapeAgentData('res/data_smsnumbers.php', { frange: '', fclient: clientValue, totnum: 100000, sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1 }); if (d && d.aaData) beforeAny = parseNumbersData(d).length; } catch (e) {}
+
+      let serverStatus = null, serverBody = '';
       if (form && rangeCtl && clientCtl) {
         try {
           const postRes = await axios.post(resolveUrl(form.action || 'SMSBulkAllocations'), params, {
             headers: Object.assign({}, BROWSER_HEADERS, { 'Content-Type': 'application/x-www-form-urlencoded' }),
             maxRedirects: 5, validateStatus: () => true, timeout: 20000
           });
+          serverStatus = postRes.status;
+          serverBody = (postRes.data == null ? '' : (typeof postRes.data === 'string' ? postRes.data : JSON.stringify(postRes.data))).toString();
           reason = 'POSTED_' + postRes.status;
-        } catch (e) { reason = 'POST_ERROR_' + (e.code || e.message); }
+        } catch (e) { reason = 'POST_ERROR_' + (e.code || e.message); serverBody = String(e.message || ''); }
       }
 
-      // Truthful verify with the agent's own filters
-      let total = 0, available = 0, usedByClient = 0, usedByClientAny = 0;
-      try {
-        const dAll = await scrapeAgentData('res/data_smsnumbers.php', { frange: rangeId, fclient: '', totnum: 100000, sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1 });
-        if (dAll && dAll.aaData) { const ns = parseNumbersData(dAll); total = ns.length; available = ns.filter(n => isAvailableClient(n.client)).length; }
-        const dCli = await scrapeAgentData('res/data_smsnumbers.php', { frange: rangeId, fclient: clientValue, totnum: 100000, sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1 });
-        if (dCli && dCli.aaData) usedByClient = parseNumbersData(dCli).length;
-        const dAny = await scrapeAgentData('res/data_smsnumbers.php', { frange: '', fclient: clientValue, totnum: 100000, sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1 });
-        if (dAny && dAny.aaData) usedByClientAny = parseNumbersData(dAny).length;
-      } catch (e) {}
+      // 🔥 AFTER count + delta = the REAL proof the allocation happened
+      let afterAny = 0;
+      try { const d = await scrapeAgentData('res/data_smsnumbers.php', { frange: '', fclient: clientValue, totnum: 100000, sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1 }); if (d && d.aaData) afterAny = parseNumbersData(d).length; } catch (e) {}
+      const allocatedReal = Math.max(0, afterAny - beforeAny);
+      if (allocatedReal > 0) reason = 'ALLOCATED_OK';
+      else if (reason.indexOf('POSTED_') === 0) reason = 'POSTED_NOCHANGE_' + serverStatus;
+
+      // best-effort range-specific remaining
+      let total = 0, available = 0;
+      try { const d = await scrapeAgentData('res/data_smsnumbers.php', { frange: rangeId, fclient: '', totnum: 100000, sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1 }); if (d && d.aaData) { const ns = parseNumbersData(d); total = ns.length; available = ns.filter(n => isAvailableClient(n.client)).length; } } catch (e) {}
 
       return ok(res, {
-        reason, allocated: (reason.indexOf('POSTED_') === 0) ? quantity : 0,
-        used: usedByClient, usedAny: usedByClientAny, remaining: available, limit: total,
-        message: `Allocated to ${user.clientName}`,
-        _debug: { rangeId, quantity, payout, clientId: user.clientId, clientName: user.clientName, clientValue,
+        reason, _server: serverBody.replace(/\s+/g, ' ').slice(0, 200),
+        allocatedReal, beforeAny, afterAny,
+        allocated: quantity, used: afterAny - beforeAny, remaining: available, limit: total,
+        message: allocatedReal > 0 ? `Allocated ${allocatedReal} to ${user.clientName}` : `Posted but no change detected`,
+        _debug: { rangeId, quantity, payout, paytermValue, clientId: user.clientId, clientName: user.clientName, clientValue,
           fieldMap: { range: rangeCtl && rangeCtl.name, client: clientCtl && clientCtl.name, payterm: paytermCtl && paytermCtl.name, qty: qtyCtl && qtyCtl.name, payout: payoutCtl && payoutCtl.name },
           sent: Object.fromEntries(params.entries()),
           allControls: C.map(c => c.name + ' [' + c.type + '] = "' + c.label + '"') }
