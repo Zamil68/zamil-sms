@@ -185,32 +185,44 @@ async function getAllocForm() {
   } catch (e) { console.error('getAllocForm error:', e.message); return null; }
 }
 
+function extractRangeItems(d) {
+  if (!d) return { items: [], more: false };
+  if (Array.isArray(d)) return { items: d, more: false };
+  if (typeof d === 'object') {
+    const arr = d.results || d.ranges || d.data || d.items || d.rows || d.list;
+    if (Array.isArray(arr)) return { items: arr, more: !!(d.more || (d.pagination && d.pagination.more)) };
+  }
+  if (typeof d === 'string') {
+    const s = d.trim();
+    if (s[0] === '{' || s[0] === '[') { try { return extractRangeItems(JSON.parse(s)); } catch (_) {} }
+    const $ = cheerio.load(s); const items = [];
+    $('option').each((i, o) => items.push({ id: $(o).attr('value'), text: $(o).text() }));
+    if (items.length) return { items, more: false };
+  }
+  return { items: [], more: false };
+}
+
 async function getRangeOptions() {
   await ensureAgentSession();
-  const map = new Map(); const sample = [];
+  const map = new Map(); const sample = []; let raw = '';
   let page = 1; const max = 500;
   const fetchPage = async (p) => (await axios.get(`${AGENT_BASE_URL}res/aj_smsranges.php`, { params: { max, page: p }, headers: browserHeaders('http://51.210.208.26/ints/agent/SMSBulkAllocations'), timeout: 15000, maxRedirects: 5, validateStatus: () => true })).data;
   while (page <= 30) {
     let d;
     try { d = await fetchPage(page); if (looksLikeLogin(d)) { await ensureAgentSession(true); d = await fetchPage(page); } } catch (e) { break; }
-    let items = []; let more = false;
-    if (d && Array.isArray(d.results)) { items = d.results; more = !!d.more; }
-    else if (Array.isArray(d)) { items = d; }
-    else if (typeof d === 'string') {
-      try { const j = JSON.parse(d); if (j && j.results) { items = j.results; more = !!j.more; } else if (Array.isArray(j)) items = j; }
-      catch (_) { const $ = cheerio.load(d); $('option').each((i, o) => items.push({ id: $(o).attr('value'), text: $(o).text() })); }
-    }
-    if (!items.length) break;
-    items.forEach(it => {
-      const id = String(it.id != null ? it.id : (it.value != null ? it.value : ''));
-      const text = String(it.text != null ? it.text : (it.label != null ? it.label : ''));
+    if (page === 1) raw = (typeof d === 'string' ? d : JSON.stringify(d)).slice(0, 600);
+    const ex = extractRangeItems(d);
+    if (!ex.items.length) break;
+    ex.items.forEach(it => {
+      const id = String(it.id != null ? it.id : (it.value != null ? it.value : (it.range_id != null ? it.range_id : (it.code != null ? it.code : ''))));
+      const text = String(it.text != null ? it.text : (it.label != null ? it.label : (it.name != null ? it.name : (it.range != null ? it.range : (it.title != null ? it.title : '')))));
       if (id) { const k = norm(text); if (k && !map.has(k)) map.set(k, id); }
-      if (sample.length < 8) sample.push(id + '|' + text);
+      if (sample.length < 10) sample.push(id + '|' + text);
     });
-    if (!more || items.length < max) break;
+    if (!ex.more || ex.items.length < max) break;
     page++;
   }
-  map._sample = sample;
+  map._sample = sample; map._raw = raw;
   return map;
 }
 
@@ -258,7 +270,7 @@ module.exports = async (req, res) => {
           // 🔥 match by username (col 1) OR name (col 2)
           const found = cd.aaData.find(c => cleanStrip(c[1]).toLowerCase() === want || cleanStrip(c[2]).toLowerCase() === want);
           if (found) {
-            const idMatch = (found[0] || '').match(/value="(\d+)"/);
+            const idMatch = (found[0] || '').match(/value=["'](\d+)["']/);
             const clientId = idMatch ? idMatch[1] : '0';
             const clientName = cleanStrip(found[2]) || cleanStrip(found[1]) || rawUsername;
             const token = jwt.sign({ username: rawUsername, clientId, clientName, panelNum: 1 }, JWT_SECRET, { expiresIn: '7d' });
@@ -363,6 +375,7 @@ module.exports = async (req, res) => {
       const query = (req.body.query || '').toLowerCase().trim();
       const data = await scrapeAgentData('res/data_smsnumbers.php', { frange: '', fclient: '', totnum: 100000, sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1 });
       if (!data || !data.aaData) return ok(res, { ranges: [], _debug: 'No data from LaMix' });
+
       const allNumbers = parseNumbersData(data);
       const rangesMap = new Map();
       allNumbers.forEach(n => {
@@ -371,19 +384,33 @@ module.exports = async (req, res) => {
         const r = rangesMap.get(key); r.total++;
         if (isAvailableClient(n.client)) r.available++;
       });
+
       const rangeOpts = await getRangeOptions();
+      const optKeys = Array.from(rangeOpts.keys());
       let mapped = 0; const unmatched = [];
       rangesMap.forEach(r => {
-        const cand = norm(`${r.country} - ${r.title}`);
-        let id = rangeOpts.get(cand);
-        if (!id) { const nt = norm(r.title); for (const [k, v] of rangeOpts) { if (k && nt && (k.includes(nt) || nt.includes(k))) { id = v; break; } } }
-        if (!id) { const nc = norm(r.country); if (nc.length >= 4) for (const [k, v] of rangeOpts) { if (k && k.includes(nc)) { id = v; break; } } }
+        const cands = [norm(`${r.country} - ${r.title}`), norm(r.title), norm(`${r.country}${r.title}`), norm(`${r.title} - ${r.country}`)];
+        let id = null;
+        for (const c of cands) { if (c && rangeOpts.has(c)) { id = rangeOpts.get(c); break; } }
+        if (!id) { const nt = norm(r.title); for (const k of optKeys) { if (k && nt && (k.includes(nt) || nt.includes(k))) { id = rangeOpts.get(k); break; } } }
+        if (!id) { const nc = norm(r.country); const nt = norm(r.title); if (nc.length >= 4) for (const k of optKeys) { if (k && k.includes(nc) && nt && k.includes(nt.slice(0, 6))) { id = rangeOpts.get(k); break; } } }
         if (id) { r.id = id; mapped++; } else { unmatched.push(`${r.country} - ${r.title}`); }
       });
       let i = 0; rangesMap.forEach(r => { if (!r.id) r.id = 'alloc_' + (i++); });
+
       const filtered = Array.from(rangesMap.values()).filter(r => `${r.country} ${r.title}`.toLowerCase().includes(query));
       const withAvail = filtered.filter(r => r.available > 0);
-      return ok(res, { ranges: withAvail, _debug: { query, totalScraped: allNumbers.length, rangesFound: filtered.length, withAvailable: withAvail.length, realIdsMapped: mapped, unmatchedSample: unmatched.slice(0, 6), rangeOptsSample: rangeOpts._sample || [] } });
+      const ourRangeSample = Array.from(rangesMap.values()).slice(0, 8).map(r => `${r.country} - ${r.title}`);
+
+      return ok(res, {
+        ranges: withAvail,
+        _debug: {
+          query, totalScraped: allNumbers.length, rangesFound: filtered.length, withAvailable: withAvail.length,
+          realIdsMapped: mapped, rangeOptsCount: optKeys.length,
+          rangeOptsRaw: rangeOpts._raw || '', rangeOptsSample: rangeOpts._sample || [],
+          ourRangeSample, unmatchedSample: unmatched.slice(0, 8)
+        }
+      });
     }
 
     // 7. CHECK AVAILABILITY
