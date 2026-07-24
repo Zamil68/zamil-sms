@@ -149,22 +149,60 @@ async function getAllocForm() {
     const html = (await axios.get(`${AGENT_BASE_URL}SMSBulkAllocations`, { headers: BROWSER_HEADERS, timeout: 15000 })).data;
     if (!html) return null;
     const $ = cheerio.load(html);
-    let form = $('form').filter((i, el) => $(el).find('select').length >= 2).first();
+    const labelFor = (el) => {
+      const $el = $(el); let lab = '';
+      let p = $el.parent();
+      for (let d = 0; d < 4 && p && p.length; d++) { lab = p.find('label').first().text(); if (lab && lab.trim()) break; p = p.parent(); }
+      if (!lab.trim()) lab = $el.prevAll('label').first().text();
+      if (!lab.trim()) { const id = $el.attr('id'); if (id) lab = $('label[for="' + id + '"]').text(); }
+      return lab.replace(/\s+/g, ' ').trim();
+    };
+    let form = $('form').filter((i, el) => $(el).find('select,input[type=text],input[type=hidden]').length >= 2).first();
     if (!form.length) form = $('form').first();
     if (!form.length) return null;
     const action = form.attr('action') || '';
-    const selects = [];
+    const controls = [];
     form.find('select').each((i, el) => {
-      const name = $(el).attr('name') || ('select_' + i);
-      const opts = [];
-      $(el).find('option').each((j, o) => opts.push({ value: $(o).attr('value') != null ? $(o).attr('value') : $(o).text().trim(), text: $(o).text().trim() }));
-      const def = $(el).find('option[selected]').attr('value') || (opts[0] && opts[0].value) || '';
-      selects.push({ name, def, opts });
+      const name = $(el).attr('name'); if (!name) return;
+      const opts = []; $(el).find('option').each((j, o) => opts.push({ value: $(o).attr('value') != null ? $(o).attr('value') : $(o).text().trim(), text: $(o).text().trim(), selected: $(o).attr('selected') != null }));
+      const def = ($(el).find('option[selected]').attr('value')) || (opts[0] && opts[0].value) || '';
+      controls.push({ name, type: 'select', label: labelFor(el), isSelect: true, multiple: $(el).attr('multiple') != null, opts, def });
     });
-    const inputs = {};
-    form.find('input').each((i, el) => { const n = $(el).attr('name'); if (n) inputs[n] = $(el).attr('value') != null ? $(el).attr('value') : ''; });
-    return { action, selects, inputs };
+    form.find('input').each((i, el) => {
+      const name = $(el).attr('name'); const t = ($(el).attr('type') || 'text').toLowerCase();
+      if (!name || t === 'submit' || t === 'button') return;
+      controls.push({ name, type: t, label: labelFor(el), isSelect: false, value: $(el).attr('value') != null ? $(el).attr('value') : '' });
+    });
+    return { action, controls };
   } catch (e) { console.error('getAllocForm error:', e.message); return null; }
+}
+
+// 🔥 Real range id → text map, from the SAME ajax source the agent's dropdown uses
+async function getRangeOptions() {
+  const map = new Map(); const sample = [];
+  let page = 1; const max = 500;
+  while (page <= 30) {
+    let resp;
+    try { resp = await axios.get(`${AGENT_BASE_URL}res/aj_smsranges.php`, { params: { max, page }, headers: BROWSER_HEADERS, timeout: 15000 }); } catch (e) { break; }
+    const d = resp.data; let items = []; let more = false;
+    if (d && Array.isArray(d.results)) { items = d.results; more = !!d.more; }
+    else if (Array.isArray(d)) { items = d; }
+    else if (typeof d === 'string') {
+      try { const j = JSON.parse(d); if (j && j.results) { items = j.results; more = !!j.more; } else if (Array.isArray(j)) items = j; }
+      catch (_) { const $ = cheerio.load(d); $('option').each((i, o) => items.push({ id: $(o).attr('value'), text: $(o).text() })); }
+    }
+    if (!items.length) break;
+    items.forEach(it => {
+      const id = String(it.id != null ? it.id : (it.value != null ? it.value : ''));
+      const text = String(it.text != null ? it.text : (it.label != null ? it.label : ''));
+      if (id) { const k = norm(text); if (k && !map.has(k)) map.set(k, id); }
+      if (sample.length < 8) sample.push(id + '|' + text);
+    });
+    if (!more || items.length < max) break;
+    page++;
+  }
+  map._sample = sample;
+  return map;
 }
 
 // Pick which <select> is the RANGE dropdown: the one whose options best match our known range texts
@@ -424,18 +462,16 @@ module.exports = async (req, res) => {
         if (isAvailableClient(n.client)) r.available++;
       });
 
-      // 🔥 Map each range to the REAL value used by the agent's range dropdown
-      const form = await getAllocForm();
-      let mapped = 0;
-      if (form) {
-        const rSel = pickRangeSelect(form, Array.from(rangesMap.values()).map(r => r.title));
-        if (rSel) {
-          const byText = new Map();
-          rSel.opts.forEach(o => { const k = norm(o.text); if (k && !byText.has(k)) byText.set(k, o.value); });
-          let i = 0;
-          rangesMap.forEach(r => { r.id = byText.get(norm(r.title)) || ('alloc_' + (i++)); if (byText.has(norm(r.title))) mapped++; });
-        }
-      }
+      // 🔥 Attach the REAL range id (the value the agent's dropdown actually submits)
+      const rangeOpts = await getRangeOptions();
+      let mapped = 0; const unmatched = [];
+      rangesMap.forEach(r => {
+        const cand = norm(`${r.country} - ${r.title}`);
+        let id = rangeOpts.get(cand);
+        if (!id) { const nt = norm(r.title); for (const [k, v] of rangeOpts) { if (k && nt && (k.includes(nt) || nt.includes(k))) { id = v; break; } } }
+        if (!id) { const nc = norm(r.country); if (nc.length >= 4) for (const [k, v] of rangeOpts) { if (k && k.includes(nc)) { id = v; break; } } }
+        if (id) { r.id = id; mapped++; } else { unmatched.push(`${r.country} - ${r.title}`); }
+      });
       let i = 0; rangesMap.forEach(r => { if (!r.id) r.id = 'alloc_' + (i++); });
 
       const filtered = Array.from(rangesMap.values()).filter(r => `${r.country} ${r.title}`.toLowerCase().includes(query));
@@ -443,10 +479,9 @@ module.exports = async (req, res) => {
       return ok(res, {
         ranges: withAvail,
         _debug: { query, totalScraped: allNumbers.length, rangesFound: filtered.length, withAvailable: withAvail.length, realIdsMapped: mapped,
-          formSelects: form ? form.selects.map(s => ({ name: s.name, optCount: s.opts.length, sample: s.opts.slice(0, 6).map(o => o.value + '=' + o.text) })) : 'FORM_NOT_FOUND' }
+          unmatchedSample: unmatched.slice(0, 6), rangeOptsSample: rangeOpts._sample || [] }
       });
     }
-
     // ═══════════════════════════════════════════════════════════
     // 7. CHECK AVAILABILITY
     // ═══════════════════════════════════════════════════════════
@@ -482,55 +517,62 @@ module.exports = async (req, res) => {
       const payout = parseFloat(req.body.payout) || 0.01;
 
       const form = await getAllocForm();
-      const dbg = { rangeId, quantity, payout, clientId: user.clientId, clientName: user.clientName };
+      const C = form ? form.controls : [];
+      const findCtl = (re, excl) => C.find(c => re.test(c.label) && (!excl || !excl.test(c.label)));
+      const rangeCtl  = findCtl(/range/i, /qty|each|payout|quantity|client/i);
+      const clientCtl = findCtl(/client/i);
+      const paytermCtl = C.find(c => c.isSelect && /payterm|term/i.test(c.label)) || C.find(c => c.isSelect && c.opts && c.opts.length > 0 && c.opts.length <= 12);
+      const qtyCtl    = findCtl(/qty|quantity|each/i);
+      const payoutCtl = findCtl(/payout|price|rate/i);
 
-      if (!form) {
-        return ok(res, { allocated: 0, used: 0, remaining: 0, limit: 0, _debug: Object.assign(dbg, { error: 'FORM_NOT_FOUND' }) });
+      const clientValue = String(user.clientId || '');
+      const targetNames = new Set([rangeCtl, clientCtl, paytermCtl, qtyCtl, payoutCtl].filter(Boolean).map(c => c.name));
+
+      let reason = 'POSTED';
+      if (!form) reason = 'FORM_NOT_FOUND';
+      else if (!rangeCtl) reason = 'RANGE_FIELD_NOT_FOUND';
+      else if (!clientCtl) reason = 'CLIENT_FIELD_NOT_FOUND';
+
+      const params = new URLSearchParams();
+      if (form) {
+        C.forEach(c => { if (c.type === 'hidden' && c.name && !targetNames.has(c.name)) params.append(c.name, c.value || ''); });
+        if (rangeCtl)  params.set(rangeCtl.name, rangeId);
+        if (clientCtl) params.set(clientCtl.name, clientValue);
+        if (paytermCtl) params.set(paytermCtl.name, paytermCtl.def);
+        if (qtyCtl) params.set(qtyCtl.name, String(quantity)); else params.append('qty', String(quantity));
+        if (payoutCtl) params.set(payoutCtl.name, String(payout)); else params.append('payout', String(payout));
       }
 
-      // Identify the real dropdowns
-      const rSel = form.selects.find(s => s.opts.some(o => o.value === rangeId));     // exact: our id came from here
-      const cSel = pickClientSelect(form, user);
-      const pSel = form.selects.find(isPaytermSelect);
-      const clientValue = cSel ? ((cSel.opts.find(o => o.value === String(user.clientId)) || cSel.opts.find(o => norm(o.text) === norm(user.username)) || cSel.opts.find(o => norm(o.text) === norm(user.clientName)) || {}).value || user.clientId) : user.clientId;
+      if (form && rangeCtl && clientCtl) {
+        try {
+          const postRes = await axios.post(resolveUrl(form.action || 'SMSBulkAllocations'), params, {
+            headers: Object.assign({}, BROWSER_HEADERS, { 'Content-Type': 'application/x-www-form-urlencoded' }),
+            maxRedirects: 5, validateStatus: () => true, timeout: 20000
+          });
+          reason = 'POSTED_' + postRes.status;
+        } catch (e) { reason = 'POST_ERROR_' + (e.code || e.message); }
+      }
 
-      // Build the POST exactly like the form (hidden fields + the 3 selects + qty/payout inputs)
-      const params = new URLSearchParams();
-      Object.entries(form.inputs).forEach(([k, v]) => { const t = (form.inputs['type_' + k] || '').toLowerCase(); if (!k.startsWith('type_')) params.append(k, v); });
-      // re-add hidden inputs properly (inputs{} already holds name->value for ALL inputs incl. hidden)
-      if (rSel) params.set(rSel.name, rangeId);
-      if (cSel) params.set(cSel.name, clientValue);
-      if (pSel) params.set(pSel.name, pSel.def);
-      // qty / payout inputs by name pattern
-      const setByPattern = (re, val) => { const hit = Object.keys(form.inputs).find(k => re.test(k) && form.inputs['type_' + k] !== 'hidden'); if (hit) params.set(hit, val); };
-      setByPattern(/qty|quant|num/i, String(quantity));
-      setByPattern(/payout|price|rate/i, String(payout));
-
-      dbg.formAction = form.action || '(self)';
-      dbg.selectNames = { range: rSel && rSel.name, client: cSel && cSel.name, payterm: pSel && pSel.name };
-      dbg.clientValue = clientValue;
-      dbg.sent = Object.fromEntries(params.entries());
-
-      if (!rSel) return ok(res, { allocated: 0, used: 0, remaining: 0, limit: 0, _debug: Object.assign(dbg, { error: 'RANGE_DROPDOWN_NOT_MATCHED' }) });
-
-      try {
-        const postRes = await axios.post(resolveUrl(form.action), params, {
-          headers: Object.assign({}, BROWSER_HEADERS, { 'Content-Type': 'application/x-www-form-urlencoded' }),
-          maxRedirects: 5, validateStatus: () => true, timeout: 15000
-        });
-        dbg.postStatus = postRes.status;
-      } catch (e) { dbg.postError = e.message; }
-
-      // 🔥 Truthful verify using the agent's OWN filters (real range value + real client value)
-      let total = 0, available = 0, usedByClient = 0;
+      // Truthful verify with the agent's own filters
+      let total = 0, available = 0, usedByClient = 0, usedByClientAny = 0;
       try {
         const dAll = await scrapeAgentData('res/data_smsnumbers.php', { frange: rangeId, fclient: '', totnum: 100000, sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1 });
         if (dAll && dAll.aaData) { const ns = parseNumbersData(dAll); total = ns.length; available = ns.filter(n => isAvailableClient(n.client)).length; }
         const dCli = await scrapeAgentData('res/data_smsnumbers.php', { frange: rangeId, fclient: clientValue, totnum: 100000, sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1 });
         if (dCli && dCli.aaData) usedByClient = parseNumbersData(dCli).length;
-      } catch (e) { dbg.verifyError = e.message; }
+        const dAny = await scrapeAgentData('res/data_smsnumbers.php', { frange: '', fclient: clientValue, totnum: 100000, sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1 });
+        if (dAny && dAny.aaData) usedByClientAny = parseNumbersData(dAny).length;
+      } catch (e) {}
 
-      return ok(res, { allocated: quantity, used: usedByClient, remaining: available, limit: total, message: `Allocated to ${user.clientName}`, _debug: dbg });
+      return ok(res, {
+        reason, allocated: (reason.indexOf('POSTED_') === 0) ? quantity : 0,
+        used: usedByClient, usedAny: usedByClientAny, remaining: available, limit: total,
+        message: `Allocated to ${user.clientName}`,
+        _debug: { rangeId, quantity, payout, clientId: user.clientId, clientName: user.clientName, clientValue,
+          fieldMap: { range: rangeCtl && rangeCtl.name, client: clientCtl && clientCtl.name, payterm: paytermCtl && paytermCtl.name, qty: qtyCtl && qtyCtl.name, payout: payoutCtl && payoutCtl.name },
+          sent: Object.fromEntries(params.entries()),
+          allControls: C.map(c => c.name + ' [' + c.type + '] = "' + c.label + '"') }
+      });
     }
 
     // ═══════════════════════════════════════════════════════════
