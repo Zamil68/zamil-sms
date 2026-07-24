@@ -137,41 +137,59 @@ module.exports = async (req, res) => {
   try {
     // 1. LOGIN (Dynamic Client Lookup from Agent Panel)
    // 1. LOGIN (Local Password Check + LaMix Client ID)
+   // 1. LOGIN (Dynamic LaMix Client Lookup - No Hardcoded Local List)
     if (url === '/login' && req.method === 'POST') {
       const { username, password } = req.body;
       if (!username || !password) return error(res, 400, 'Username and password required');
       
-      // 🔥 Step 1: Check against our local database (USERS_DB)
-      const localUser = USERS_DB.find(u => u.username.toLowerCase() === username.toLowerCase() && u.password === password);
-      
-      if (localUser) {
-        // 🔥 Step 2: Create JWT token with the real LaMix clientId
+      try {
+        // Step 1: Fetch clients from LaMix agent panel to find the matching username
+        const clientsRes = await axios.get(`${AGENT_BASE_URL}res/data_clients.php`, {
+          params: { sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 1000, sSearch: username },
+          headers: { 'Cookie': AGENT_COOKIE, 'X-Requested-With': 'XMLHttpRequest' },
+          timeout: 10000
+        });
+        
+        let foundClient = null;
+        if (clientsRes.data && clientsRes.data.aaData) {
+          // Columns: 0=Checkbox(ID), 1=Username, 2=Name, 3=Email, 4=Contact, 5=Skype, 6=Active, 7=Action
+          foundClient = clientsRes.data.aaData.find(c => (c[1] || '').toLowerCase() === username.toLowerCase());
+        }
+        
+        let clientId = '0';
+        let clientName = username;
+        let panelNum = 1;
+
+        if (foundClient) {
+          // Extract numeric ID from checkbox HTML (e.g., value="169269")
+          const idMatch = (foundClient[0] || '').match(/value="(\d+)"/);
+          clientId = idMatch ? idMatch[1] : '0'; 
+          clientName = foundClient[2] || username;
+        } else if (username.toLowerCase() === 'muzammil62') {
+          // Fallback for the main agent account
+          clientId = '0';
+          clientName = 'Agent';
+        } else {
+          // If not found in LaMix clients, reject login
+          return error(res, 401, 'Client not found in LaMix system. Please contact admin.');
+        }
+        
+        // Create JWT token with real LaMix client data
         const token = jwt.sign({ 
-          username: localUser.username, 
-          clientId: localUser.clientId, 
-          clientName: localUser.clientName || localUser.username,
-          panelNum: localUser.panelNum || 1
+          username: username, 
+          clientId: clientId, 
+          clientName: clientName,
+          panelNum: panelNum 
         }, JWT_SECRET, { expiresIn: '7d' });
         
         return ok(res, { 
           session: token, 
-          username: localUser.username, 
-          clientId: localUser.clientId, 
-          clientName: localUser.clientName || localUser.username,
+          username: username, 
+          clientId: clientId, 
+          clientName: clientName,
           redirect: '/dashboard/dashboard.html' 
         });
-      }
 
-      return error(res, 401, 'Invalid username or password');
-    }
-        
-        // Fallback: Allow agent (muzammil62) to login
-        if (username.toLowerCase() === 'muzammil62' && password === 'muzammil62') {
-           const token = jwt.sign({ username: 'muzammil62', clientId: '0', clientName: 'Agent', panelNum: 1 }, JWT_SECRET, { expiresIn: '7d' });
-           return ok(res, { session: token, username: 'muzammil62', clientId: '0', clientName: 'Agent', redirect: '/dashboard/dashboard.html' });
-        }
-
-        return error(res, 401, 'Client not found in LaMix system');
       } catch (err) {
         console.error('Login error:', err.message);
         return error(res, 500, 'Login service unavailable');
