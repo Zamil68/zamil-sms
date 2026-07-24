@@ -307,25 +307,23 @@ function rgBackToFolders() { RG_OPEN_COUNTRY = null; renderRanges(ALL_RANGES); }
 // 🔥 FIXED: dispatches to the flag-aware / grouped-folder renderer,
 // and keeps ALL_RANGES populated so search actually has data to filter.
 function renderRanges(ranges) {
-  ALL_RANGES = ranges || [];
-  const container = document.getElementById('rangesList');
-  if (!container) return;
-
-  if (!ranges || !ranges.length) {
+  if (ranges) ALL_RANGES = ranges;
+  var container = document.getElementById('rangesList');
+  var countEl = document.getElementById('rangesCount');
+  var list = ALL_RANGES || [];
+  var q = ((document.getElementById('rangesSearch') || {}).value || '').toLowerCase().trim();
+  if (q && typeof filterRanges === 'function') list = filterRanges(ALL_RANGES, q);
+  if (countEl) countEl.textContent = list.length;
+  if (!list.length) {
     container.innerHTML = '<div class="empty"><div class="empty-icon">📭</div>No ranges found. Allocate numbers from the Add button.</div>';
-    var cnt = document.getElementById('rangesCount'); if (cnt) cnt.textContent = 0;
     return;
   }
-
-  if (RANGES_GROUPED) {
-    renderRangesGroupedView(ranges, container);
-  } else {
-    var html = '';
-    for (var i = 0; i < ranges.length; i++) html += _rangeCardHtml(ranges[i]);
-    container.innerHTML = html;
+  if (RANGES_GROUPED && typeof renderRangesGroupedView === 'function') { renderRangesGroupedView(list, container); return; }
+  var h = '';
+  for (var i = 0; i < list.length; i++) {
+    if (typeof _rangeCardHtml === 'function') h += _rangeCardHtml(list[i]);
   }
-  var countEl = document.getElementById('rangesCount');
-  if (countEl) countEl.textContent = ranges.length;
+  container.innerHTML = h || '<div class="empty">No ranges</div>';
 }
 function onRangesSearch(){
   var q = ((document.getElementById("rangesSearch")||{}).value||"").trim().toLowerCase();
