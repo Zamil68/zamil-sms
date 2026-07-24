@@ -151,26 +151,17 @@ module.exports = async (req, res) => {
       });
       
       if (!data || !data.aaData) {
-        console.log("🔍 DEBUG RANGES: No data or no aaData returned from LaMix.");
-        return ok(res, { ranges: [] });
+        return ok(res, { ranges: [], _debug: "No data or no aaData returned from LaMix." });
       }
       
       const allNumbers = parseNumbersData(data);
-      console.log(`🔍 DEBUG RANGES: Total numbers scraped = ${allNumbers.length}`);
-      if (allNumbers.length > 0) {
-        console.log(`🔍 DEBUG RANGES: First 3 client names from LaMix:`, allNumbers.slice(0, 3).map(n => `"${n.client}"`));
-      }
-      
       const target1 = (user.clientName || '').toLowerCase().trim();
       const target2 = (user.username || '').toLowerCase().trim();
-      console.log(`🔍 DEBUG RANGES: Looking for client matching: "${target1}" OR "${target2}"`);
       
       const userNumbers = allNumbers.filter(n => {
         const c = (n.client || '').toLowerCase().trim();
         return c === target1 || c === target2 || c.includes(target1) || c.includes(target2);
       });
-      
-      console.log(`🔍 DEBUG RANGES: Matched ${userNumbers.length} numbers for this user.`);
       
       const rangesMap = new Map();
       userNumbers.forEach(n => {
@@ -183,7 +174,16 @@ module.exports = async (req, res) => {
         range.count++;
       });
 
-      return ok(res, { ranges: Array.from(rangesMap.values()).map(r => ({ ...r, minsAgo: Math.floor(Math.random() * 60) })) });
+      // 🔥 RETURN DEBUG INFO TO BROWSER
+      return ok(res, { 
+        ranges: Array.from(rangesMap.values()).map(r => ({ ...r, minsAgo: Math.floor(Math.random() * 60) })),
+        _debug: {
+          totalScraped: allNumbers.length,
+          sampleClients: allNumbers.slice(0, 10).map(n => `"${n.client}"`),
+          lookingFor: `target1: "${target1}" OR target2: "${target2}"`,
+          matchedCount: userNumbers.length
+        }
+      });
     }
 
     if (url === '/numbers' && req.method === 'POST') {
@@ -264,7 +264,6 @@ module.exports = async (req, res) => {
     // 🔥 DEBUG: SEARCH RANGES
     if (url === '/alloc/search-ranges' && req.method === 'POST') {
       const query = (req.body.query || '').toLowerCase().trim();
-      console.log(`🔍 DEBUG SEARCH: User searched for query: "${query}"`);
       
       const data = await scrapeAgentData('res/data_smsnumbers.php', {
         frange: '', fclient: '', totnum: 100000, sEcho: 1, iColumns: 8,
@@ -272,17 +271,12 @@ module.exports = async (req, res) => {
       });
       
       if (!data || !data.aaData) {
-        console.log("🔍 DEBUG SEARCH: No data or no aaData returned from LaMix.");
-        return ok(res, { ranges: [] });
+        return ok(res, { ranges: [], _debug: "No data or no aaData returned from LaMix." });
       }
       
       const allNumbers = parseNumbersData(data);
-      console.log(`🔍 DEBUG SEARCH: Total numbers scraped = ${allNumbers.length}`);
-      if (allNumbers.length > 0) {
-        console.log(`🔍 DEBUG SEARCH: First 3 countries from LaMix:`, allNumbers.slice(0, 3).map(n => `"${n.country}"`));
-      }
-      
       const rangesMap = new Map();
+      
       allNumbers.forEach(n => {
         const key = `${n.country} -- ${n.range}`;
         if (!rangesMap.has(key)) {
@@ -302,9 +296,16 @@ module.exports = async (req, res) => {
         return searchText.includes(query);
       });
       
-      console.log(`🔍 DEBUG SEARCH: Found ${filtered.length} ranges matching "${query}"`);
-      
-      return ok(res, { ranges: filtered });
+      // 🔥 RETURN DEBUG INFO TO BROWSER
+      return ok(res, { 
+        ranges: filtered,
+        _debug: {
+          querySearched: query,
+          totalScraped: allNumbers.length,
+          sampleCountries: [...new Set(allNumbers.slice(0, 20).map(n => n.country))],
+          matchedCount: filtered.length
+        }
+      });
     }
 
     if (url === '/alloc/check-availability' && req.method === 'POST') {
