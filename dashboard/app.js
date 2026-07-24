@@ -1423,38 +1423,43 @@ function autoVerifyClient(){
 
 // 🔥 UPDATED: Search ranges with proper filtering
 function allocSearch(){
-  var q=document.getElementById("aCountryInput").value.trim();
-  if(!q){showToast("Range name likhein","error");return;}
-  var btn=document.getElementById("aSearchBtn"); var list=document.getElementById("aRangeList");
-  btn.disabled=true; btn.textContent="…";
-  list.innerHTML="<div class=\"empty\"><div class=\"spinner\"></div></div>";
-  ASTATE.availCache={};
-  apiCall("/api/alloc/search-ranges",{query:q,session:SESSION},function(d){
-    btn.disabled=false; btn.textContent="🔍 Search";
-    var ranges=d.ranges||[];
-    ASTATE.ranges=ranges;
-    if(d.error||!ranges.length){ list.innerHTML="<div class=\"empty\" style=\"color:var(--red)\">"+(d.error?"Error — retry":"No ranges found")+"</div>"; return; }
-    renderAllocRanges(); setTimeout(allocBulkCheck,200);
+  var q = document.getElementById("aCountryInput").value.trim();
+  if (!q) { showToast("Type a country or range name", "error"); return; }
+  var btn = document.getElementById("aSearchBtn"); var list = document.getElementById("aRangeList");
+  btn.disabled = true; btn.textContent = "…";
+  list.innerHTML = "<div class=\"empty\"><div class=\"spinner\"></div></div>";
+  ASTATE.availCache = {};
+  apiCall("/api/alloc/search-ranges", { query: q, session: SESSION }, function(d){
+    btn.disabled = false; btn.textContent = "🔍 Search";
+    var ranges = (d && d.ranges) || [];
+    ASTATE.ranges = ranges;
+    // 🔥 Use the available counts the server ALREADY computed (no extra requests, no wrong overwrite)
+    ranges.forEach(function(r){ ASTATE.availCache[r.id] = { available: r.available || 0, total: r.total || 0 }; });
+    if (!ranges.length) { list.innerHTML = "<div class=\"empty\" style=\"color:var(--red)\">No available ranges for \"" + escHtml(q) + "\"</div>"; return; }
+    renderAllocRanges();
   });
 }
 document.addEventListener("keydown",function(e){ if(e.key==="Enter"&&document.activeElement===document.getElementById("aCountryInput")) allocSearch(); });
 
 function renderAllocRanges(){
-  var html=""; var stillChecking=false;
-  for(var j=0;j<ASTATE.ranges.length;j++){ if(ASTATE.availCache[ASTATE.ranges[j].id]===null){stillChecking=true;break;} }
-  for(var i=0;i<ASTATE.ranges.length;i++){
-    var r=ASTATE.ranges[i]; var avail=ASTATE.availCache[r.id]; var badge="";
-    if(avail===null) badge="<span class=\"avail-wait\"><span class=\"spinner\" style=\"width:10px;height:10px;border-width:1.5px\"></span></span>";
-    else if(avail!==undefined) badge=avail.available>0?"<span class=\"avail-ok\">✓ Available</span>":"<span class=\"avail-no\">✕ Not available</span>";
-    var isNone=avail!==undefined&&avail!==null&&avail.available===0;
-    var disabled=stillChecking||isNone;
-    var onclick=disabled?"":"onclick=\"selectAllocRange(this)\"";
-    var extraStyle=disabled?"cursor:not-allowed;opacity:.45;":"";
-    html+="<div class=\"alloc-range-item\" data-id=\""+escHtml(r.id)+"\" data-title=\""+escHtml(r.title)+"\" "+onclick+" style=\""+extraStyle+"\">";
-    html+="<div><div class=\"alloc-range-name\">"+escHtml(r.title)+"</div><div class=\"alloc-range-id\">ID: "+escHtml(r.id)+"</div></div>";
-    html+="<div>"+badge+"</div></div>";
+  var html = ""; var stillChecking = false;
+  for (var j = 0; j < ASTATE.ranges.length; j++){ if (ASTATE.availCache[ASTATE.ranges[j].id] === null){ stillChecking = true; break; } }
+  for (var i = 0; i < ASTATE.ranges.length; i++){
+    var r = ASTATE.ranges[i]; var avail = ASTATE.availCache[r.id]; var badge = "";
+    if (avail === null) badge = "<span class=\"avail-wait\"><span class=\"spinner\" style=\"width:10px;height:10px;border-width:1.5px\"></span></span>";
+    else if (avail !== undefined) {
+      if (avail.available > 0) badge = "<span class=\"avail-ok\">✓ " + avail.available + " available</span>";
+      else badge = "<span class=\"avail-no\">✕ Not available</span>";
+    }
+    var isNone = avail !== undefined && avail !== null && avail.available === 0;
+    var disabled = stillChecking || isNone;
+    var onclick = disabled ? "" : "onclick=\"selectAllocRange(this)\"";
+    var extraStyle = disabled ? "cursor:not-allowed;opacity:.45;" : "";
+    html += "<div class=\"alloc-range-item\" data-id=\"" + escHtml(r.id) + "\" data-title=\"" + escHtml(r.title) + "\" " + onclick + " style=\"" + extraStyle + "\">";
+    html += "<div><div class=\"alloc-range-name\">" + escHtml(r.title) + "</div><div class=\"alloc-range-id\">" + escHtml(r.country || "") + "</div></div>";
+    html += "<div>" + badge + "</div></div>";
   }
-  document.getElementById("aRangeList").innerHTML=html;
+  document.getElementById("aRangeList").innerHTML = html;
 }
 
 function allocBulkCheck(){
