@@ -1365,15 +1365,27 @@ var ADD_PAGE_INITED=false;
 function initAddPage(force){
   // Reset only if not yet verified or forced
   if(!force && ASTATE.clientId) return;
-  ASTATE={clientId:null,clientName:null,panelNum:1,selectedRangeId:null,selectedRangeTitle:null,payterm:"2",payout:"0.01",ranges:[],availCache:{}};
-  var sc=document.getElementById("aSearchCard"); if(sc) sc.style.display="none";
-  var ac=document.getElementById("aAllocCard"); if(ac) ac.style.display="none";
-  var rl=document.getElementById("aRangeList"); if(rl) rl.innerHTML="<div class=\"empty\" style=\"font-size:.78rem;color:var(--muted);padding:14px 8px;text-align:center\">Type a country or keyword above to find available ranges.</div>";
-  var ar=document.getElementById("aAllocResult"); if(ar){ ar.style.display="none"; ar.innerHTML=""; }
-  var lb=document.getElementById("aLimitBar"); if(lb) lb.innerHTML="";
-  var ci=document.getElementById("aCountryInput"); if(ci) ci.value="";
+  
+  // 🔥 DYNAMIC: Get real client info from localStorage (set during login)
+  ASTATE.clientId = localStorage.getItem("app_client_id") || "0";
+  ASTATE.clientName = localStorage.getItem("app_client_name") || USERNAME;
+  ASTATE.panelNum = parseInt(localStorage.getItem("app_panel_num") || "1");
+  ASTATE.selectedRangeId = null;
+  ASTATE.selectedRangeTitle = null;
+  ASTATE.payterm = "2";
+  ASTATE.payout = "0.01";
+  ASTATE.ranges = [];
+  ASTATE.availCache = {};
+  
+  var sc = document.getElementById("aSearchCard"); if(sc) sc.style.display="none";
+  var ac = document.getElementById("aAllocCard"); if(ac) ac.style.display="none";
+  var rl = document.getElementById("aRangeList"); if(rl) rl.innerHTML="<div class=\"empty\" style=\"font-size:.78rem;color:var(--muted);padding:14px 8px;text-align:center\">Type a country or keyword above to find available ranges.</div>";
+  var ar = document.getElementById("aAllocResult"); if(ar){ ar.style.display="none"; ar.innerHTML=""; }
+  var lb = document.getElementById("aLimitBar"); if(lb) lb.innerHTML="";
+  var ci = document.getElementById("aCountryInput"); if(ci) ci.value="";
+  
   autoVerifyClient();
-  ADD_PAGE_INITED=true;
+  ADD_PAGE_INITED = true;
 }
 
 function autoVerifyClient(){
