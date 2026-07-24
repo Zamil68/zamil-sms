@@ -134,14 +134,59 @@ module.exports = async (req, res) => {
   const url = req.url.replace(/^\/api/, '');
   
   try {
+    // 1. LOGIN (Dynamic Client Lookup from Agent Panel)
     if (url === '/login' && req.method === 'POST') {
       const { username, password } = req.body;
-      const user = USERS_DB.find(u => u.username.toLowerCase() === username.toLowerCase() && u.password === password);
-      if (user) {
-        const token = jwt.sign({ username: user.username, clientId: user.clientId }, JWT_SECRET, { expiresIn: '7d' });
-        return ok(res, { session: token, username: user.username, clientId: user.clientId, redirect: '/dashboard/dashboard.html' });
+      if (!username || !password) return error(res, 400, 'Username and password required');
+      
+      try {
+        // Fetch clients from agent panel to find the matching username
+        const clientsRes = await axios.get(`${AGENT_BASE_URL}res/data_clients.php`, {
+          params: { sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 1000, sSearch: username },
+          headers: { 'Cookie': AGENT_COOKIE, 'X-Requested-With': 'XMLHttpRequest' },
+          timeout: 10000
+        });
+        
+        let foundClient = null;
+        if (clientsRes.data && clientsRes.data.aaData) {
+          // Columns: 0=Checkbox(ID), 1=Username, 2=Name, 3=Email, 4=Contact, 5=Skype, 6=Active, 7=Action
+          foundClient = clientsRes.data.aaData.find(c => (c[1] || '').toLowerCase() === username.toLowerCase());
+        }
+        
+        if (foundClient) {
+          // Extract numeric ID from checkbox HTML (e.g., value="169269") or fallback to username
+          const idMatch = (foundClient[0] || '').match(/value="(\d+)"/);
+          const clientId = idMatch ? idMatch[1] : username; 
+          const clientName = foundClient[2] || username;
+          
+          // Create JWT token with real client data
+          const token = jwt.sign({ 
+            username: username, 
+            clientId: clientId, 
+            clientName: clientName,
+            panelNum: 1 
+          }, JWT_SECRET, { expiresIn: '7d' });
+          
+          return ok(res, { 
+            session: token, 
+            username: username, 
+            clientId: clientId, 
+            clientName: clientName,
+            redirect: '/dashboard/dashboard.html' 
+          });
+        }
+        
+        // Fallback: Allow agent (muzammil62) to login
+        if (username.toLowerCase() === 'muzammil62' && password === 'muzammil62') {
+           const token = jwt.sign({ username: 'muzammil62', clientId: '0', clientName: 'Agent', panelNum: 1 }, JWT_SECRET, { expiresIn: '7d' });
+           return ok(res, { session: token, username: 'muzammil62', clientId: '0', clientName: 'Agent', redirect: '/dashboard/dashboard.html' });
+        }
+
+        return error(res, 401, 'Client not found in LaMix system');
+      } catch (err) {
+        console.error('Login error:', err.message);
+        return error(res, 500, 'Login service unavailable');
       }
-      return error(res, 401, 'Invalid username or password');
     }
 
     if (url === '/ping' && req.method === 'POST') {
