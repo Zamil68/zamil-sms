@@ -19,9 +19,10 @@ const corsHeaders = {
 const AGENT_BASE_URL = 'http://51.210.208.26/ints/agent/';
 const AGENT_COOKIE = 'PHPSESSID=0950059eaead99816b1e27139bf2d227';
 
+// We only need username/password for local login. The scraper will handle the rest.
 const USERS_DB = [
-  { username: "ZML_Ahsan", password: "12345", clientId: "101", assignedNumbers: ["255651498861", "96893010505"] },
-  { username: "test", password: "test", clientId: "102", assignedNumbers: [] }
+  { username: "ZML_Ahsan", password: "12345", clientId: "101" },
+  { username: "test", password: "test", clientId: "102" }
 ];
 
 function getUserFromSession(token) {
@@ -31,11 +32,6 @@ function getUserFromSession(token) {
 
 function ok(res, data = {}) { res.status(200).json({ ok: true, ...data, ...corsHeaders }); }
 function error(res, statusCode, message) { res.status(statusCode).json({ ok: false, error: message, ...corsHeaders }); }
-
-// Helper to clean numbers (removes +, spaces, dashes for perfect matching)
-function cleanNumber(num) {
-  return String(num || '').replace(/[^0-9]/g, '');
-}
 
 async function getSmartDOR() {
   const now = new Date();
@@ -99,7 +95,7 @@ async function scrapeAgentData(endpoint, params = {}) {
         'X-Requested-With': 'XMLHttpRequest',
         'Referer': 'http://51.210.208.26/ints/agent/MySMSNumbers'
       },
-      timeout: 10000
+      timeout: 15000
     });
     return response.data;
   } catch (err) {
@@ -108,7 +104,7 @@ async function scrapeAgentData(endpoint, params = {}) {
   }
 }
 
-// 🔥 FIXED: Correct column mapping based on your HTML table headers
+// 🔥 PARSE DATA: Extracts Range, Country, Number, and crucially, the CLIENT column
 function parseNumbersData(data) {
   if (data && typeof data === 'object' && data.aaData) {
     return data.aaData.map(row => ({
@@ -120,12 +116,11 @@ function parseNumbersData(data) {
     }));
   }
   
-  // Fallback HTML parsing
   const $ = cheerio.load(data);
   const numbers = [];
   $('tbody tr').each((i, row) => {
     const cells = $(row).find('td');
-    if (cells.length < 4) return;
+    if (cells.length < 6) return;
     numbers.push({
       range: cells.eq(1).text().trim(),
       country: cells.eq(2).text().trim(),
@@ -146,7 +141,7 @@ module.exports = async (req, res) => {
       const { username, password } = req.body;
       const user = USERS_DB.find(u => u.username.toLowerCase() === username.toLowerCase() && u.password === password);
       if (user) {
-        const token = jwt.sign({ username: user.username, clientId: user.clientId, assignedNumbers: user.assignedNumbers || [] }, JWT_SECRET, { expiresIn: '7d' });
+        const token = jwt.sign({ username: user.username, clientId: user.clientId }, JWT_SECRET, { expiresIn: '7d' });
         return ok(res, { session: token, username: user.username, clientId: user.clientId, redirect: '/dashboard/dashboard.html' });
       }
       return error(res, 401, 'Invalid username or password');
@@ -156,14 +151,14 @@ module.exports = async (req, res) => {
       return getUserFromSession(req.body.session) ? ok(res) : error(res, 401, 'Session expired');
     }
 
-    // 🔥 RANGES
+    // 🔥 RANGES: Filter by the logged-in user's username matching the 'Client' column
     if (url === '/ranges' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
       
       const data = await scrapeAgentData('res/data_smsnumbers.php', {
-        frange: '', fclient: '', totnum: 20045, sEcho: 1, iColumns: 8,
-        iDisplayStart: 0, iDisplayLength: 20000, sSearch: '', bRegex: false, iSortingCols: 1
+        frange: '', fclient: '', totnum: 100000, sEcho: 1, iColumns: 8,
+        iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1
       });
       
       if (!data) return ok(res, { ranges: [] });
@@ -171,15 +166,17 @@ module.exports = async (req, res) => {
       const allNumbers = parseNumbersData(data);
       console.log(`🔍 DEBUG: Scraped ${allNumbers.length} total numbers.`);
       
-      const userCleanNumbers = user.assignedNumbers.map(cleanNumber);
-      
+      // 🔥 FILTER: Only keep numbers where the Client column matches the logged-in username
+      const cleanUser = (user.username || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
       const userNumbers = allNumbers.filter(n => {
-        const cleanScraped = cleanNumber(n.number);
-        return userCleanNumbers.includes(cleanScraped);
+        const cleanClient = (n.client || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        return cleanClient === cleanUser;
       });
       
-      console.log(`🔍 DEBUG: Matched ${userNumbers.length} numbers for this user.`);
-      if (userNumbers.length > 0) console.log(`🔍 DEBUG: First matched number:`, userNumbers[0]);
+      console.log(`🔍 DEBUG: Matched ${userNumbers.length} numbers for client: ${user.username}`);
+      if (userNumbers.length > 0) {
+        console.log(`🔍 DEBUG: First matched number:`, JSON.stringify(userNumbers[0]));
+      }
       
       const rangesMap = new Map();
       userNumbers.forEach(n => {
@@ -192,7 +189,9 @@ module.exports = async (req, res) => {
         range.count++;
       });
 
-      return ok(res, { ranges: Array.from(rangesMap.values()).map(r => ({ ...r, minsAgo: Math.floor(Math.random() * 60) })) });
+      const finalRanges = Array.from(rangesMap.values()).map(r => ({ ...r, minsAgo: Math.floor(Math.random() * 60) }));
+      console.log(`🔍 DEBUG: Returning ${finalRanges.length} ranges to frontend.`, JSON.stringify(finalRanges));
+      return ok(res, { ranges: finalRanges });
     }
 
     if (url === '/numbers' && req.method === 'POST') {
@@ -200,17 +199,17 @@ module.exports = async (req, res) => {
       if (!user) return error(res, 401, 'Unauthorized');
       
       const data = await scrapeAgentData('res/data_smsnumbers.php', {
-        frange: '', fclient: '', totnum: 20045, sEcho: 1, iColumns: 8,
-        iDisplayStart: 0, iDisplayLength: 20000, sSearch: '', bRegex: false, iSortingCols: 1
+        frange: '', fclient: '', totnum: 100000, sEcho: 1, iColumns: 8,
+        iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1
       });
       if (!data) return ok(res, { numbers: [] });
       
       const allNumbers = parseNumbersData(data);
-      const userCleanNumbers = user.assignedNumbers.map(cleanNumber);
+      const cleanUser = (user.username || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
       
       const userNumbers = allNumbers.filter(n => {
-        const cleanScraped = cleanNumber(n.number);
-        return userCleanNumbers.includes(cleanScraped) && n.range === req.body.rangeTitle;
+        const cleanClient = (n.client || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        return cleanClient === cleanUser && n.range === req.body.rangeTitle;
       });
       return ok(res, { numbers: userNumbers });
     }
@@ -218,16 +217,31 @@ module.exports = async (req, res) => {
     if (url === '/smscount' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
+      
+      const data = await scrapeAgentData('res/data_smsnumbers.php', {
+        frange: '', fclient: '', totnum: 100000, sEcho: 1, iColumns: 8,
+        iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1
+      });
+      
+      let userNumbers = [];
+      if (data) {
+        const allNumbers = parseNumbersData(data);
+        const cleanUser = (user.username || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        userNumbers = allNumbers.filter(n => {
+          const cleanClient = (n.client || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+          return cleanClient === cleanUser;
+        }).map(n => n.number);
+      }
+      
       const today = new Date().toISOString().split('T')[0];
       const response = await axios.get(LAMIX_API_URL, { 
-        params: { apikey: LAMIX_API_KEY, date_from: `${today} 00:00:00`, date_to: `${today} 23:59:59`, limit: 200 } 
+        params: { apikey: LAMIX_API_KEY, date_from: `${today} 00:00:00`, date_to: `${today} 23:59:59`, limit: 500 } 
       });
       let allSms = [];
       if (Array.isArray(response.data.records)) allSms = response.data.records;
       else if (Array.isArray(response.data)) allSms = response.data;
       
-      const userCleanNumbers = user.assignedNumbers.map(cleanNumber);
-      const userSms = allSms.filter(sms => userCleanNumbers.includes(cleanNumber(sms.num || sms.number)));
+      const userSms = allSms.filter(sms => userNumbers.includes(String(sms.num || sms.number).replace(/[^0-9]/g, '')));
       
       return ok(res, { 
         count: userSms.length,
@@ -238,26 +252,49 @@ module.exports = async (req, res) => {
     if (url === '/smscount-range' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
-      return ok(res, { count: 0 }); 
+      return ok(res, { count: 0 }); // Placeholder until specific range logic is added
     }
 
     if (url === '/dor' && req.method === 'POST') {
       return ok(res, await getSmartDOR());
     }
 
+    // 🔥 ADD BUTTON: Show ranges that have UNALLOCATED numbers (Client column is empty)
     if (url === '/alloc/search-ranges' && req.method === 'POST') {
-      const data = await scrapeAgentData('SMSBulkAllocations');
+      const data = await scrapeAgentData('res/data_smsnumbers.php', {
+        frange: '', fclient: '', totnum: 100000, sEcho: 1, iColumns: 8,
+        iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1
+      });
+      
       if (!data) return ok(res, { ranges: [] });
-      const $ = cheerio.load(data);
-      const ranges = [];
-      $('select[name="range"] option').each((i, el) => {
-        const text = $(el).text().trim();
-        if (text) {
-          const parts = text.split(' - ');
-          ranges.push({ id: `alloc_range_${i}`, title: parts[1] || text, country: parts[0] || 'Global', numbers: [] });
+      
+      const allNumbers = parseNumbersData(data);
+      const rangesMap = new Map();
+      
+      allNumbers.forEach(n => {
+        const key = `${n.country} -- ${n.range}`;
+        if (!rangesMap.has(key)) {
+          rangesMap.set(key, {
+            id: `alloc_${rangesMap.size}`,
+            title: n.range,
+            country: n.country,
+            total: 0,
+            available: 0
+          });
+        }
+        const r = rangesMap.get(key);
+        r.total++;
+        // If client is empty, the number is available for allocation
+        if (!n.client || n.client.trim() === '') {
+          r.available++;
         }
       });
-      return ok(res, { ranges });
+      
+      // Filter to only show ranges that have at least 1 available number
+      const availableRanges = Array.from(rangesMap.values()).filter(r => r.available > 0);
+      
+      console.log(`🔍 DEBUG: Found ${availableRanges.length} ranges with available numbers for Add button.`);
+      return ok(res, { ranges: availableRanges });
     }
 
     if (url === '/alloc/allocate' && req.method === 'POST') {
@@ -265,8 +302,9 @@ module.exports = async (req, res) => {
       if (!user) return error(res, 401, 'Unauthorized');
       const { rangeId, quantity, payout } = req.body;
       try {
+        // Note: You may need to adjust the payload keys based on the exact form fields in SMSBulkAllocations
         await axios.post(`${AGENT_BASE_URL}SMSBulkAllocations`, {
-          range: rangeId, qty: quantity, payout: payout || 0.01, user_id: user.clientId
+          range: rangeId, qty: quantity, payout: payout || 0.01, client: user.username
         }, {
           headers: { 'Cookie': AGENT_COOKIE, 'Content-Type': 'application/x-www-form-urlencoded', 'Referer': 'http://51.210.208.26/ints/agent/SMSBulkAllocations' }
         });
