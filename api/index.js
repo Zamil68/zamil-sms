@@ -32,6 +32,11 @@ function getUserFromSession(token) {
 function ok(res, data = {}) { res.status(200).json({ ok: true, ...data, ...corsHeaders }); }
 function error(res, statusCode, message) { res.status(statusCode).json({ ok: false, error: message, ...corsHeaders }); }
 
+// Helper to clean numbers (removes +, spaces, dashes for perfect matching)
+function cleanNumber(num) {
+  return String(num || '').replace(/[^0-9]/g, '');
+}
+
 async function getSmartDOR() {
   const now = new Date();
   const reportDate = new Date(now.getHours() < 5 ? now.getTime() - 86400000 : now.getTime());
@@ -41,9 +46,7 @@ async function getSmartDOR() {
 
   if (fs.existsSync(filePath)) {
     const stats = fs.statSync(filePath);
-    if (Date.now() - stats.mtimeMs < 3000) {
-      return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    }
+    if (Date.now() - stats.mtimeMs < 3000) return JSON.parse(fs.readFileSync(filePath, 'utf8'));
   }
 
   try {
@@ -51,7 +54,6 @@ async function getSmartDOR() {
     const response = await axios.get(LAMIX_API_URL, { 
       params: { apikey: LAMIX_API_KEY, date_from: `${today} 00:00:00`, date_to: `${today} 23:59:59`, limit: 500 } 
     });
-    
     let allSms = [];
     if (Array.isArray(response.data.records)) allSms = response.data.records;
     else if (Array.isArray(response.data)) allSms = response.data;
@@ -68,7 +70,6 @@ async function getSmartDOR() {
         range: 'Global'
       }))
     };
-
     fs.writeFileSync(filePath, JSON.stringify(parsedData, null, 2), 'utf8');
     return parsedData;
   } catch (err) {
@@ -80,17 +81,11 @@ async function getSmartDOR() {
 
 setInterval(async () => {
   try {
-    await axios.post(`${AGENT_BASE_URL}signin`, {
-      username: 'muzammil62',
-      password: 'muzammil62'
-    }, {
-      headers: { 'Cookie': AGENT_COOKIE },
-      timeout: 5000
+    await axios.post(`${AGENT_BASE_URL}signin`, { username: 'muzammil62', password: 'muzammil62' }, {
+      headers: { 'Cookie': AGENT_COOKIE }, timeout: 5000
     });
     console.log('[SESSION REFRESH] Agent panel session refreshed');
-  } catch (err) {
-    console.error('[SESSION REFRESH] Failed:', err.message);
-  }
+  } catch (err) { console.error('[SESSION REFRESH] Failed:', err.message); }
 }, 15 * 60 * 1000);
 
 async function scrapeAgentData(endpoint, params = {}) {
@@ -102,7 +97,7 @@ async function scrapeAgentData(endpoint, params = {}) {
         'Cookie': AGENT_COOKIE,
         'Accept': 'application/json, text/javascript, */*; q=0.01',
         'X-Requested-With': 'XMLHttpRequest',
-        'Referer': 'http://51.210.208.26/ints/agent/SMSDashboard'
+        'Referer': 'http://51.210.208.26/ints/agent/MySMSNumbers'
       },
       timeout: 10000
     });
@@ -113,28 +108,30 @@ async function scrapeAgentData(endpoint, params = {}) {
   }
 }
 
+// 🔥 FIXED: Correct column mapping based on your HTML table headers
 function parseNumbersData(data) {
   if (data && typeof data === 'object' && data.aaData) {
     return data.aaData.map(row => ({
-      range: (row[0] || '').replace(/<[^>]*>/g, '').trim(),
-      country: (row[1] || '').replace(/<[^>]*>/g, '').trim(),
-      number: (row[2] || '').replace(/<[^>]*>/g, '').trim(),
-      cli: (row[3] || '').replace(/<[^>]*>/g, '').trim(),
-      payout: (row[7] || '$0.01').replace(/<[^>]*>/g, '').trim()
+      range: (row[1] || '').replace(/<[^>]*>/g, '').trim(),   // Column 1: Range
+      country: (row[2] || '').replace(/<[^>]*>/g, '').trim(), // Column 2: Prefix/Country
+      number: (row[3] || '').replace(/<[^>]*>/g, '').trim(),  // Column 3: Number
+      client: (row[5] || '').replace(/<[^>]*>/g, '').trim(),  // Column 5: Client
+      payout: (row[6] || '$0.01').replace(/<[^>]*>/g, '').trim() // Column 6: Payout
     }));
   }
   
+  // Fallback HTML parsing
   const $ = cheerio.load(data);
   const numbers = [];
-  $('tr').each((i, row) => {
+  $('tbody tr').each((i, row) => {
     const cells = $(row).find('td');
-    if (cells.length < 3) return;
+    if (cells.length < 4) return;
     numbers.push({
-      range: cells.eq(0).text().trim(),
-      country: cells.eq(1).text().trim(),
-      number: cells.eq(2).text().trim(),
-      cli: cells.eq(3).text().trim(),
-      payout: cells.eq(7).text().trim() || '$0.01'
+      range: cells.eq(1).text().trim(),
+      country: cells.eq(2).text().trim(),
+      number: cells.eq(3).text().trim(),
+      client: cells.eq(5).text().trim(),
+      payout: cells.eq(6).text().trim() || '$0.01'
     });
   });
   return numbers;
@@ -159,24 +156,30 @@ module.exports = async (req, res) => {
       return getUserFromSession(req.body.session) ? ok(res) : error(res, 401, 'Session expired');
     }
 
-    // 🔥 RANGES WITH DEBUG LOGS
+    // 🔥 RANGES
     if (url === '/ranges' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
       
-      const data = await scrapeAgentData('MySMSNumbers');
-      console.log('🔍 SCRAPE DEBUG: Data type =', typeof data, data ? (data.aaData ? 'JSON' : 'HTML') : 'NULL');
+      const data = await scrapeAgentData('res/data_smsnumbers.php', {
+        frange: '', fclient: '', totnum: 20045, sEcho: 1, iColumns: 8,
+        iDisplayStart: 0, iDisplayLength: 20000, sSearch: '', bRegex: false, iSortingCols: 1
+      });
       
       if (!data) return ok(res, { ranges: [] });
       
       const allNumbers = parseNumbersData(data);
-      console.log('🔍 SCRAPE DEBUG: Total numbers parsed =', allNumbers.length);
-      if (allNumbers.length > 0) {
-        console.log('🔍 SCRAPE DEBUG: First number object =', JSON.stringify(allNumbers[0]));
-      }
+      console.log(`🔍 DEBUG: Scraped ${allNumbers.length} total numbers.`);
       
-      const userNumbers = allNumbers.filter(n => user.assignedNumbers.includes(n.number));
-      console.log('🔍 SCRAPE DEBUG: User matched numbers =', userNumbers.length);
+      const userCleanNumbers = user.assignedNumbers.map(cleanNumber);
+      
+      const userNumbers = allNumbers.filter(n => {
+        const cleanScraped = cleanNumber(n.number);
+        return userCleanNumbers.includes(cleanScraped);
+      });
+      
+      console.log(`🔍 DEBUG: Matched ${userNumbers.length} numbers for this user.`);
+      if (userNumbers.length > 0) console.log(`🔍 DEBUG: First matched number:`, userNumbers[0]);
       
       const rangesMap = new Map();
       userNumbers.forEach(n => {
@@ -196,29 +199,35 @@ module.exports = async (req, res) => {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
       
-      const data = await scrapeAgentData('MySMSNumbers');
+      const data = await scrapeAgentData('res/data_smsnumbers.php', {
+        frange: '', fclient: '', totnum: 20045, sEcho: 1, iColumns: 8,
+        iDisplayStart: 0, iDisplayLength: 20000, sSearch: '', bRegex: false, iSortingCols: 1
+      });
       if (!data) return ok(res, { numbers: [] });
       
       const allNumbers = parseNumbersData(data);
-      const userNumbers = allNumbers.filter(n => user.assignedNumbers.includes(n.number) && n.range === req.body.rangeTitle);
+      const userCleanNumbers = user.assignedNumbers.map(cleanNumber);
       
+      const userNumbers = allNumbers.filter(n => {
+        const cleanScraped = cleanNumber(n.number);
+        return userCleanNumbers.includes(cleanScraped) && n.range === req.body.rangeTitle;
+      });
       return ok(res, { numbers: userNumbers });
     }
 
     if (url === '/smscount' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
-      
       const today = new Date().toISOString().split('T')[0];
       const response = await axios.get(LAMIX_API_URL, { 
         params: { apikey: LAMIX_API_KEY, date_from: `${today} 00:00:00`, date_to: `${today} 23:59:59`, limit: 200 } 
       });
-      
       let allSms = [];
       if (Array.isArray(response.data.records)) allSms = response.data.records;
       else if (Array.isArray(response.data)) allSms = response.data;
       
-      const userSms = allSms.filter(sms => user.assignedNumbers && user.assignedNumbers.includes(sms.num || sms.number));
+      const userCleanNumbers = user.assignedNumbers.map(cleanNumber);
+      const userSms = allSms.filter(sms => userCleanNumbers.includes(cleanNumber(sms.num || sms.number)));
       
       return ok(res, { 
         count: userSms.length,
@@ -226,11 +235,9 @@ module.exports = async (req, res) => {
       });
     }
 
-    // 🔥 ADDED MISSING ENDPOINT
     if (url === '/smscount-range' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
-      // Returning safe default for now to stop the 404 loop
       return ok(res, { count: 0 }); 
     }
 
@@ -241,7 +248,6 @@ module.exports = async (req, res) => {
     if (url === '/alloc/search-ranges' && req.method === 'POST') {
       const data = await scrapeAgentData('SMSBulkAllocations');
       if (!data) return ok(res, { ranges: [] });
-      
       const $ = cheerio.load(data);
       const ranges = [];
       $('select[name="range"] option').each((i, el) => {
@@ -257,10 +263,9 @@ module.exports = async (req, res) => {
     if (url === '/alloc/allocate' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
-      
       const { rangeId, quantity, payout } = req.body;
       try {
-        const allocResponse = await axios.post(`${AGENT_BASE_URL}SMSBulkAllocations`, {
+        await axios.post(`${AGENT_BASE_URL}SMSBulkAllocations`, {
           range: rangeId, qty: quantity, payout: payout || 0.01, user_id: user.clientId
         }, {
           headers: { 'Cookie': AGENT_COOKIE, 'Content-Type': 'application/x-www-form-urlencoded', 'Referer': 'http://51.210.208.26/ints/agent/SMSBulkAllocations' }
@@ -275,11 +280,9 @@ module.exports = async (req, res) => {
     if (url === '/leaderboard' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
-      
       const dorData = await getSmartDOR();
       const cliCounts = {};
       dorData.recent.forEach(sms => { const cli = sms.cli || 'Unknown'; cliCounts[cli] = (cliCounts[cli] || 0) + 1; });
-      
       const top10 = Object.entries(cliCounts).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([cli, count]) => ({ username: cli, count }));
       return ok(res, { users: top10 });
     }
@@ -297,7 +300,6 @@ setInterval(() => {
     const keepDate = new Date(now.setDate(now.getDate() - 7));
     const keepStr = keepDate.toISOString().split('T')[0];
     const tmpDir = '/tmp';
-    
     if (fs.existsSync(tmpDir)) {
       fs.readdirSync(tmpDir).forEach(file => {
         if (file.startsWith('dor-') && file < `dor-${keepStr}.json`) {
