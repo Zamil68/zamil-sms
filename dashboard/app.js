@@ -304,50 +304,29 @@ function rgOpenCountry(idx) { RG_OPEN_COUNTRY = _rgOrder[idx]; renderRanges(ALL_
 function rgBackToFolders() { RG_OPEN_COUNTRY = null; renderRanges(ALL_RANGES); }
 
 // 🔥 UPDATED: Group ranges by country and show only user-specific ranges
+// 🔥 FIXED: dispatches to the flag-aware / grouped-folder renderer,
+// and keeps ALL_RANGES populated so search actually has data to filter.
 function renderRanges(ranges) {
+  ALL_RANGES = ranges || [];
   const container = document.getElementById('rangesList');
-  if (!ranges || ranges.length === 0) {
-    container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">No ranges found. Allocate numbers from the Add button.</div>';
+  if (!container) return;
+
+  if (!ranges || !ranges.length) {
+    container.innerHTML = '<div class="empty"><div class="empty-icon">📭</div>No ranges found. Allocate numbers from the Add button.</div>';
+    var cnt = document.getElementById('rangesCount'); if (cnt) cnt.textContent = 0;
     return;
   }
-  
-  // 🔥 GROUP BY COUNTRY
-  const byCountry = {};
-  ranges.forEach(r => {
-    if (!byCountry[r.country]) byCountry[r.country] = [];
-    byCountry[r.country].push(r);
-  });
-  
-  let html = '';
-  Object.keys(byCountry).sort().forEach(country => {
-    html += `<div class="country-group" style="margin-bottom:20px">`;
-    html += `<div class="country-header" style="padding:10px 15px;background:var(--card-bg);border-radius:8px;margin-bottom:10px;font-weight:600;color:var(--text-primary)">🌍 ${country} <span style="color:var(--muted);font-weight:400">(${byCountry[country].length} ranges)</span></div>`;
-    html += `<div class="ranges-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px">`;
-    
-    byCountry[country].forEach(range => {
-      html += `
-        <div class="range-card" onclick="showRangeNumbers('${range.id}', '${range.title}', '${range.country}')" style="padding:15px;border:1px solid var(--border-color);border-radius:8px;cursor:pointer;transition:all 0.2s" onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--border-color)'">
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <div>
-              <div style="font-weight:600;color:var(--text-primary)">${range.title}</div>
-              <div style="font-size:0.8rem;color:var(--muted);margin-top:4px">ID: ${range.id}</div>
-            </div>
-            <div style="text-align:right">
-              <div style="font-size:1.5rem;font-weight:700;color:var(--primary)">${range.count}</div>
-              <div style="font-size:0.75rem;color:var(--muted)">numbers</div>
-            </div>
-          </div>
-        </div>
-      `;
-    });
-    
-    html += `</div></div>`;
-  });
-  
-  container.innerHTML = html;
-  document.getElementById('rangesCount').textContent = ranges.length;
-}
 
+  if (RANGES_GROUPED) {
+    renderRangesGroupedView(ranges, container);
+  } else {
+    var html = '';
+    for (var i = 0; i < ranges.length; i++) html += _rangeCardHtml(ranges[i]);
+    container.innerHTML = html;
+  }
+  var countEl = document.getElementById('rangesCount');
+  if (countEl) countEl.textContent = ranges.length;
+}
 function onRangesSearch(){
   var q = ((document.getElementById("rangesSearch")||{}).value||"").trim().toLowerCase();
   
