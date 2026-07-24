@@ -188,6 +188,36 @@ module.exports = async (req, res) => {
         return error(res, 500, 'Login service unavailable');
       }
     }
+    // 🔥 NEW: Get all available clients dynamically (for admin/agent features)
+    if (url === '/clients/list' && req.method === 'POST') {
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      
+      try {
+        const response = await axios.get(`${AGENT_BASE_URL}res/data_clients.php`, {
+          params: { sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 1000, sSearch: '' },
+          headers: { 'Cookie': AGENT_COOKIE, 'X-Requested-With': 'XMLHttpRequest' },
+          timeout: 10000
+        });
+        
+        if (response.data && response.data.aaData) {
+          const clients = response.data.aaData.map(client => {
+            const idMatch = (client[0] || '').match(/value="(\d+)"/);
+            return {
+              id: idMatch ? idMatch[1] : (client[1] || '0'),
+              username: client[1] || '',
+              name: client[2] || '',
+              panelNum: 1
+            };
+          });
+          return ok(res, { clients: clients });
+        }
+        return ok(res, { clients: [] });
+      } catch (err) {
+        console.error('Client list error:', err.message);
+        return error(res, 500, 'Failed to fetch clients');
+      }
+    }
 
     if (url === '/ping' && req.method === 'POST') {
       return getUserFromSession(req.body.session) ? ok(res) : error(res, 401, 'Session expired');
