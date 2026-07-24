@@ -89,17 +89,26 @@ async function scrapeAgentData(endpoint, params = {}) {
     const response = await axios.get(`${AGENT_BASE_URL}${endpoint}`, {
       params: params,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Cookie': AGENT_COOKIE,
+        // 🔥 EXACT HEADERS FROM YOUR WORKING BROWSER REQUEST
         'Accept': 'application/json, text/javascript, */*; q=0.01',
-        'X-Requested-With': 'XMLHttpRequest',
-        'Referer': 'http://51.210.208.26/ints/agent/MySMSNumbers'
+        'Accept-Encoding': 'gzip, deflate',
+        'Accept-Language': 'en-US,en;q=0.9,ja;q=0.8',
+        'Connection': 'keep-alive',
+        'Cookie': AGENT_COOKIE,
+        'Host': '51.210.208.26',
+        'Referer': 'http://51.210.208.26/ints/agent/MySMSNumbers',
+        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36',
+        'X-Requested-With': 'XMLHttpRequest'
       },
       timeout: 15000
     });
     return response.data;
   } catch (err) {
     console.error('Agent Panel Scrape Error:', err.message);
+    if (err.response) {
+        console.error('Scrape Response Status:', err.response.status);
+        console.error('Scrape Response Headers:', err.response.headers);
+    }
     return null;
   }
 }
