@@ -1,7 +1,6 @@
-
 // Check auth on load for protected pages
 if(window.location.pathname.includes('dashboard') || window.location.pathname.includes('sms')) {
-    checkAuth('/');
+    checkAuth('/login/index.html');
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -163,7 +162,7 @@ function hideWakeUpOverlay() {
 // ── UTILITIES ──
 
 
-// ── RANGES ──
+// ─ RANGES ──
 // Smart parser: handles "Ecuador (K) 59397979xxxx", "USA LX 1234xxx",
 // "(K) Ecuador 593...", "Brazil MX d 55...",
 // "213 - Algeria LX 04May" (dial-code prefix style) etc.
@@ -303,21 +302,52 @@ function renderRangesGroupedView(list, container) {
 }
 function rgOpenCountry(idx) { RG_OPEN_COUNTRY = _rgOrder[idx]; renderRanges(ALL_RANGES); }
 function rgBackToFolders() { RG_OPEN_COUNTRY = null; renderRanges(ALL_RANGES); }
-function renderRanges(ranges){
-  ALL_RANGES=ranges||[];
-  var q=(document.getElementById("rangesSearch")||{}).value||"";
-  var view=filterRanges(ALL_RANGES,q);
-  var listEl=document.getElementById("rangesList");
-  document.getElementById("rangesCount").textContent=view.length;
-  if(!view.length){ listEl.innerHTML="<div class=\"empty\"><div class=\"empty-icon\">📭</div>No ranges found</div>"; return; }
-  // Grouping only applies to the un-searched view — while searching, a
-  // flat list of matches is more useful than folders.
-  if (RANGES_GROUPED && !q.trim()) { renderRangesGroupedView(view, listEl); return; }
-  RG_OPEN_COUNTRY = null;
-  var html="";
-  for(var i=0;i<view.length;i++) html+=_rangeCardHtml(view[i]);
-  listEl.innerHTML=html;
+
+// 🔥 UPDATED: Group ranges by country and show only user-specific ranges
+function renderRanges(ranges) {
+  const container = document.getElementById('rangesList');
+  if (!ranges || ranges.length === 0) {
+    container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">No ranges found. Allocate numbers from the Add button.</div>';
+    return;
+  }
+  
+  // 🔥 GROUP BY COUNTRY
+  const byCountry = {};
+  ranges.forEach(r => {
+    if (!byCountry[r.country]) byCountry[r.country] = [];
+    byCountry[r.country].push(r);
+  });
+  
+  let html = '';
+  Object.keys(byCountry).sort().forEach(country => {
+    html += `<div class="country-group" style="margin-bottom:20px">`;
+    html += `<div class="country-header" style="padding:10px 15px;background:var(--card-bg);border-radius:8px;margin-bottom:10px;font-weight:600;color:var(--text-primary)">🌍 ${country} <span style="color:var(--muted);font-weight:400">(${byCountry[country].length} ranges)</span></div>`;
+    html += `<div class="ranges-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px">`;
+    
+    byCountry[country].forEach(range => {
+      html += `
+        <div class="range-card" onclick="showRangeNumbers('${range.id}', '${range.title}', '${range.country}')" style="padding:15px;border:1px solid var(--border-color);border-radius:8px;cursor:pointer;transition:all 0.2s" onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--border-color)'">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div style="font-weight:600;color:var(--text-primary)">${range.title}</div>
+              <div style="font-size:0.8rem;color:var(--muted);margin-top:4px">ID: ${range.id}</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:1.5rem;font-weight:700;color:var(--primary)">${range.count}</div>
+              <div style="font-size:0.75rem;color:var(--muted)">numbers</div>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+    
+    html += `</div></div>`;
+  });
+  
+  container.innerHTML = html;
+  document.getElementById('rangesCount').textContent = ranges.length;
 }
+
 function onRangesSearch(){
   renderRanges(ALL_RANGES);
   var q=((document.getElementById("rangesSearch")||{}).value||"").trim();
@@ -405,6 +435,8 @@ function fallbackCopy(n){
   catch(e){ showToast("Copy failed","error"); }
   document.body.removeChild(ta);
 }
+
+// 🔥 UPDATED: Load ranges with proper user filtering
 function loadRanges(forceRefresh){
   var listEl=document.getElementById("rangesList");
   var cached=cacheGet(CACHE_KEY_RANGES);
@@ -434,6 +466,7 @@ function loadRanges(forceRefresh){
     if(forceRefresh) showToast("✓ "+(d.ranges||[]).length+" ranges loaded","success");
   });
 }
+
 function showRanges(){
     document.getElementById("rangesPanel").style.display="block";
     document.getElementById("numbersPanel").style.display="none";
@@ -450,6 +483,8 @@ function showRanges(){
 }
 
 // ── NUMBERS ──
+
+// 🔥 UPDATED: Load numbers for specific range (match by both ID and title)
 function loadNumbers(rangeId,rangeTitle,count){
   ACTIVE_RANGE={id:rangeId,title:rangeTitle,count:count||500};
   var ckey=numCacheKey(rangeId);
@@ -489,7 +524,7 @@ var mainNum = mainNumEl ? mainNumEl.textContent : "0";
   // Cache missing or older than 3h → fetch fresh automatically.
   if(cached && cached.stale){ showMini("Cache expired • refreshing…","info"); }
   showLoad("Fetching numbers…");
-  apiCall("/api/numbers",{session:SESSION,rangeId:rangeId,limit:count||500},function(d){
+  apiCall("/api/numbers",{session:SESSION,rangeId:rangeId,rangeTitle:rangeTitle,limit:count||500},function(d){
     hideLoad();
     if(!d || !d.ok){ showToast("Error: "+((d&&d.error)||"Service unavailable"),"error"); return; }
     var nums=(d.numbers||[]).map(function(n){ return (typeof n==="string"?n:n.numberFull||n.number||n.msisdn||Object.values(n)[0]||"").toString().trim(); });
@@ -497,13 +532,14 @@ var mainNum = mainNumEl ? mainNumEl.textContent : "0";
     showPanel(nums,false);
   });
 }
+
 function refreshNumbers(){
   if(!ACTIVE_RANGE.id) return;
   var oldNums=ALL_NUMS.slice();
   var btn=document.getElementById("btnRefreshNums");
   btn.disabled=true; btn.textContent="↻…";
   showLoad("Refreshing…");
-  apiCall("/api/numbers",{session:SESSION,rangeId:ACTIVE_RANGE.id,limit:500},function(d){
+  apiCall("/api/numbers",{session:SESSION,rangeId:ACTIVE_RANGE.id,rangeTitle:ACTIVE_RANGE.title,limit:500},function(d){
     hideLoad(); btn.disabled=false; btn.textContent="↻ Refresh";
     if(!d || !d.ok){ showToast("Error: "+((d&&d.error)||"Service unavailable"),"error"); return; }
     var nums=(d.numbers||[]).map(function(n){ return (typeof n==="string"?n:n.numberFull||n.number||n.msisdn||Object.values(n)[0]||"").toString().trim(); });
@@ -630,7 +666,7 @@ function copyAll(){
   });
 }
 
-// ── SMS COUNT & REFRESH ──
+// ─ SMS COUNT & REFRESH ──
 var _SMS_LAST_CALL=0;
 var _SMS_PREV_COUNT=null;
 var _SMS_SEEN=null;
@@ -1149,14 +1185,14 @@ function startNumSmsWatch(){
         var prev=NUM_SMS_PREV[number];
         if(prev!==undefined&&d.count>prev){
           var diff=d.count-prev;
-          showToast("🔔 "+number+": +"+diff+" new SMS!","success");
+          showToast(" "+number+": +"+diff+" new SMS!","success");
           if(window.Notification&&Notification.permission==="granted"){
             new Notification("New SMS on "+number,{body:"+"+diff+" message"+(diff>1?"s":"")+(d.recent&&d.recent[0]?" — "+d.recent[0].message.substring(0,60):""),icon:""});
           }
         }
         NUM_SMS_PREV[number]=d.count;
         var t=document.getElementById("numSmsTitle");
-        if(t&&t.textContent==="📲 "+number) renderNumSmsModal(d);
+        if(t&&t.textContent===" "+number) renderNumSmsModal(d);
       });
     });
   },30000);
@@ -1183,7 +1219,7 @@ function renderLeaderboard(users){
   var top3=users.slice(0,3);
   var rest=users.slice(3);
   var badges=["ELITE CHAMPION","FAST SENDER","ON FIRE","SHARP ROUTER","STRATEGIST","DOMINATOR","SPEED KING","VOLUME KING","RISING STAR","RAPID FIRE"];
-  var badgeIcons=["👑","⚡","🔥","🎯","🧠","💀","🚀","📈","🌟","⚡"];
+  var badgeIcons=["👑","","🔥","🎯","","💀","🚀","","🌟","⚡"];
   var badgeCls=["b-elite","b-fast","b-fire","b-sharp","b-strat","b-dom","b-speed","b-strat","b-fire","b-fast"];
   var streakLabels=[14,7,5,3,2,3,5,4,3,2];
   var podiumOrder=[1,0,2];
@@ -1268,7 +1304,7 @@ function loadLeaderboard(range){
     if(lbComing){
       lbComing.style.display="block";
       lbComing.innerHTML =
-        '<div class="lb-coming-icon">🔒</div>'+
+        '<div class="lb-coming-icon"></div>'+
         '<div class="lb-coming-title">Not available yet</div>'+
         '<div class="lb-coming-sub">Leaderboard is not available yet for Purple users.</div>';
     }
@@ -1331,11 +1367,13 @@ function loadDOR(){
     });
 }
 
-// ── ALLOC MODAL ──
+// ─ ALLOC MODAL ──
 var ASTATE={clientId:null,clientName:null,panelNum:1,selectedRangeId:null,selectedRangeTitle:null,payterm:null,payout:null,ranges:[],availCache:{}};
 var PAYTERM_OPTS={"1":"Daily","2":"Weekly","3":"Weekly7","4":"BiWeekly","5":"BiWeekly30","6":"Monthly15","7":"Monthly30","8":"Monthly45","9":"Monthly60"};
 var PAYOUT_PRESETS=[0,0.01,0.025,0.05,0.1];
 var ADD_PAGE_INITED=false;
+
+// 🔥 UPDATED: Reset allocation state properly
 function initAddPage(force){
   // Reset only if not yet verified or forced
   if(!force && ASTATE.clientId) return;
@@ -1349,6 +1387,7 @@ function initAddPage(force){
   autoVerifyClient();
   ADD_PAGE_INITED=true;
 }
+
 function autoVerifyClient(){
   var info=document.getElementById("aClientInfo");
   if(!info) return;
@@ -1381,6 +1420,8 @@ function autoVerifyClient(){
     }
   });
 }
+
+// 🔥 UPDATED: Search ranges with proper filtering
 function allocSearch(){
   var q=document.getElementById("aCountryInput").value.trim();
   if(!q){showToast("Range name likhein","error");return;}
@@ -1388,7 +1429,7 @@ function allocSearch(){
   btn.disabled=true; btn.textContent="…";
   list.innerHTML="<div class=\"empty\"><div class=\"spinner\"></div></div>";
   ASTATE.availCache={};
-  apiCall("/api/alloc/search-ranges",{query:q,panelNum:ASTATE.panelNum},function(d){
+  apiCall("/api/alloc/search-ranges",{query:q,session:SESSION},function(d){
     btn.disabled=false; btn.textContent="🔍 Search";
     var ranges=d.ranges||[];
     ASTATE.ranges=ranges;
@@ -1397,6 +1438,7 @@ function allocSearch(){
   });
 }
 document.addEventListener("keydown",function(e){ if(e.key==="Enter"&&document.activeElement===document.getElementById("aCountryInput")) allocSearch(); });
+
 function renderAllocRanges(){
   var html=""; var stillChecking=false;
   for(var j=0;j<ASTATE.ranges.length;j++){ if(ASTATE.availCache[ASTATE.ranges[j].id]===null){stillChecking=true;break;} }
@@ -1414,6 +1456,7 @@ function renderAllocRanges(){
   }
   document.getElementById("aRangeList").innerHTML=html;
 }
+
 function allocBulkCheck(){
   ASTATE.ranges.forEach(function(r){ ASTATE.availCache[r.id]=null; });
   renderAllocRanges();
@@ -1421,7 +1464,7 @@ function allocBulkCheck(){
   function next(){
     while(active<CONCURRENCY && i<ASTATE.ranges.length){
       var r=ASTATE.ranges[i++]; active++;
-      apiCall("/api/alloc/check-availability",{rangeId:r.id,panelNum:ASTATE.panelNum},(function(rng){
+      apiCall("/api/alloc/check-availability",{rangeId:r.id,session:SESSION,panelNum:ASTATE.panelNum},(function(rng){
         return function(d){
           ASTATE.availCache[rng.id]=d||{available:0,total:0};
           renderAllocRanges();
@@ -1432,6 +1475,7 @@ function allocBulkCheck(){
   }
   next();
 }
+
 function selectAllocRange(el){
   var id=el.dataset.id; var title=el.dataset.title;
   ASTATE.selectedRangeId=id; ASTATE.selectedRangeTitle=title;
@@ -1444,12 +1488,15 @@ function selectAllocRange(el){
   document.getElementById("aAllocCard").style.display="";
   document.getElementById("aAllocCard").scrollIntoView({behavior:"smooth",block:"nearest"});
 }
+
 function aBackToSearch(){
   document.getElementById("aAllocCard").style.display="none";
   document.querySelectorAll(".alloc-range-item").forEach(function(x){x.classList.remove("ar-selected");});
   ASTATE.selectedRangeId=null; ASTATE.selectedRangeTitle=null;
   var ci=document.getElementById("aCountryInput"); if(ci) ci.focus();
 }
+
+// 🔥 UPDATED: Allocate and refresh ranges automatically
 function doAllocate(){
   if(!ASTATE.selectedRangeId){showToast("Range select karein","error");return;}
   ASTATE.payterm=ASTATE.payterm||"2"; ASTATE.payout=ASTATE.payout||"0.01";
@@ -1457,7 +1504,7 @@ function doAllocate(){
   if(qty<1||qty>25){showToast("Qty 1–25 hona chahiye","error");return;}
   var btn=document.getElementById("aAllocBtn"); var sp=document.getElementById("aAllocSpinner"); var res=document.getElementById("aAllocResult");
   btn.disabled=true; sp.style.display=""; res.style.display="none";
-  apiCall("/api/alloc/allocate",{clientId:ASTATE.clientId,rangeId:ASTATE.selectedRangeId,payterm:ASTATE.payterm,payout:ASTATE.payout,qty:qty,username:USERNAME,panelNum:ASTATE.panelNum},function(d){
+  apiCall("/api/alloc/allocate",{session:SESSION,rangeId:ASTATE.selectedRangeId,quantity:qty,payout:ASTATE.payout},function(d){
     btn.disabled=false; sp.style.display=""; res.style.display="block";
     if(!d){ res.className="alloc-result err"; res.innerHTML="❌ No response — please retry"; sp.style.display="none"; return; }
     if(d.limitReached){ res.className="alloc-result err"; res.innerHTML="⚠️ Daily limit reached! "+d.used+"/"+d.limit+" used today."; showToast("⚠️ Daily limit reached","error"); return; }
@@ -1466,13 +1513,13 @@ function doAllocate(){
       res.className="alloc-result ok";
       res.innerHTML="✅ Allocated!<br/>Client: <b>"+escHtml(ASTATE.clientName)+"</b><br/>Range: <b>"+escHtml(ASTATE.selectedRangeTitle)+"</b><br/>Qty: <b>"+qty+"</b> • Payterm: <b>"+escHtml(ptLabel)+"</b><br/><span style=\"font-size:.75rem;opacity:.8\">Daily: "+d.used+"/"+d.limit+" used — "+d.remaining+" remaining</span>";
       showToast("✓ Allocated!","success");
-      document.getElementById("aLimitBar").innerHTML="📅 Daily: <strong>"+d.used+"/"+d.limit+"</strong> — <strong>"+d.remaining+"</strong> remaining";
+      document.getElementById("aLimitBar").innerHTML=" Daily: <strong>"+d.used+"/"+d.limit+"</strong> — <strong>"+d.remaining+"</strong> remaining";
       // Auto-refresh ranges (mirrors the unassign flow) so newly assigned
       // numbers show up immediately when user goes back to the ranges list.
       try{ localStorage.removeItem(CACHE_KEY_RANGES); }catch(e){}
       try{ loadRanges(true); }catch(e){}
     } else {
-      res.className="alloc-result err"; res.innerHTML="❌ Failed: "+(d.error||"Service issue — retry");
+      res.className="alloc-result err"; res.innerHTML=" Failed: "+(d.error||"Service issue — retry");
       showToast("❌ Allocation failed","error");
     }
     sp.style.display="none";
@@ -1495,10 +1542,8 @@ document.addEventListener("click",function(e){
 // ── BOTTOM NAV SWITCH ── (SPA style - no page reload)
 var _LAST_MAIN_SUB = "ranges"; // remember "ranges" or "numbers" before leaving main
 var _NUMBERS_SCROLL = 0;       // remember scroll inside numbers list when leaving
-// ── BOTTOM NAV SWITCH ── (SPA style - no page reload)
-var _LAST_MAIN_SUB = "ranges"; // remember "ranges" or "numbers" before leaving main
-var _NUMBERS_SCROLL = 0;       // remember scroll inside numbers list when leaving
 
+// 🔥 UPDATED: Bottom nav switch with proper state management
 function bnSwitch(page){
   // Remember sub-state + scroll before leaving main screen
   var ms = document.getElementById("mainScreen");
@@ -1754,7 +1799,7 @@ function openShareModal() {
   _shrReset();
 
   document.getElementById("shareModal").classList.add("shr-open");
-  document.getElementById("shrTitle").textContent = "🔗 Share Numbers";
+  document.getElementById("shrTitle").textContent = " Share Numbers";
 
   if(isFeatureLocked("shareNumbers")){
     _shrShowError("Not available yet for Purple users.");
@@ -1930,7 +1975,7 @@ function _shrRenderRanges() {
   });
 }
 
-// ── Range search / number search from step 1 ─────────────────
+// ── Range search / number search from step 1 ────────────────
 var _shrNumSearchDebounce = null;
 function _shrOnRangeSearch(val) {
   var q = val.trim().toLowerCase();
@@ -2359,7 +2404,7 @@ function purpleDoAllocate(){
     if(res){ res.className="alloc-result err"; res.innerHTML="⚠️ Select a client first"; } return;
   }
   if(!_purpleSelected.size){
-    if(res){ res.className="alloc-result err"; res.innerHTML="⚠️ Select at least one number"; } return;
+    if(res){ res.className="alloc-result err"; res.innerHTML="️ Select at least one number"; } return;
   }
 
   if(spin) spin.style.display = "inline-block";
