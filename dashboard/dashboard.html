@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#06080F">
     <title>Zamil SMS — Dashboard</title>
     <link rel="icon" type="image/x-icon" href="/branding/favicon.ico">
     <link rel="stylesheet" href="common.css">
@@ -47,23 +46,23 @@
                         <div class="section-title">📡 Your Ranges <span class="badge" id="rangesCount">0</span></div>
                     </div>
                     <div class="search-bar">
-                        <span class="search-ic">🔍</span>
-                        <input type="text" id="rangesSearch" placeholder="Search country or range..." oninput="onRangesSearch()" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-                    </div>
+    <span class="search-ic">🔍</span>
+    <input type="text" id="rangesSearch" placeholder="Search country or range..." oninput="onRangesSearch()" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+</div>
                     <div id="rangesList" class="ranges-list"></div>
                 </div>
 
-                <!-- NUMBERS PANEL -->
-                <div id="numbersPanel">
-                    <!-- ✅ Prominent Back Button -->
-                    <button class="panel-back" onclick="showRanges()" style="margin-bottom:12px; font-size:0.95rem; font-weight:700; padding:8px 0;">
-                        ← Back to Ranges
-                    </button>
-
-                    <div class="section-hdr">
-                        <div class="section-title" id="panelTitle">Range Name</div>
-                        <button class="btn btn-sm btn-ghost" id="btnRefreshNums" onclick="refreshNumbers()">↻ Refresh</button>
-                    </div>
+               <!-- NUMBERS PANEL -->
+<div id="numbersPanel">
+    <!-- ✅ Prominent Back Button -->
+    <button class="panel-back" onclick="showRanges()" style="margin-bottom:12px; font-size:0.95rem; font-weight:700; padding:8px 0;">
+        ← Back to Ranges
+    </button>
+    
+    <div class="section-hdr">
+        <div class="section-title" id="panelTitle">Range Name</div>
+        <button class="btn btn-sm btn-ghost" id="btnRefreshNums" onclick="refreshNumbers()">↻ Refresh</button>
+    </div>
                     <div class="strip-bar">
                         <span class="strip-label">View:</span>
                         <button class="btn btn-sm btn-copy" id="btnRestoreCC" onclick="applyStrip(0)" style="display:none">Restore CC</button>
@@ -181,7 +180,7 @@
                     </div>
                 </div>
 
-                <div class="section-hdr"><div class="section-title">📨 Recent Messages</div></div>
+                <div class="section-hdr"><div class="section-title"> Recent Messages</div></div>
                 <div class="sms-big-card">
                     <div id="smsRecentList" style="padding:4px 0"></div>
                 </div>
@@ -190,42 +189,41 @@
         </div>
     </div>
 
-    <!-- BOTTOM NAV (New Order) -->
-    <nav class="bottom-nav">
-        <button class="bn-item active" data-page="ranges" onclick="bnSwitch('ranges')">
-            <span class="bn-icon">📡</span>
-            <span>Ranges</span>
-        </button>
-        <button class="bn-item" data-page="inbox" onclick="bnSwitch('inbox')">
-            <span class="bn-icon">📬</span>
-            <span>Inbox</span>
-            <span class="bn-sms-pill"><span class="bn-sms-count" id="bnSmsCount">0</span></span>
-        </button>
-        <button class="bn-item" data-page="add" onclick="bnSwitch('add')">
-            <span class="bn-icon">➕</span>
-            <span>Add</span>
-        </button>
-        <button class="bn-item" data-page="dor" onclick="bnSwitch('dor')">
-            <span class="bn-icon">📊</span>
-            <span>DOR</span>
-        </button>
-        <button class="bn-item" data-page="top10" onclick="bnSwitch('top10')">
-            <span class="bn-icon">🏆</span>
-            <span>Top 10</span>
-        </button>
-    </nav>
-
-    <!-- DOR (Detail OTP Report) PAGE -->
-    <div id="dorPage" style="display:none">
-        <div class="section-hdr">
-            <div class="section-title">📊 Detail OTP Report (Global)</div>
-            <button class="btn btn-sm btn-ghost" onclick="loadDOR()">↻ Refresh</button>
-        </div>
-        <div class="sms-big-card">
-            <div style="padding:24px; text-align:center; color:var(--muted);" id="dorLoading">Loading global stats...</div>
-            <div id="dorList" style="display:none; padding: 4px 0;"></div>
-        </div>
+   <!-- BOTTOM NAV (New Order) -->
+<nav class="bottom-nav">
+    <button class="bn-item active" data-page="ranges" onclick="bnSwitch('ranges')">
+        <span class="bn-icon">📡</span>
+        <span>Ranges</span>
+    </button>
+    <button class="bn-item" data-page="inbox" onclick="bnSwitch('inbox')">
+        <span class="bn-icon">📬</span>
+        <span>Inbox</span>
+        <span class="bn-sms-pill"><span class="bn-sms-count" id="bnSmsCount">0</span></span>
+    </button>
+    <button class="bn-item" data-page="add" onclick="bnSwitch('add')">
+        <span class="bn-icon">➕</span>
+        <span>Add</span>
+    </button>
+    <button class="bn-item" data-page="dor" onclick="bnSwitch('dor')">
+        <span class="bn-icon">📊</span>
+        <span>DOR</span>
+    </button>
+    <button class="bn-item" data-page="top10" onclick="bnSwitch('top10')">
+        <span class="bn-icon">🏆</span>
+        <span>Top 10</span>
+    </button>
+</nav>
+<!-- DOR (Detail OTP Report) PAGE -->
+<div id="dorPage" style="display:none">
+    <div class="section-hdr">
+        <div class="section-title">📊 Detail OTP Report (Global)</div>
+        <button class="btn btn-sm btn-ghost" onclick="loadDOR()">↻ Refresh</button>
     </div>
+    <div class="sms-big-card">
+        <div style="padding:24px; text-align:center; color:var(--muted);" id="dorLoading">Loading global stats...</div>
+        <div id="dorList" style="display:none; padding: 4px 0;"></div
+    </div>
+</div>
 
     <!-- MODALS -->
     <div id="numSmsModal" onclick="if(event.target===this)closeNumSmsModal()">
@@ -286,24 +284,29 @@
         <div class="spinner" style="width:32px;height:32px;border-width:3px"></div>
         <div id="loadingText" class="loading-text">Loading…</div>
     </div>
-
-    <!-- Flag helper: turns an ISO country code into a real flag (emoji or crisp image).
-         Load before app.js since app.js's render code will call it. -->
-    <script src="/dashboard/flags.js" defer></script>
-    <script src="/login/providers.js" defer></script>
-    <script src="/dashboard/utils.js" defer></script>
-    <script src="/dashboard/api.js" defer></script>
-    <script src="/dashboard/auth.js" defer></script>
-    <script src="/dashboard/app.js" defer></script>
-
-    <!-- 🔥 Clear browser auto-fill on load (kept from your version) -->
+    
+    <script src="/login/providers.js"></script>
+    <script src="/dashboard/utils.js"></script>
+    <script src="/dashboard/api.js"></script>
+    <script src="/dashboard/auth.js"></script>
+    <script src="/dashboard/app.js"></script>
+    <!-- 🔥 FORCE CLEAR AUTO-FILL BUGS ON LOAD -->
     <script>
         window.addEventListener('DOMContentLoaded', () => {
-            document.querySelectorAll('input[type="text"]').forEach(input => {
+            const searchInputs = document.querySelectorAll('input[type="text"]');
+            searchInputs.forEach(input => {
                 input.value = '';
                 input.setAttribute('autocomplete', 'off');
             });
         });
     </script>
+
+    <script src="/login/providers.js"></script>
+    <script src="/dashboard/utils.js"></script>
+    <script src="/dashboard/api.js"></script>
+    <script src="/dashboard/auth.js"></script>
+    <script src="/dashboard/app.js"></script>
+</body>
+</html>
 </body>
 </html>
