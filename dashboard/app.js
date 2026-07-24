@@ -349,13 +349,22 @@ function renderRanges(ranges) {
 }
 
 function onRangesSearch(){
-  renderRanges(ALL_RANGES);
-  var q=((document.getElementById("rangesSearch")||{}).value||"").trim();
-  // Only trigger remote number search when query has 4+ digits
-  var digits=q.replace(/\D/g,"");
-  var panel=document.getElementById("numMatchesPanel");
-  if(digits.length<4){ if(panel) panel.style.display="none"; return; }
-  doNumberSearchDebounced(digits);
+  var q = ((document.getElementById("rangesSearch")||{}).value||"").trim().toLowerCase();
+  
+  // If empty query, show all ranges
+  if (!q) {
+    renderRanges(ALL_RANGES);
+    return;
+  }
+  
+  // Filter ranges by country OR title
+  var filtered = ALL_RANGES.filter(function(r) {
+    var title = (r.title || "").toLowerCase();
+    var country = (r.country || "").toLowerCase();
+    return title.indexOf(q) >= 0 || country.indexOf(q) >= 0;
+  });
+  
+  renderRanges(filtered);
 }
 var _numSearchT=0;
 function doNumberSearchDebounced(q){
