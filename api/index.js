@@ -257,33 +257,36 @@ module.exports = async (req, res) => {
     }
 
     // 🔥 FIXED: Match by rangeId OR rangeTitle to ensure numbers load correctly
-    if (url === '/numbers' && req.method === 'POST') {
-      const user = getUserFromSession(req.body.session);
-      if (!user) return error(res, 401, 'Unauthorized');
-      
-      const data = await scrapeAgentData('res/data_smsnumbers.php', {
-        frange: '', fclient: '', totnum: 100000, sEcho: 1, iColumns: 8,
-        iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1
-      });
-      if (!data) return ok(res, { numbers: [] });
-      
-      const allNumbers = parseNumbersData(data);
-      const cleanUser = (user.username || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-      
-      const reqId = req.body.rangeId || '';
-      const reqTitle = req.body.rangeTitle || '';
-      
-      const userNumbers = allNumbers.filter(n => {
-        const cleanClient = (n.client || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-        const matchesUser = cleanClient === cleanUser;
-        const matchesId = reqId && n.range.includes(reqId.replace('range_', '')); // Fallback match
-        const matchesTitle = reqTitle && n.range.toLowerCase() === reqTitle.toLowerCase();
-        
-        return matchesUser && (matchesTitle || matchesId);
-      });
-      
-      return ok(res, { numbers: userNumbers });
-    }
+    // 🔥 FIXED: EXACT MATCHING for rangeId and rangeTitle
+if (url === '/numbers' && req.method === 'POST') {
+  const user = getUserFromSession(req.body.session);
+  if (!user) return error(res, 401, 'Unauthorized');
+  
+  const data = await scrapeAgentData('res/data_smsnumbers.php', {
+    frange: '', fclient: '', totnum: 100000, sEcho: 1, iColumns: 8,
+    iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1
+  });
+  if (!data) return ok(res, { numbers: [] });
+  
+  const allNumbers = parseNumbersData(data);
+  const cleanUser = (user.username || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+  
+  const reqId = req.body.rangeId || '';
+  const reqTitle = req.body.rangeTitle || '';
+  
+  const userNumbers = allNumbers.filter(n => {
+    const cleanClient = (n.client || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+    const matchesUser = cleanClient === cleanUser;
+    
+    // 🔥 EXACT MATCHING (no substrings!)
+    const matchesId = reqId && n.range === reqId.replace('alloc_', '');
+    const matchesTitle = reqTitle && n.range.toLowerCase() === reqTitle.toLowerCase();
+    
+    return matchesUser && (matchesTitle || matchesId);
+  });
+  
+  return ok(res, { numbers: userNumbers });
+}
 
     if (url === '/smscount' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
@@ -331,35 +334,50 @@ module.exports = async (req, res) => {
     }
 
     // 🔥 FIXED: Robust availability check (handles empty, 'unallocated', or null)
-    if (url === '/alloc/search-ranges' && req.method === 'POST') {
-      const data = await scrapeAgentData('res/data_smsnumbers.php', {
-        frange: '', fclient: '', totnum: 100000, sEcho: 1, iColumns: 8,
-        iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1
+    // 🔥 FIXED: PROPER SEARCH FILTERING
+if (url === '/alloc/search-ranges' && req.method === 'POST') {
+  const query = (req.body.query || '').toLowerCase().trim();
+  const data = await scrapeAgentData('res/data_smsnumbers.php', {
+    frange: '', fclient: '', totnum: 100000, sEcho: 1, iColumns: 8,
+    iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1
+  });
+  
+  if (!data) return ok(res, { ranges: [] });
+  
+  const allNumbers = parseNumbersData(data);
+  const rangesMap = new Map();
+  
+  allNumbers.forEach(n => {
+    const key = `${n.country} -- ${n.range}`;
+    if (!rangesMap.has(key)) {
+      rangesMap.set(key, { 
+        id: `alloc_${rangesMap.size}`, 
+        title: n.range, 
+        country: n.country, 
+        total: 0, 
+        available: 0 
       });
-      
-      if (!data) return ok(res, { ranges: [] });
-      
-      const allNumbers = parseNumbersData(data);
-      const rangesMap = new Map();
-      
-      allNumbers.forEach(n => {
-        const key = `${n.country} -- ${n.range}`;
-        if (!rangesMap.has(key)) {
-          rangesMap.set(key, { id: `alloc_${rangesMap.size}`, title: n.range, country: n.country, total: 0, available: 0 });
-        }
-        const r = rangesMap.get(key);
-        r.total++;
-        
-        const cleanClient = (n.client || '').trim().toLowerCase();
-        if (cleanClient === '' || cleanClient === 'unallocated' || cleanClient === 'null') {
-          r.available++;
-        }
-      });
-      
-      const availableRanges = Array.from(rangesMap.values()).filter(r => r.available > 0);
-      return ok(res, { ranges: availableRanges });
     }
-
+    const r = rangesMap.get(key);
+    r.total++;
+    
+    const cleanClient = (n.client || '').trim().toLowerCase();
+    if (cleanClient === '' || cleanClient === 'unallocated' || cleanClient === 'null') {
+      r.available++;
+    }
+  });
+  
+  // 🔥 FILTER BY SEARCH QUERY (case-insensitive)
+  const filteredRanges = Array.from(rangesMap.values()).filter(r => {
+    const country = (r.country || '').toLowerCase();
+    const title = (r.title || '').toLowerCase();
+    return country.includes(query) || title.includes(query);
+  });
+  
+  // 🔥 ONLY SHOW AVAILABLE RANGES
+  const availableRanges = filteredRanges.filter(r => r.available > 0);
+  return ok(res, { ranges: availableRanges });
+}
     // 🔥 ADDED: Missing check-availability endpoint to stop 404 loop
     if (url === '/alloc/check-availability' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
@@ -368,22 +386,56 @@ module.exports = async (req, res) => {
       return ok(res, { available: 1000, total: 1000, message: 'Ready to allocate' });
     }
 
-    if (url === '/alloc/allocate' && req.method === 'POST') {
-      const user = getUserFromSession(req.body.session);
-      if (!user) return error(res, 401, 'Unauthorized');
-      const { rangeId, quantity, payout } = req.body;
-      try {
-        await axios.post(`${AGENT_BASE_URL}SMSBulkAllocations`, {
-          range: rangeId, qty: quantity, payout: payout || 0.01, client: user.username
-        }, {
-          headers: { 'Cookie': AGENT_COOKIE, 'Content-Type': 'application/x-www-form-urlencoded', 'Referer': 'http://51.210.208.26/ints/agent/SMSBulkAllocations' }
-        });
-        return ok(res, { allocated: parseInt(quantity), message: 'Allocation successful' });
-      } catch (err) {
-        console.error('Allocation Error:', err.message);
-        return error(res, 400, 'Allocation failed on agent panel');
+    // 🔥 FIXED: USE CLIENT ID FOR ALLOCATION
+if (url === '/alloc/allocate' && req.method === 'POST') {
+  const user = getUserFromSession(req.body.session);
+  if (!user) return error(res, 401, 'Unauthorized');
+  const { rangeId, quantity, payout } = req.body;
+  
+  // 🔥 GET REAL CLIENT ID FROM SESSION
+  const clientId = user.clientId;
+  
+  try {
+    await axios.post(`${AGENT_BASE_URL}SMSBulkAllocations`, {
+      range: rangeId.replace('alloc_', ''), // Clean ID
+      qty: quantity, 
+      payout: payout || 0.01, 
+      client: clientId // 🔥 MUST USE CLIENT ID
+    }, {
+      headers: { 
+        'Cookie': AGENT_COOKIE, 
+        'Content-Type': 'application/x-www-form-urlencoded', 
+        'Referer': 'http://51.210.208.26/ints/agent/SMSBulkAllocations' 
       }
-    }
+    });
+    
+    // 🔥 VERIFY ALLOCATION HAPPENED
+    const verifyRes = await axios.get(`${AGENT_BASE_URL}res/data_smsnumbers.php`, {
+      params: { 
+        frange: rangeId.replace('alloc_', ''), 
+        fclient: clientId,
+        totnum: 100000, 
+        sEcho: 1, 
+        iColumns: 8,
+        iDisplayStart: 0, 
+        iDisplayLength: 100000
+      },
+      headers: { 'Cookie': AGENT_COOKIE }
+    });
+    
+    const allocatedCount = (verifyRes.data?.aaData || []).length;
+    return ok(res, { 
+      allocated: parseInt(quantity), 
+      message: 'Allocation successful', 
+      used: allocatedCount,
+      limit: 100,
+      remaining: 100 - allocatedCount
+    });
+  } catch (err) {
+    console.error('Allocation Error:', err.message);
+    return error(res, 400, 'Allocation failed on agent panel');
+  }
+}
 
     if (url === '/leaderboard' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
