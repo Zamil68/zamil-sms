@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#06080F">
     <title>Zamil SMS — Dashboard</title>
     <link rel="icon" type="image/x-icon" href="/branding/favicon.ico">
     <link rel="stylesheet" href="common.css">
@@ -30,7 +31,7 @@
                     <div class="dropdown-item" onclick="openChangePasswordModal()">🔑 Change Password</div>
                     <div class="dropdown-item" onclick="openShareModal()">🔗 Share Numbers</div>
                     <div class="dropdown-divider"></div>
-                    <div class="dropdown-item danger" onclick="doLogout()"> Sign Out</div>
+                    <div class="dropdown-item danger" onclick="doLogout()">🚪 Sign Out</div>
                 </div>
             </div>
         </div>
@@ -129,7 +130,7 @@
             <div id="top10Page" style="display:none">
                 <div class="lb-hdr">
                     <div class="lb-title-wrap">
-                        <span class="lb-trophy"></span>
+                        <span class="lb-trophy">🏆</span>
                         <div>
                             <div class="lb-title">Leaderboard</div>
                             <div class="lb-sub">Top SMS Senders</div>
@@ -180,7 +181,7 @@
                     </div>
                 </div>
 
-                <div class="section-hdr"><div class="section-title"> Recent Messages</div></div>
+                <div class="section-hdr"><div class="section-title">📨 Recent Messages</div></div>
                 <div class="sms-big-card">
                     <div id="smsRecentList" style="padding:4px 0"></div>
                 </div>
@@ -192,7 +193,7 @@
    <!-- BOTTOM NAV (New Order) -->
 <nav class="bottom-nav">
     <button class="bn-item active" data-page="ranges" onclick="bnSwitch('ranges')">
-        <span class="bn-icon"></span>
+        <span class="bn-icon">📡</span>
         <span>Ranges</span>
     </button>
     <button class="bn-item" data-page="inbox" onclick="bnSwitch('inbox')">
@@ -209,7 +210,7 @@
         <span>DOR</span>
     </button>
     <button class="bn-item" data-page="top10" onclick="bnSwitch('top10')">
-        <span class="bn-icon"></span>
+        <span class="bn-icon">🏆</span>
         <span>Top 10</span>
     </button>
 </nav>
@@ -239,7 +240,7 @@
     <div id="shareModal" class="shr-overlay" onclick="if(event.target===this)closeShareModal()">
         <div class="shr-box">
             <div class="shr-header">
-                <div class="shr-title" id="shrTitle"> Share Numbers</div>
+                <div class="shr-title" id="shrTitle">🔗 Share Numbers</div>
                 <button class="shr-close" onclick="closeShareModal()">✕</button>
             </div>
             <div class="shr-body">
