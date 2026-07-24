@@ -46,9 +46,9 @@
                         <div class="section-title">📡 Your Ranges <span class="badge" id="rangesCount">0</span></div>
                     </div>
                     <div class="search-bar">
-                        <span class="search-ic"></span>
-                        <input type="text" id="rangesSearch" placeholder="Search country or range..." oninput="onRangesSearch()">
-                    </div>
+    <span class="search-ic">🔍</span>
+    <input type="text" id="rangesSearch" placeholder="Search country or range..." oninput="onRangesSearch()" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+</div>
                     <div id="rangesList" class="ranges-list"></div>
                 </div>
 
@@ -290,5 +290,23 @@
     <script src="/dashboard/api.js"></script>
     <script src="/dashboard/auth.js"></script>
     <script src="/dashboard/app.js"></script>
+    <!-- 🔥 FORCE CLEAR AUTO-FILL BUGS ON LOAD -->
+    <script>
+        window.addEventListener('DOMContentLoaded', () => {
+            const searchInputs = document.querySelectorAll('input[type="text"]');
+            searchInputs.forEach(input => {
+                input.value = '';
+                input.setAttribute('autocomplete', 'off');
+            });
+        });
+    </script>
+
+    <script src="/login/providers.js"></script>
+    <script src="/dashboard/utils.js"></script>
+    <script src="/dashboard/api.js"></script>
+    <script src="/dashboard/auth.js"></script>
+    <script src="/dashboard/app.js"></script>
+</body>
+</html>
 </body>
 </html>
