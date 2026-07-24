@@ -142,58 +142,35 @@ module.exports = async (req, res) => {
       const { username, password } = req.body;
       if (!username || !password) return error(res, 400, 'Username and password required');
       
-      try {
-        // Step 1: Fetch clients from LaMix agent panel to find the matching username
-        const clientsRes = await axios.get(`${AGENT_BASE_URL}res/data_clients.php`, {
-          params: { sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 1000, sSearch: username },
-          headers: { 'Cookie': AGENT_COOKIE, 'X-Requested-With': 'XMLHttpRequest' },
-          timeout: 10000
-        });
-        
-        let foundClient = null;
-        if (clientsRes.data && clientsRes.data.aaData) {
-          // Columns: 0=Checkbox(ID), 1=Username, 2=Name, 3=Email, 4=Contact, 5=Skype, 6=Active, 7=Action
-          foundClient = clientsRes.data.aaData.find(c => (c[1] || '').toLowerCase() === username.toLowerCase());
-        }
-        
-        let clientId = '0';
-        let clientName = username;
-        let panelNum = 1;
-
-        if (foundClient) {
-          // Extract numeric ID from checkbox HTML (e.g., value="169269")
-          const idMatch = (foundClient[0] || '').match(/value="(\d+)"/);
-          clientId = idMatch ? idMatch[1] : '0'; 
-          clientName = foundClient[2] || username;
-        } else if (username.toLowerCase() === 'muzammil62') {
-          // Fallback for the main agent account
-          clientId = '0';
-          clientName = 'Agent';
-        } else {
-          // If not found in LaMix clients, reject login
-          return error(res, 401, 'Client not found in LaMix system. Please contact admin.');
-        }
-        
-        // Create JWT token with real LaMix client data
+      // Map your known users to their REAL LaMix Client IDs
+      // LaMix only checks the clientId during allocation, not the password.
+      const userMap = {
+        'zml_ahsan': { clientId: '169269', clientName: 'ZML_Ahsan' },
+        'zml_anns': { clientId: '169270', clientName: 'ZML_Anns' },
+        'test': { clientId: '102', clientName: 'Test User' },
+        'muzammil62': { clientId: '0', clientName: 'Agent' } // Agent fallback
+      };
+      
+      const user = userMap[username.toLowerCase()];
+      
+      if (user) {
         const token = jwt.sign({ 
           username: username, 
-          clientId: clientId, 
-          clientName: clientName,
-          panelNum: panelNum 
+          clientId: user.clientId, 
+          clientName: user.clientName,
+          panelNum: 1 
         }, JWT_SECRET, { expiresIn: '7d' });
         
         return ok(res, { 
           session: token, 
           username: username, 
-          clientId: clientId, 
-          clientName: clientName,
+          clientId: user.clientId, 
+          clientName: user.clientName,
           redirect: '/dashboard/dashboard.html' 
         });
-
-      } catch (err) {
-        console.error('Login error:', err.message);
-        return error(res, 500, 'Login service unavailable');
       }
+      
+      return error(res, 401, 'Invalid username or password');
     }
     // 🔥 NEW: Get all available clients dynamically (for admin/agent features)
     if (url === '/clients/list' && req.method === 'POST') {
@@ -343,72 +320,81 @@ if (url === '/numbers' && req.method === 'POST') {
     // 🔥 FIXED: Robust availability check (handles empty, 'unallocated', or null)
     // 🔥 FIXED: PROPER SEARCH FILTERING
 if (url === '/alloc/search-ranges' && req.method === 'POST') {
-  const query = (req.body.query || '').toLowerCase().trim();
-  const data = await scrapeAgentData('res/data_smsnumbers.php', {
-    frange: '', fclient: '', totnum: 100000, sEcho: 1, iColumns: 8,
-    iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1
-  });
-  
-  if (!data) return ok(res, { ranges: [] });
-  
-  const allNumbers = parseNumbersData(data);
-  const rangesMap = new Map();
-  
-  allNumbers.forEach(n => {
-    const key = `${n.country} -- ${n.range}`;
-    if (!rangesMap.has(key)) {
-      rangesMap.set(key, { 
-        id: `alloc_${rangesMap.size}`, 
-        title: n.range, 
-        country: n.country, 
-        total: 0, 
-        available: 0 
+      const query = (req.body.query || '').toLowerCase().trim();
+      
+      const data = await scrapeAgentData('res/data_smsnumbers.php', {
+        frange: '', fclient: '', totnum: 100000, sEcho: 1, iColumns: 8,
+        iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1
       });
+      
+      if (!data || !data.aaData) return ok(res, { ranges: [] });
+      
+      const allNumbers = parseNumbersData(data);
+      const rangesMap = new Map();
+      
+      allNumbers.forEach(n => {
+        const key = `${n.country} -- ${n.range}`;
+        if (!rangesMap.has(key)) {
+          rangesMap.set(key, { id: `alloc_${rangesMap.size}`, title: n.range, country: n.country, total: 0, available: 0 });
+        }
+        const r = rangesMap.get(key);
+        r.total++;
+        
+        const cleanClient = (n.client || '').trim().toLowerCase();
+        if (cleanClient === '' || cleanClient === 'unallocated' || cleanClient === 'null') {
+          r.available++;
+        }
+      });
+      
+      // 🔥 STRICT FILTER: Only show ranges that match the search query
+      const filtered = Array.from(rangesMap.values()).filter(r => {
+        const searchText = `${r.country} ${r.title}`.toLowerCase();
+        return searchText.includes(query);
+      });
+      
+      // 🔥 ONLY SHOW RANGES THAT ACTUALLY HAVE AVAILABLE NUMBERS
+      return ok(res, { ranges: filtered.filter(r => r.available > 0) });
     }
-    const r = rangesMap.get(key);
-    r.total++;
-    
-    const cleanClient = (n.client || '').trim().toLowerCase();
-    if (cleanClient === '' || cleanClient === 'unallocated' || cleanClient === 'null') {
-      r.available++;
-    }
-  });
-  
-  // 🔥 FILTER BY SEARCH QUERY (case-insensitive)
-  const filteredRanges = Array.from(rangesMap.values()).filter(r => {
-    const country = (r.country || '').toLowerCase();
-    const title = (r.title || '').toLowerCase();
-    return country.includes(query) || title.includes(query);
-  });
-  
-  // 🔥 ONLY SHOW AVAILABLE RANGES
-  const availableRanges = filteredRanges.filter(r => r.available > 0);
-  return ok(res, { ranges: availableRanges });
-}
     // 🔥 ADDED: Missing check-availability endpoint to stop 404 loop
-    if (url === '/alloc/check-availability' && req.method === 'POST') {
-      const user = getUserFromSession(req.body.session);
-      if (!user) return error(res, 401, 'Unauthorized');
-      // Safe mock response to satisfy frontend
-      return ok(res, { available: 1000, total: 1000, message: 'Ready to allocate' });
+   if (url === '/alloc/check-availability' && req.method === 'POST') {
+      const { rangeId } = req.body;
+      const cleanRangeId = rangeId.replace('alloc_', '');
+      
+      const data = await scrapeAgentData('res/data_smsnumbers.php', {
+        frange: cleanRangeId, fclient: '', totnum: 100000, sEcho: 1, iColumns: 8,
+        iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1
+      });
+      
+      let available = 0;
+      let total = 0;
+      
+      if (data && data.aaData) {
+        const numbers = parseNumbersData(data);
+        total = numbers.length;
+        available = numbers.filter(n => {
+          const c = (n.client || '').trim().toLowerCase();
+          return c === '' || c === 'unallocated' || c === 'null';
+        }).length;
+      }
+      
+      return ok(res, { available, total });
     }
 
-    // 🔥 FIXED: USE CLIENT ID FOR ALLOCATION
-if (url === '/alloc/allocate' && req.method === 'POST') {
+    if (url === '/alloc/allocate' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
       
       const { rangeId, quantity, payout } = req.body;
+      const cleanRangeId = rangeId.replace('alloc_', '');
+      const clientId = user.clientId; // 🔥 This is what LaMix uses to authorize
       
       try {
-        // 🔥 Use the real clientId from the logged-in user's session
-        const clientId = user.clientId;
-        
+        // 1. Send REAL allocation request to LaMix Agent Panel
         await axios.post(`${AGENT_BASE_URL}SMSBulkAllocations`, {
-          range: rangeId.replace('alloc_', ''), // Clean the ID
+          range: cleanRangeId,
           qty: quantity, 
           payout: payout || 0.01, 
-          client: clientId // 🔥 This is the magic key that links it to the right user in LaMix
+          client: clientId // 🔥 LaMix checks THIS ID
         }, {
           headers: { 
             'Cookie': AGENT_COOKIE, 
@@ -417,17 +403,36 @@ if (url === '/alloc/allocate' && req.method === 'POST') {
           }
         });
         
+        // 2. REAL-TIME VERIFY: Re-scrape to get the actual updated available count
+        const verifyData = await scrapeAgentData('res/data_smsnumbers.php', {
+          frange: cleanRangeId, fclient: '', totnum: 100000, sEcho: 1, iColumns: 8,
+          iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1
+        });
+        
+        let newAvailable = 0;
+        let newTotal = 0;
+        if (verifyData && verifyData.aaData) {
+          const numbers = parseNumbersData(verifyData);
+          newTotal = numbers.length;
+          newAvailable = numbers.filter(n => {
+            const c = (n.client || '').trim().toLowerCase();
+            return c === '' || c === 'unallocated' || c === 'null';
+          }).length;
+        }
+        
         return ok(res, { 
           allocated: parseInt(quantity), 
-          message: 'Allocation successful',
-          clientId: clientId
+          message: 'Successfully allocated to ' + user.clientName,
+          used: newTotal - newAvailable,
+          limit: 100, // Adjust based on your actual LaMix limit
+          remaining: newAvailable
         });
+        
       } catch (err) {
         console.error('Allocation Error:', err.message);
-        return error(res, 400, 'Allocation failed on agent panel');
+        return error(res, 400, 'Allocation failed on LaMix panel. Check range and limits.');
       }
     }
-
     if (url === '/leaderboard' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
