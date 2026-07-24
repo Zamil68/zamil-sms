@@ -19,7 +19,6 @@ const corsHeaders = {
 const AGENT_BASE_URL = 'http://51.210.208.26/ints/agent/';
 const AGENT_COOKIE = 'PHPSESSID=0950059eaead99816b1e27139bf2d227';
 
-// Centralized user mapping (Easy to add more users later)
 const USER_MAP = {
   'zml_ahsan': { clientId: '169269', clientName: 'ZML_Ahsan', panelNum: 1 },
   'zml_anns': { clientId: '169270', clientName: 'ZML_Anns', panelNum: 1 },
@@ -77,13 +76,11 @@ async function getSmartDOR() {
   }
 }
 
-// Keep agent session alive
 setInterval(async () => {
   try {
     await axios.post(`${AGENT_BASE_URL}signin`, { username: 'muzammil62', password: 'muzammil62' }, {
       headers: { 'Cookie': AGENT_COOKIE }, timeout: 5000
     });
-    console.log('[SESSION REFRESH] Agent panel session refreshed');
   } catch (err) { console.error('[SESSION REFRESH] Failed:', err.message); }
 }, 15 * 60 * 1000);
 
@@ -92,7 +89,7 @@ async function scrapeAgentData(endpoint, params = {}) {
     const response = await axios.get(`${AGENT_BASE_URL}${endpoint}`, {
       params: params,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Cookie': AGENT_COOKIE,
         'Accept': 'application/json, text/javascript, */*; q=0.01',
         'X-Requested-With': 'XMLHttpRequest',
@@ -117,20 +114,7 @@ function parseNumbersData(data) {
       payout: (row[6] || '$0.01').replace(/<[^>]*>/g, '').trim()
     }));
   }
-  const $ = cheerio.load(data);
-  const numbers = [];
-  $('tbody tr').each((i, row) => {
-    const cells = $(row).find('td');
-    if (cells.length < 6) return;
-    numbers.push({
-      range: cells.eq(1).text().trim(),
-      country: cells.eq(2).text().trim(),
-      number: cells.eq(3).text().trim(),
-      client: cells.eq(5).text().trim(),
-      payout: cells.eq(6).text().trim() || '$0.01'
-    });
-  });
-  return numbers;
+  return [];
 }
 
 module.exports = async (req, res) => {
@@ -138,72 +122,25 @@ module.exports = async (req, res) => {
   const url = req.url.replace(/^\/api/, '');
   
   try {
-    // 1. LOGIN
     if (url === '/login' && req.method === 'POST') {
-      const rawUsername = (req.body.username || '').trim();
+      const rawUsername = (req.body.username || '').trim().toLowerCase();
       const password = (req.body.password || '').trim();
       
       if (!rawUsername || !password) return error(res, 400, 'Username and password required');
       
-      const user = USER_MAP[rawUsername.toLowerCase()];
-      
+      const user = USER_MAP[rawUsername];
       if (user) {
-        const token = jwt.sign({ 
-          username: rawUsername, 
-          clientId: user.clientId, 
-          clientName: user.clientName,
-          panelNum: user.panelNum 
-        }, JWT_SECRET, { expiresIn: '7d' });
-        
-        return ok(res, { 
-          session: token, 
-          username: rawUsername, 
-          clientId: user.clientId, 
-          clientName: user.clientName,
-          redirect: '/dashboard/dashboard.html' 
-        });
+        const token = jwt.sign({ username: rawUsername, clientId: user.clientId, clientName: user.clientName, panelNum: user.panelNum }, JWT_SECRET, { expiresIn: '7d' });
+        return ok(res, { session: token, username: rawUsername, clientId: user.clientId, clientName: user.clientName, redirect: '/dashboard/dashboard.html' });
       }
-      
       return error(res, 401, 'Invalid username or password');
     }
 
-    // 2. CLIENTS LIST (For admin features)
-    if (url === '/clients/list' && req.method === 'POST') {
-      const user = getUserFromSession(req.body.session);
-      if (!user) return error(res, 401, 'Unauthorized');
-      
-      try {
-        const response = await axios.get(`${AGENT_BASE_URL}res/data_clients.php`, {
-          params: { sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 1000, sSearch: '' },
-          headers: { 'Cookie': AGENT_COOKIE, 'X-Requested-With': 'XMLHttpRequest' },
-          timeout: 10000
-        });
-        
-        if (response.data && response.data.aaData) {
-          const clients = response.data.aaData.map(client => {
-            const idMatch = (client[0] || '').match(/value="(\d+)"/);
-            return {
-              id: idMatch ? idMatch[1] : (client[1] || '0'),
-              username: client[1] || '',
-              name: client[2] || '',
-              panelNum: 1
-            };
-          });
-          return ok(res, { clients: clients });
-        }
-        return ok(res, { clients: [] });
-      } catch (err) {
-        console.error('Client list error:', err.message);
-        return error(res, 500, 'Failed to fetch clients');
-      }
-    }
-
-    // 3. PING
     if (url === '/ping' && req.method === 'POST') {
       return getUserFromSession(req.body.session) ? ok(res) : error(res, 401, 'Session expired');
     }
 
-    // 4. RANGES (Forgiving match: checks both clientName and username)
+    // 🔥 DEBUG: RANGES
     if (url === '/ranges' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
@@ -213,16 +150,27 @@ module.exports = async (req, res) => {
         iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1
       });
       
-      if (!data) return ok(res, { ranges: [] });
+      if (!data || !data.aaData) {
+        console.log("🔍 DEBUG RANGES: No data or no aaData returned from LaMix.");
+        return ok(res, { ranges: [] });
+      }
       
       const allNumbers = parseNumbersData(data);
+      console.log(`🔍 DEBUG RANGES: Total numbers scraped = ${allNumbers.length}`);
+      if (allNumbers.length > 0) {
+        console.log(`🔍 DEBUG RANGES: First 3 client names from LaMix:`, allNumbers.slice(0, 3).map(n => `"${n.client}"`));
+      }
+      
       const target1 = (user.clientName || '').toLowerCase().trim();
       const target2 = (user.username || '').toLowerCase().trim();
+      console.log(`🔍 DEBUG RANGES: Looking for client matching: "${target1}" OR "${target2}"`);
       
       const userNumbers = allNumbers.filter(n => {
         const c = (n.client || '').toLowerCase().trim();
         return c === target1 || c === target2 || c.includes(target1) || c.includes(target2);
       });
+      
+      console.log(`🔍 DEBUG RANGES: Matched ${userNumbers.length} numbers for this user.`);
       
       const rangesMap = new Map();
       userNumbers.forEach(n => {
@@ -238,7 +186,6 @@ module.exports = async (req, res) => {
       return ok(res, { ranges: Array.from(rangesMap.values()).map(r => ({ ...r, minsAgo: Math.floor(Math.random() * 60) })) });
     }
 
-    // 5. NUMBERS (Exact range match + forgiving client match)
     if (url === '/numbers' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
@@ -247,7 +194,7 @@ module.exports = async (req, res) => {
         frange: '', fclient: '', totnum: 100000, sEcho: 1, iColumns: 8,
         iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1
       });
-      if (!data) return ok(res, { numbers: [] });
+      if (!data || !data.aaData) return ok(res, { numbers: [] });
       
       const allNumbers = parseNumbersData(data);
       const target1 = (user.clientName || '').toLowerCase().trim();
@@ -264,7 +211,6 @@ module.exports = async (req, res) => {
       return ok(res, { numbers: userNumbers });
     }
 
-    // 6. SMS COUNT
     if (url === '/smscount' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
@@ -275,7 +221,7 @@ module.exports = async (req, res) => {
       });
       
       let userNumbers = [];
-      if (data) {
+      if (data && data.aaData) {
         const allNumbers = parseNumbersData(data);
         const target1 = (user.clientName || '').toLowerCase().trim();
         const target2 = (user.username || '').toLowerCase().trim();
@@ -305,32 +251,38 @@ module.exports = async (req, res) => {
       });
     }
 
-    // 7. SMS COUNT RANGE
     if (url === '/smscount-range' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
       return ok(res, { count: 0 }); 
     }
 
-    // 8. DOR
     if (url === '/dor' && req.method === 'POST') {
       return ok(res, await getSmartDOR());
     }
 
-    // 9. SEARCH RANGES (Add Page) - Shows ALL matching ranges, even if 0 available
+    // 🔥 DEBUG: SEARCH RANGES
     if (url === '/alloc/search-ranges' && req.method === 'POST') {
       const query = (req.body.query || '').toLowerCase().trim();
+      console.log(`🔍 DEBUG SEARCH: User searched for query: "${query}"`);
       
       const data = await scrapeAgentData('res/data_smsnumbers.php', {
         frange: '', fclient: '', totnum: 100000, sEcho: 1, iColumns: 8,
         iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1
       });
       
-      if (!data || !data.aaData) return ok(res, { ranges: [] });
+      if (!data || !data.aaData) {
+        console.log("🔍 DEBUG SEARCH: No data or no aaData returned from LaMix.");
+        return ok(res, { ranges: [] });
+      }
       
       const allNumbers = parseNumbersData(data);
-      const rangesMap = new Map();
+      console.log(`🔍 DEBUG SEARCH: Total numbers scraped = ${allNumbers.length}`);
+      if (allNumbers.length > 0) {
+        console.log(`🔍 DEBUG SEARCH: First 3 countries from LaMix:`, allNumbers.slice(0, 3).map(n => `"${n.country}"`));
+      }
       
+      const rangesMap = new Map();
       allNumbers.forEach(n => {
         const key = `${n.country} -- ${n.range}`;
         if (!rangesMap.has(key)) {
@@ -340,7 +292,6 @@ module.exports = async (req, res) => {
         r.total++;
         
         const c = (n.client || '').trim().toLowerCase();
-        // Broad check for unallocated numbers
         if (c === '' || c === 'unallocated' || c === 'null' || c === 'none' || c === 'free' || c === '0') {
           r.available++;
         }
@@ -351,11 +302,11 @@ module.exports = async (req, res) => {
         return searchText.includes(query);
       });
       
-      // DO NOT hide ranges with 0 available. Show them so the UI can display "0 available".
+      console.log(`🔍 DEBUG SEARCH: Found ${filtered.length} ranges matching "${query}"`);
+      
       return ok(res, { ranges: filtered });
     }
 
-    // 10. CHECK AVAILABILITY
     if (url === '/alloc/check-availability' && req.method === 'POST') {
       const { rangeId } = req.body;
       const cleanRangeId = rangeId.replace('alloc_', '').trim();
@@ -380,7 +331,6 @@ module.exports = async (req, res) => {
       return ok(res, { available, total });
     }
 
-    // 11. ALLOCATE (Real-time verification)
     if (url === '/alloc/allocate' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
@@ -389,7 +339,6 @@ module.exports = async (req, res) => {
       const cleanRangeId = rangeId.replace('alloc_', '').trim();
       
       try {
-        // Send allocation request. LaMix expects the client NAME in the 'client' field.
         await axios.post(`${AGENT_BASE_URL}SMSBulkAllocations`, {
           range: cleanRangeId,
           qty: quantity, 
@@ -403,7 +352,6 @@ module.exports = async (req, res) => {
           }
         });
         
-        // Verify allocation by re-scraping
         const verifyData = await scrapeAgentData('res/data_smsnumbers.php', {
           frange: cleanRangeId, fclient: '', totnum: 100000, sEcho: 1, iColumns: 8,
           iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1
@@ -434,7 +382,6 @@ module.exports = async (req, res) => {
       }
     }
 
-    // 12. LEADERBOARD
     if (url === '/leaderboard' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
@@ -452,7 +399,6 @@ module.exports = async (req, res) => {
   }
 };
 
-// Cleanup old DOR files
 setInterval(() => {
   try {
     const now = new Date();
