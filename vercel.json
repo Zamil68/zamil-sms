@@ -8,6 +8,9 @@
     { "src": "branding/**", "use": "@vercel/static" }
   ],
   "routes": [
+    { "src": "^/$", "dest": "/login", "status": 302 },
+    { "src": "^/dashboard/?$", "dest": "/dashboard/dashboard.html" },
+
     { "src": "/api/(.*)", "dest": "/api/index.js" },
     { "src": "/login/(.*)", "dest": "/login/$1" },
     { "src": "/dashboard/(.*)", "dest": "/dashboard/$1" },
