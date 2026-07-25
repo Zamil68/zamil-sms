@@ -364,5 +364,105 @@
   var fm = document.getElementById('featMenu'); if (fm) fm.addEventListener('click', function(e){ e.stopPropagation(); });
 })();
 </script>
+
+    <style>
+/* ═══ Floating OTP toast + colorful inbox codes (additive only) ═══ */
+#otpFloat{position:fixed;top:64px;left:50%;transform:translateX(-50%) translateY(-18px);
+  width:min(92vw,380px);z-index:650;display:none;opacity:0;
+  transition:opacity .25s ease, transform .25s ease;pointer-events:none}
+#otpFloat.show{display:block;opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
+.otp-float-card{background:var(--card);border:1px solid var(--border);border-left:4px solid var(--accent);
+  border-radius:14px;box-shadow:0 16px 40px rgba(0,0,0,.28);padding:12px 14px;cursor:pointer;
+  display:flex;flex-direction:column;gap:6px}
+.otp-float-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.otp-float-cli{font-size:.74rem;font-weight:800;color:var(--text);display:flex;align-items:center;gap:6px;min-width:0}
+.otp-float-cli b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.otp-float-time{font-size:.64rem;color:var(--muted);font-weight:700;flex-shrink:0}
+.otp-float-code{align-self:flex-start;font-size:1.5rem;font-weight:900;letter-spacing:.14em;
+  font-variant-numeric:tabular-nums;padding:4px 12px;border-radius:10px;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;
+  box-shadow:0 4px 14px rgba(34,211,238,.35)}
+.otp-float-num{font-size:.7rem;color:var(--muted);font-weight:700;font-variant-numeric:tabular-nums}
+.otp-float-msg{font-size:.72rem;color:var(--muted);line-height:1.35;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.otp-float-hint{font-size:.6rem;color:var(--accent);font-weight:700;text-align:right}
+.rsms-body .otp-code{display:inline-block;font-weight:900;letter-spacing:.1em;
+  font-variant-numeric:tabular-nums;padding:1px 8px;border-radius:7px;margin:0 2px;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-size:1.02em}
+</style>
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+   🟢 ADD-ON 1 — Real-time floating OTP (toast + sound + notification)
+   Rides the EXISTING 3s poll → NO extra requests, NO console spam.
+   It only takes over the *visual + sound* alert; detection and the
+   browser push-notification stay owned by app.js (so nothing doubles).
+   Delete this whole IIFE to revert.
+   ═══════════════════════════════════════════════════════════ */
+(function(){
+  function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
+  function codeOf(m){ var x=String(m||'').match(/\b(\d{4,8})\b/); return x?x[1]:''; }
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  var actx=null;
+  function ensureCtx(){ if(!actx){ try{ actx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } if(actx&&actx.state==='suspended'){ actx.resume().catch(function(){}); } return actx; }
+  function chime(){ var c=ensureCtx(); if(!c) return; try{ var now=c.currentTime;
+    [[880,0],[1320,0.12]].forEach(function(p){ var o=c.createOscillator(),g=c.createGain(); o.connect(g);g.connect(c.destination); o.type='sine'; o.frequency.value=p[0]; var t=now+p[1]; g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.22,t+0.02); g.gain.exponentialRampToValueAtTime(0.0001,t+0.32); o.start(t); o.stop(t+0.34); });
+  }catch(e){} }
+  ['click','keydown','touchstart'].forEach(function(ev){ document.addEventListener(ev, ensureCtx, {once:true, passive:true}); });
+
+  var host=null, hideT=null;
+  function toastHost(){ if(host) return host; host=document.createElement('div'); host.id='otpFloat'; document.body.appendChild(host); return host; }
+  function showFloat(text, recent){
+    var r=(recent&&recent[0])||null, code=r?codeOf(r.message):'', cli=r?(r.cli||'OTP'):'OTP', num=r?(r.number||''):'', t=r?(r.time||''):'', more=(recent&&recent.length>1)?(' +'+(recent.length-1)+' more'):'';
+    var h=toastHost();
+    h.innerHTML='<div class="otp-float-card" title="Tap to copy '+(code||num)+'">'
+      +'<div class="otp-float-top"><div class="otp-float-cli">📨 <b>'+esc(cli)+more+'</b></div><div class="otp-float-time">'+esc(t)+'</div></div>'
+      +(code?'<div class="otp-float-code">'+esc(code)+'</div>':'')
+      +(num?'<div class="otp-float-num">📱 '+esc(num)+'</div>':'')
+      +(r&&r.message?'<div class="otp-float-msg">'+esc(r.message)+'</div>':'')
+      +'<div class="otp-float-hint">tap to copy code</div></div>';
+    var card=h.querySelector('.otp-float-card'); if(card) card.onclick=function(){ var v=code||num; if(v&&navigator.clipboard) navigator.clipboard.writeText(v).catch(function(){}); };
+    h.classList.add('show'); clearTimeout(hideT); hideT=setTimeout(function(){ h.classList.remove('show'); }, 8000);
+    if(!document.hidden) chime();
+  }
+  function enhanceCodes(){ try{ document.querySelectorAll('#smsRecentList .rsms-body').forEach(function(el){
+    if(el.getAttribute('data-otpdone')) return; el.setAttribute('data-otpdone','1');
+    el.innerHTML = el.innerHTML.replace(/\b(\d{4,8})\b/, '<span class="otp-code">$1</span>');
+  }); }catch(e){} }
+
+  ready(function(){
+    if(typeof showSmsAlert==='function'){ var _o=showSmsAlert; window.showSmsAlert=function(t,r){ try{ showFloat(t,r); }catch(e){ try{_o(t,r);}catch(_){} } }; }
+    if(typeof renderSmsRecent==='function'){ var _r=renderSmsRecent; window.renderSmsRecent=function(it){ try{_r(it);}catch(e){} enhanceCodes(); }; }
+  });
+})();
+
+/* ═══════════════════════════════════════════════════════════
+   🟢 ADD-ON 2 — Remember the active tab across a browser refresh.
+   Saves the current view to sessionStorage; restores it on load.
+   If anything is missing it silently falls back to Ranges (safe).
+   Delete this whole IIFE to revert.
+   ═══════════════════════════════════════════════════════════ */
+(function(){
+  function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
+  var KEY='zamil_view', NKEY='zamil_num';
+  function setView(v){ try{ sessionStorage.setItem(KEY,v); }catch(e){} }
+  function setNum(id,t,c){ try{ sessionStorage.setItem(NKEY, JSON.stringify({id:id,title:t,count:c})); setView('numbers'); }catch(e){} }
+  ready(function(){
+    try{
+      if(typeof bnSwitch==='function'){ var _bn=bnSwitch; window.bnSwitch=function(p){ try{ var m=(p==='home')?'ranges':p; setView(m); }catch(e){} return _bn.apply(this,arguments); }; }
+      if(typeof loadNumbers==='function'){ var _ln=loadNumbers; window.loadNumbers=function(id,t,c){ try{ setNum(id,t,c); }catch(e){} return _ln.apply(this,arguments); }; }
+      if(typeof showRanges==='function'){ var _sr=showRanges; window.showRanges=function(){ try{ setView('ranges'); }catch(e){} return _sr.apply(this,arguments); }; }
+    }catch(e){}
+    try{
+      if(!localStorage.getItem('app_session')) return;
+      var v=sessionStorage.getItem(KEY), n=sessionStorage.getItem(NKEY);
+      if(v==='numbers' && n){ var o=JSON.parse(n); if(o&&o.id){ try{ if(typeof ACTIVE_RANGE!=='undefined'){ ACTIVE_RANGE.id=o.id; ACTIVE_RANGE.title=o.title||''; ACTIVE_RANGE.count=o.count||0; } }catch(e){} if(typeof loadNumbers==='function') loadNumbers(o.id,o.title||'',o.count||0); return; } }
+      if(v && v!=='ranges' && v!=='numbers' && typeof bnSwitch==='function') bnSwitch(v);
+    }catch(e){}
+  });
+})();
+</script>
+    
 </body>
 </html>
