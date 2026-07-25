@@ -268,6 +268,61 @@ async function countDailyAllocByCountry(username, clientName){
   return { byCountry:{}, byRange:{}, total:0, _src:'none' }; // no Supabase yet → uncapped (allocations still work)
 }
 
+// ═══════════════════════════════════════════════════════════
+// 🔥 CDR SCRAPER (real OTP/SMS source) + 05:00→05:00 PKT business day + 5s cache
+// ═══════════════════════════════════════════════════════════
+function businessDayPKT(){
+  const pkt = new Date(Date.now() + 5*3600000);
+  const hour = pkt.getUTCHours();
+  let base = pkt.toISOString().slice(0,10);
+  if (hour < 5) base = new Date(pkt.getTime() - 86400000).toISOString().slice(0,10);
+  const next = new Date(new Date(base+'T00:00:00Z').getTime() + 86400000).toISOString().slice(0,10);
+  return { from: base + ' 05:00:00', to: next + ' 04:59:59', label: base };
+}
+async function scrapeCDR(dateFrom, dateTo, extra){
+  await ensureAgentSession();
+  const params = Object.assign({
+    fdate1: dateFrom, fdate2: dateTo, frange:'', fclient:'', fnum:'', fcli:'',
+    fgdate:'', fgmonth:'', fgrange:'', fgclient:'', fgnumber:'', fgcli:'', fg:0,
+    sEcho:1, iColumns:9, iDisplayStart:0, iDisplayLength:100000,
+    sSearch:'', bRegex:false, iSortCol_0:0, sSortDir_0:'desc', iSortingCols:1
+  }, extra||{});
+  const doReq = async () => (await axios.get(`${AGENT_BASE_URL}res/data_smscdr.php`, { params, headers: browserHeaders('http://51.210.208.26/ints/agent/SMSCDRStats'), timeout: 20000, maxRedirects:5, validateStatus:()=>true })).data;
+  try {
+    let d = await doReq();
+    if (looksLikeLogin(d)) { await ensureAgentSession(true); d = await doReq(); }
+    if (!d || !d.aaData) return [];
+    const rows = [];
+    d.aaData.forEach(r => {
+      if (!Array.isArray(r)) return;
+      const dt = String(r[0]||'');
+      if (!/^\d{4}-\d{2}-\d{2}/.test(dt)) return; // skip the totals row
+      rows.push({ datetime: dt, date: dt.slice(0,10), time: dt.slice(11,19),
+        range: String(r[1]||'').replace(/<[^>]*>/g,'').trim(),
+        number: String(r[2]||'').replace(/<[^>]*>/g,'').trim(),
+        cli: String(r[3]||'').replace(/<[^>]*>/g,'').trim(),
+        client: String(r[4]||'').replace(/<[^>]*>/g,'').trim(),
+        message: String(r[5]||'').replace(/<[^>]*>/g,'').trim(),
+        currency: String(r[6]||'').trim(), myPayout: r[7], clientPayout: r[8] });
+    });
+    return rows;
+  } catch(e){ console.error('scrapeCDR:', e.message); return []; }
+}
+let _cdrCache = { key:'', ts:0, rows:[] };
+const CDR_TTL = 5000; // 5s — one scrape serves all users/calls, protects the panel
+async function getCachedCDR(from, to){
+  const key = from + '|' + to;
+  if (_cdrCache.key === key && (Date.now() - _cdrCache.ts) < CDR_TTL) return _cdrCache.rows;
+  const rows = await scrapeCDR(from, to);
+  _cdrCache = { key, ts: Date.now(), rows };
+  return rows;
+}
+function isMine(client, user){
+  const c = (client||'').toLowerCase().trim();
+  const t1 = (user.clientName||'').toLowerCase().trim(), t2 = (user.username||'').toLowerCase().trim();
+  return c && (c===t1 || c===t2 || c.includes(t1) || c.includes(t2));
+}
+
 module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).json({ ...corsHeaders });
   const url = req.url.replace(/^\/api/, '');
@@ -404,11 +459,16 @@ module.exports = async (req, res) => {
         return ok(res, { number, count, recent });
       } catch (e) { console.error('number-smscount:', e.message); return ok(res, { number, count: 0, recent: [], _debug: e.message }); }
     }
+    
 
-    if (url === '/smscount-range' && req.method === 'POST') {
+    if (url === '/smscount' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
-      return ok(res, { count: 0 });
+      const bd = businessDayPKT();
+      const rows = await getCachedCDR(bd.from, bd.to);
+      const mine = rows.filter(r => isMine(r.client, user));
+      mine.sort((a,b) => b.datetime.localeCompare(a.datetime));
+      return ok(res, { count: mine.length, recent: mine.slice(0,50).map(r => ({ time: r.time, datetime: r.datetime, number: r.number, cli: r.cli, message: r.message, range: r.range })) });
     }
 
     if (url === '/dor' && req.method === 'POST') {
