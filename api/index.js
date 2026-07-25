@@ -410,6 +410,15 @@ function isAdminish(role){ return role === 'super' || role === 'admin'; }
 let _statsCache = { ts: 0, data: null };
 const STATS_TTL = 60000; // 60s
 
+const COUNTRY_ISO = { 'pakistan':'PK','sri lanka':'LK','malaysia':'MY','myanmar':'MM','afghanistan':'AF','tajikistan':'TJ','tanzania':'TZ','kyrgyzstan':'KG','uzbekistan':'UZ','sudan':'SD','angola':'AO','algeria':'DZ','zimbabwe':'ZW','bolivia':'BO','india':'IN','bangladesh':'BD','nepal':'NP','indonesia':'ID','philippines':'PH','vietnam':'VN','thailand':'TH','cambodia':'KH','egypt':'EG','nigeria':'NG','kenya':'KE','uganda':'UG','ghana':'GH','south africa':'ZA','brazil':'BR','mexico':'MX','united states':'US','usa':'US','united kingdom':'GB','germany':'DE','france':'FR','spain':'ES','italy':'IT','russia':'RU','turkey':'TR','iran':'IR','iraq':'IQ','saudi arabia':'SA','united arab emirates':'AE','qatar':'QA','kuwait':'KW','jordan':'JO','lebanon':'LB','morocco':'MA','tunisia':'TN','libya':'LY','ethiopia':'ET','somalia':'SO','rwanda':'RW','zambia':'ZM','mozambique':'MZ','botswana':'BW','namibia':'NA','senegal':'SN','mali':'ML','niger':'NE','benin':'BJ','togo':'TG','burkina faso':'BF','guinea':'GN','ivory coast':'CI','cameroon':'CM','congo':'CG','gabon':'GA','madagascar':'MG','malawi':'MW','kazakhstan':'KZ','azerbaijan':'AZ','armenia':'AM','georgia':'GE','ukraine':'UA','poland':'PL','romania':'RO','greece':'GR','netherlands':'NL','belgium':'BE','switzerland':'CH','sweden':'SE','norway':'NO','denmark':'DK','finland':'FI','ireland':'IE','canada':'CA','australia':'AU','new zealand':'NZ','japan':'JP','south korea':'KR','china':'CN','singapore':'SG','argentina':'AR','chile':'CL','colombia':'CO','peru':'PE','venezuela':'VE','ecuador':'EC','paraguay':'PY','uruguay':'UY','panama':'PA','costa rica':'CR','guatemala':'GT','honduras':'HN','cuba':'CU','dominican republic':'DO','haiti':'HT','jamaica':'JM','portugal':'PT','austria':'AT','belarus':'BY','hungary':'HU','czechia':'CZ','slovakia':'SK','bulgaria':'BG','serbia':'RS','croatia':'HR','yemen':'YE','oman':'OM','bahrain':'BH','syria':'SY','mongolia':'MN','laos':'LA','bhutan':'BT','maldives':'MV','fiji':'FJ' };
+function isoToFlag(iso){ return String(iso||'').toUpperCase().replace(/./g, c => String.fromCodePoint(127397 + c.charCodeAt(0))); }
+function countryFlag(name){
+  const s = ' ' + String(name||'').toLowerCase();
+  let best='', bestLen=0;
+  for (const k in COUNTRY_ISO){ const re = new RegExp(' ' + k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '(?![a-z])'); if (re.test(s) && k.length>bestLen){ best=k; bestLen=k.length; } }
+  return best ? isoToFlag(COUNTRY_ISO[best]) : '🏳️';
+}
+
 module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).json({ ...corsHeaders });
   const url = req.url.replace(/^\/api/, '');
@@ -684,19 +693,36 @@ if (url === '/stats' && req.method === 'POST') {
       const today = bd.label;
       const dayBack = (n) => new Date(new Date(today + 'T00:00:00Z').getTime() - n * 86400000).toISOString().slice(0, 10);
 
-      // inventory from the numbers table
       const data = await scrapeAgentData('res/data_smsnumbers.php', { frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
-      let totalNumbers = 0, allocated = 0, available = 0; const rangesSet = new Set(), countriesSet = new Set();
+      let totalNumbers = 0, allocated = 0, available = 0; const rangesSet = new Set(); const countryMap = {};
       if (data && data.aaData) {
         const rows = parseNumbersData(data);
         totalNumbers = rows.length;
         rows.forEach(n => {
           if (n.range) rangesSet.add(n.range);
-          const ctry = _countryOfRange(n.range).replace(/^\d+\s*-\s*/, '').trim();
-          if (ctry) countriesSet.add(ctry.toLowerCase());
-          if (isAvailableClient(n.client)) available++; else allocated++;
+          const ctry = _countryOfRange(n.range).replace(/^\d+\s*-\s*/, '').trim() || 'Other';
+          const key = ctry.toLowerCase();
+          if (!countryMap[key]) countryMap[key] = { country: ctry, flag: countryFlag(ctry), ranges: {} };
+          const rn = n.range || 'Unknown';
+          if (!countryMap[key].ranges[rn]) countryMap[key].ranges[rn] = { range: rn, available: 0, total: 0 };
+          countryMap[key].ranges[rn].total++;
+          if (isAvailableClient(n.client)) { available++; countryMap[key].ranges[rn].available++; } else allocated++;
         });
       }
+      const countries = Object.values(countryMap).map(c => ({ country: c.country, flag: c.flag, ranges: Object.values(c.ranges).sort((a,b)=> b.available - a.available) })).sort((a,b)=> a.country.localeCompare(b.country));
+
+      const todayRows = await getCachedCDR(bd.from, bd.to);
+      const otpToday = todayRows.length;
+      const otpWeek  = (await getCachedCDR(dayBack(6) + ' 00:00:00',  today + ' 23:59:59')).length;
+      const otpMonth = (await getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')).length;
+      const rangeCounts = {}; todayRows.forEach(r => { if (r.range) rangeCounts[r.range] = (rangeCounts[r.range]||0)+1; });
+      let mostActiveRange = '—', mostActiveCount = 0;
+      Object.entries(rangeCounts).forEach(([rg,c]) => { if (c > mostActiveCount){ mostActiveCount = c; mostActiveRange = rg; } });
+
+      const result = { totalCountries: countries.length, totalRanges: rangesSet.size, totalNumbers, allocated, available, otpToday, otpWeek, otpMonth, mostActiveRange, mostActiveCount, countries };
+      _statsCache = { ts: Date.now(), data: result };
+      return ok(res, result);
+    }
 
       // OTP volumes from CDR
       const todayRows = await getCachedCDR(bd.from, bd.to);
