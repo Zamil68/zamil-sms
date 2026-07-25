@@ -430,11 +430,17 @@ module.exports = async (req, res) => {
     }
 
     // 5. SMS COUNT
-    if (url === '/number-smscount' && req.method === 'POST') {
+   if (url === '/number-smscount' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
-      const number = String(req.body.number || '').replace(/[^0-9]/g, '');
-      if (!number) return ok(res, { number, count: 0, recent: [] });
+      const number = String(req.body.number||'').replace(/[^0-9]/g,'');
+      if (!number) return ok(res, { number, count:0, recent:[] });
+      const bd = businessDayPKT();
+      const rows = await getCachedCDR(bd.from, bd.to);
+      const mine = rows.filter(r => { const num=(r.number||'').replace(/[^0-9]/g,''); return isMine(r.client, user) && (num===number || num.endsWith(number) || number.endsWith(num)); });
+      mine.sort((a,b) => b.datetime.localeCompare(a.datetime));
+      return ok(res, { number, count: mine.length, recent: mine.slice(0,8).map(r => ({ time: r.time, cli: r.cli, message: r.message, number: r.number })) });
+    }
       try {
         const nd = await scrapeAgentData('res/data_smsnumbers.php', { frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
         const t1 = (user.clientName||'').toLowerCase().trim(), t2 = (user.username||'').toLowerCase().trim();
@@ -472,7 +478,10 @@ module.exports = async (req, res) => {
     }
 
     if (url === '/dor' && req.method === 'POST') {
-      return ok(res, await getSmartDOR());
+      const bd = businessDayPKT();
+      const rows = await getCachedCDR(bd.from, bd.to);
+      rows.sort((a,b) => b.datetime.localeCompare(a.datetime));
+      return ok(res, { date: bd.label, total: rows.length, recent: rows.slice(0,200).map(r => ({ time: r.time, datetime: r.datetime, number: r.number, cli: r.cli, client: r.client, message: r.message, range: r.range })) });
     }
 
     // 6. SEARCH RANGES (real ids + available counts)
@@ -659,11 +668,20 @@ module.exports = async (req, res) => {
     if (url === '/leaderboard' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
-      const dorData = await getSmartDOR();
-      const cliCounts = {};
-      dorData.recent.forEach(sms => { const cli = sms.cli || 'Unknown'; cliCounts[cli] = (cliCounts[cli] || 0) + 1; });
-      const top10 = Object.entries(cliCounts).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([cli, count]) => ({ username: cli, count }));
-      return ok(res, { users: top10 });
+      const range = (req.body.range || 'today');
+      const bd = businessDayPKT(); let from = bd.from, to = bd.to;
+      if (range !== 'today') {
+        const days = range === 'week' ? 7 : 30;
+        const pkt = new Date(Date.now() + 5*3600000);
+        const end = pkt.toISOString().slice(0,10);
+        const start = new Date(pkt.getTime() - (days-1)*86400000).toISOString().slice(0,10);
+        from = start + ' 05:00:00'; to = end + ' 23:59:59';
+      }
+      const rows = await scrapeCDR(from, to);
+      const counts = {};
+      rows.forEach(r => { const c = r.client || 'Unknown'; if (c) counts[c] = (counts[c]||0) + 1; });
+      const users = Object.entries(counts).sort((a,b) => b[1]-a[1]).slice(0,10).map(([username,count]) => ({ username, count }));
+      return ok(res, { users, range });
     }
 
     // 10. CLIENTS LIST
