@@ -25,7 +25,7 @@ let AGENT_COOKIE = 'PHPSESSID=0950059eaead99816b1e27139bf2d227'; // starting poi
 let _cookieTs = 0;        // when we last got a fresh cookie
 let _lastLoginTry = 0;    // throttle login attempts
 const AGENT_USER = 'muzammil62';
-const AGENT_PASS = 'muzammil62';
+const AGENT_PASS = 'Zamil6262#$&#$&@';
 const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36';
 
 async function ensureAgentSession(force) {
