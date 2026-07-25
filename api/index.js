@@ -407,6 +407,8 @@ async function getRole(username){
   return role;
 }
 function isAdminish(role){ return role === 'super' || role === 'admin'; }
+let _statsCache = { ts: 0, data: null };
+const STATS_TTL = 60000; // 60s
 
 module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).json({ ...corsHeaders });
@@ -670,6 +672,46 @@ module.exports = async (req, res) => {
       const remaining = supaEnabled() ? Math.max(0, Math.min(RANGE_CAP - rangeUsed, COUNTRY_CAP - countryUsed)) : COUNTRY_CAP;
       return ok(res, { country, rangeUsed, rangeLimit:RANGE_CAP, countryUsed, countryLimit:COUNTRY_CAP, remaining, byCountry:r.byCountry, _src:r._src||'none' });
     }
+
+if (url === '/stats' && req.method === 'POST') {
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      const role = await getRole(user.username);
+      if (!isAdminish(role)) return error(res, 403, 'Admins only');
+      if (_statsCache.data && (Date.now() - _statsCache.ts) < STATS_TTL) return ok(res, _statsCache.data);
+
+      const bd = businessDayPKT();
+      const today = bd.label;
+      const dayBack = (n) => new Date(new Date(today + 'T00:00:00Z').getTime() - n * 86400000).toISOString().slice(0, 10);
+
+      // inventory from the numbers table
+      const data = await scrapeAgentData('res/data_smsnumbers.php', { frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
+      let totalNumbers = 0, allocated = 0, available = 0; const rangesSet = new Set(), countriesSet = new Set();
+      if (data && data.aaData) {
+        const rows = parseNumbersData(data);
+        totalNumbers = rows.length;
+        rows.forEach(n => {
+          if (n.range) rangesSet.add(n.range);
+          const ctry = _countryOfRange(n.range).replace(/^\d+\s*-\s*/, '').trim();
+          if (ctry) countriesSet.add(ctry.toLowerCase());
+          if (isAvailableClient(n.client)) available++; else allocated++;
+        });
+      }
+
+      // OTP volumes from CDR
+      const todayRows = await getCachedCDR(bd.from, bd.to);
+      const otpToday = todayRows.length;
+      const otpWeek  = (await getCachedCDR(dayBack(6) + ' 00:00:00',  today + ' 23:59:59')).length;
+      const otpMonth = (await getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')).length;
+      const rangeCounts = {};
+      todayRows.forEach(r => { if (r.range) rangeCounts[r.range] = (rangeCounts[r.range] || 0) + 1; });
+      let mostActiveRange = '—', mostActiveCount = 0;
+      Object.entries(rangeCounts).forEach(([rg, c]) => { if (c > mostActiveCount) { mostActiveCount = c; mostActiveRange = rg; } });
+
+      const result = { totalCountries: countriesSet.size, totalRanges: rangesSet.size, totalNumbers, allocated, available, otpToday, otpWeek, otpMonth, mostActiveRange, mostActiveCount };
+      _statsCache = { ts: Date.now(), data: result };
+      return ok(res, result);
+    }    
   
     // 8. ALLOCATE (real post + before/after proof)
     if (url === '/alloc/allocate' && req.method === 'POST') {
