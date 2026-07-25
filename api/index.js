@@ -232,36 +232,40 @@ function resolveUrl(action) {
   if (action[0] === '/') return 'http://51.210.208.26' + action;
   return `${AGENT_BASE_URL}${action}`;
 }
-const DAILY_ALLOC_CAP = 3; // 🔥 per COUNTRY per day
-function _todayPKT(){ return new Date(Date.now()+5*3600000).toISOString().slice(0,10); } // PKT calendar day
+// 🔥 Per-country (3) / per-range (2) daily caps — Supabase-backed; uncapped until keys are set
+const COUNTRY_CAP = 3;
+const RANGE_CAP   = 2;
+const DAILY_ALLOC_CAP = COUNTRY_CAP;
+const SUPABASE_URL = process.env.SUPABASE_URL || '';
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || '';
+function supaEnabled(){ return !!(SUPABASE_URL && SUPABASE_KEY); }
+function _todayPKT(){ return new Date(Date.now()+5*3600000).toISOString().slice(0,10); }
+function _todayStartUTC(){ return new Date().toISOString().slice(0,10) + 'T00:00:00Z'; }
 function _countryOfRange(rangeText){
   const t = String(rangeText||'').trim();
   if (typeof splitRangeName === 'function') { try { const s = splitRangeName(t); if (s && s.country) return s.country; } catch(e){} }
-  // fallback: leading words before the first "LX/MX/RX/DC" marker or before a digit run
   const m = t.match(/^(.*?)[\s\-]*(?:LX|MX|RX|DC|LX2|MX2)\b/i) || t.match(/^(.*?)[\s\-]+\d{3,}/);
   return (m && m[1] ? m[1] : t).trim();
 }
-// returns { byCountry: { 'Zimbabwe': 2, ... }, total: n }
+async function supaInsertEvent(ev){
+  if (!supaEnabled()) return;
+  try { await fetch(`${SUPABASE_URL}/rest/v1/alloc_events`, { method:'POST', headers:{ 'apikey':SUPABASE_KEY, 'Authorization':'Bearer '+SUPABASE_KEY, 'Content-Type':'application/json', 'Prefer':'return=minimal' }, body: JSON.stringify(ev) }); }
+  catch(e){ console.error('supaInsertEvent', e.message); }
+}
 async function countDailyAllocByCountry(username, clientName){
-  try {
-    const d = await scrapeAgentData('res/data_smsbulkallocations.php', {
-      sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:500, sSearch:'', bRegex:false, iSortingCols:1
-    });
-    if(!d || !d.aaData) return { byCountry:{}, total:0 };
-    const today = _todayPKT();
-    const want = [ (username||'').toLowerCase(), (clientName||'').toLowerCase() ].filter(Boolean);
-    const byCountry = {}; let total = 0;
-    d.aaData.forEach(row => {
-      const day = String(row[0]||'').slice(0,10);
-      const who = String(row[1]||'').toLowerCase().trim();
-      if (day === today && want.some(w => who === w || who.includes(w) || w.includes(who))) {
-        total++;
-        const country = _countryOfRange(row[3] || row[2] || '');
-        byCountry[country] = (byCountry[country]||0) + 1;
+  if (supaEnabled()) {
+    try {
+      const start = encodeURIComponent('gte.' + _todayStartUTC());
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/alloc_events?username=${encodeURIComponent('eq.'+username)}&created_at=${start}&select=country,range_id`, { headers:{ 'apikey':SUPABASE_KEY, 'Authorization':'Bearer '+SUPABASE_KEY } });
+      const rows = await r.json();
+      if (Array.isArray(rows)) {
+        const byCountry={}, byRange={};
+        rows.forEach(x => { const c=x.country||'Unknown'; byCountry[c]=(byCountry[c]||0)+1; if(x.range_id) byRange[x.range_id]=(byRange[x.range_id]||0)+1; });
+        return { byCountry, byRange, total: rows.length, _src:'supabase' };
       }
-    });
-    return { byCountry, total };
-  } catch(e){ return { byCountry:{}, total:0 }; } // never block on a scrape hiccup
+    } catch(e){ console.error('supa count error', e.message); }
+  }
+  return { byCountry:{}, byRange:{}, total:0, _src:'none' }; // no Supabase yet → uncapped (allocations still work)
 }
 
 module.exports = async (req, res) => {
@@ -475,55 +479,7 @@ module.exports = async (req, res) => {
       const remaining = supaEnabled() ? Math.max(0, Math.min(RANGE_CAP - rangeUsed, COUNTRY_CAP - countryUsed)) : COUNTRY_CAP;
       return ok(res, { country, rangeUsed, rangeLimit:RANGE_CAP, countryUsed, countryLimit:COUNTRY_CAP, remaining, byCountry:r.byCountry, _src:r._src||'none' });
     }
-    if (url === '/number-smscount' && req.method === 'POST') {
-      const user = getUserFromSession(req.body.session);
-      if (!user) return error(res, 401, 'Unauthorized');
-      const number = String(req.body.number || '').replace(/[^0-9]/g, '');
-      if (!number) return ok(res, { number, count: 0, recent: [] });
-
-      // 1) Confirm the number belongs to this user (so counts can't be snooped across clients)
-      const nd = await scrapeAgentData('res/data_smsnumbers.php', {
-        frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1
-      });
-      const target1 = (user.clientName||'').toLowerCase().trim(), target2 = (user.username||'').toLowerCase().trim();
-      let owns = false;
-      if (nd && nd.aaData) {
-        owns = parseNumbersData(nd).some(n => {
-          const num = String(n.number||'').replace(/[^0-9]/g,'');
-          const c = (n.client||'').toLowerCase().trim();
-          return (num === number || num.endsWith(number) || number.endsWith(num)) &&
-                 c && (c === target1 || c === target2 || c.includes(target1) || c.includes(target2));
-        });
-      }
-      if (!owns) return ok(res, { number, count: 0, recent: [] });
-
-      // 2) Count today's OTPs for this number from the panel CDR (05:00→05:00 business day)
-      const today = businessDayUTC();
-      let count = 0; const recent = [];
-      try {
-        const cd = await scrapeAgentData('res/data_smscdr.php', {
-          sEcho:1, iColumns:10, iDisplayStart:0, iDisplayLength:500, sSearch:'', bRegex:false, iSortingCols:1
-        });
-        if (cd && cd.aaData) {
-          cd.aaData.forEach(row => {
-            const cells = row.map(c => String(c||'').replace(/<[^>]*>/g,'').trim());
-            const num = cells.find(c => c.replace(/[^0-9]/g,'').endsWith(number)) || '';
-            if (!num) return;
-            const day = (cells.find(c => /^\d{4}-\d{2}-\d{2}/.test(c)) || '').slice(0,10);
-            if (day && day !== today) return;
-            count++;
-            if (recent.length < 8) recent.push({
-              time: (cells.find(c => /^\d{4}-\d{2}-\d{2}/.test(c)) || '').slice(11,19),
-              cli: cells.find(c => /^[A-Za-z]/.test(c) && !/^\d{4}-\d{2}-\d{2}/.test(c)) || '',
-              message: cells.find(c => c.length > 12 && !/^\d{4}-\d{2}-\d{2}/.test(c)) || '',
-              number: num
-            });
-          });
-        }
-      } catch(e){}
-      return ok(res, { number, count, recent });
-    }
-
+  
     // 8. ALLOCATE (real post + before/after proof)
     if (url === '/alloc/allocate' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
@@ -531,7 +487,6 @@ module.exports = async (req, res) => {
       const rangeId = String(req.body.rangeId || '').trim();
       const quantity = parseInt(req.body.quantity) || parseInt(req.body.qty) || 1;
       const payout = parseFloat(req.body.payout) || 0.01;
-      const _country = _countryOfRange(req.body.rangeTitle || '');
       const _country = _countryOfRange(req.body.rangeTitle || '');
       const _cap = await countDailyAllocByCountry(user.username, user.clientName);
       const _countryUsed = _cap.byCountry[_country] || 0;
@@ -616,6 +571,7 @@ module.exports = async (req, res) => {
       const allocatedReal = Math.max(0, afterAny - beforeAny);
       if (allocatedReal > 0) reason = 'ALLOCATED_OK';
       else if (reason.indexOf('POSTED_') === 0) reason = 'POSTED_NOCHANGE_' + serverStatus;
+      const looksSuccessful = allocatedReal > 0 || (serverStatus != null && serverStatus >= 200 && serverStatus < 400);
       if (looksSuccessful && supaEnabled()) await supaInsertEvent({ username: user.username, country: _country, range_id: rangeId, range_title: String(req.body.rangeTitle||''), qty: quantity });
 
       let total = 0, available = 0;
