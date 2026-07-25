@@ -659,9 +659,14 @@ module.exports = async (req, res) => {
       if (!user) return error(res, 401, 'Unauthorized');
       const country = _countryOfRange(req.body.rangeTitle || req.body.country || '');
       const rangeId = String(req.body.rangeId || '').trim();
+      const role = await getRole(user.username);
       const r = await countDailyAllocByCountry(user.username, user.clientName);
       const countryUsed = r.byCountry[country] || 0;
       const rangeUsed = (r.byRange && r.byRange[rangeId]) || 0;
+      if (isAdminish(role)) {
+        // 🔓 admin / super → no limit; keep the button enabled
+        return ok(res, { country, rangeUsed, rangeLimit: 999, countryUsed, countryLimit: 999, remaining: 999, exempt: true, byCountry: r.byCountry, _src: r._src||'none' });
+      }
       const remaining = supaEnabled() ? Math.max(0, Math.min(RANGE_CAP - rangeUsed, COUNTRY_CAP - countryUsed)) : COUNTRY_CAP;
       return ok(res, { country, rangeUsed, rangeLimit:RANGE_CAP, countryUsed, countryLimit:COUNTRY_CAP, remaining, byCountry:r.byCountry, _src:r._src||'none' });
     }
