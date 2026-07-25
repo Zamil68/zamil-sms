@@ -309,13 +309,16 @@ async function scrapeCDR(dateFrom, dateTo, extra){
     return rows;
   } catch(e){ console.error('scrapeCDR:', e.message); return []; }
 }
-let _cdrCache = { key:'', ts:0, rows:[] };
-const CDR_TTL = 5000; // 5s — one scrape serves all users/calls, protects the panel
-async function getCachedCDR(from, to){
+const _cdrCache = new Map();   // key(from|to) -> { ts, rows }  — multi-window, no thrashing
+const CDR_TTL = 5000;          // 5s  for "today" (inbox / DOR / per-number)
+const CDR_TTL_WIDE = 60000;    // 60s for week/month (heavy, changes slowly)
+async function getCachedCDR(from, to, ttl){
   const key = from + '|' + to;
-  if (_cdrCache.key === key && (Date.now() - _cdrCache.ts) < CDR_TTL) return _cdrCache.rows;
+  const hit = _cdrCache.get(key);
+  if (hit && (Date.now() - hit.ts) < (ttl || CDR_TTL)) return hit.rows;
   const rows = await scrapeCDR(from, to);
-  _cdrCache = { key, ts: Date.now(), rows };
+  _cdrCache.set(key, { ts: Date.now(), rows });
+  if (_cdrCache.size > 12) { const now = Date.now(); for (const [k, v] of _cdrCache) if (now - v.ts > 120000) _cdrCache.delete(k); }
   return rows;
 }
 function isMine(client, user){
@@ -667,7 +670,7 @@ module.exports = async (req, res) => {
         const start = new Date(pkt.getTime() - (days-1)*86400000).toISOString().slice(0,10);
         from = start + ' 00:00:00'; to = end + ' 23:59:59';
       }
-      const rows = await scrapeCDR(from, to);
+     const rows = await getCachedCDR(from, to, range === 'today' ? CDR_TTL : CDR_TTL_WIDE);
       const counts = {};
       rows.forEach(r => { const c = r.client || 'Unknown'; if (c) counts[c] = (counts[c]||0) + 1; });
       const users = Object.entries(counts).sort((a,b) => b[1]-a[1]).slice(0,10).map(([username,count]) => ({ username, count }));
