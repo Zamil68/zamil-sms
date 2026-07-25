@@ -532,8 +532,6 @@ module.exports = async (req, res) => {
       const quantity = parseInt(req.body.quantity) || parseInt(req.body.qty) || 1;
       const payout = parseFloat(req.body.payout) || 0.01;
       const _country = _countryOfRange(req.body.rangeTitle || '');
-      const _cap = await countDailyAllocByCountry(user.username, user.clientName);
-      const _countryUsed = _cap.byCountry[_country] || 0;
       const _country = _countryOfRange(req.body.rangeTitle || '');
       const _cap = await countDailyAllocByCountry(user.username, user.clientName);
       const _countryUsed = _cap.byCountry[_country] || 0;
