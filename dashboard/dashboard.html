@@ -465,62 +465,137 @@
 </script>
 
 <!-- ═══ STATISTICS PAGE (admin-only) ═══ -->
+<!-- ═══ STATISTICS PAGE (admin-only) — countries → ranges → available ═══ -->
 <div id="statsPage" style="display:none;position:fixed;inset:0;z-index:600;background:var(--bg);overflow-y:auto">
-  <div style="max-width:520px;margin:0 auto;padding:14px 14px 40px">
+  <div style="max-width:560px;margin:0 auto;padding:14px 14px 40px">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
       <button onclick="closeStatsPage()" style="width:34px;height:34px;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:1rem">←</button>
-      <div style="flex:1">
-        <div style="font-size:1rem;font-weight:800;letter-spacing:-.01em">📊 Statistics</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:1.05rem;font-weight:800;letter-spacing:-.01em">📊 Statistics</div>
         <div style="font-size:.66rem;color:var(--muted)" id="statsUpdated">Admin overview</div>
       </div>
-      <button onclick="loadStats()" style="font-size:.74rem;font-weight:800;color:var(--text);background:var(--surface);border:1px solid var(--border);padding:9px 12px;border-radius:9px;cursor:pointer">↻</button>
+      <button onclick="copyAvailList()" style="font-size:.72rem;font-weight:800;color:var(--text);background:var(--surface);border:1px solid var(--border);padding:9px 11px;border-radius:9px;cursor:pointer;white-space:nowrap">📋 Copy list</button>
+      <button onclick="loadStats()" style="font-size:.74rem;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;padding:9px 12px;border-radius:9px;cursor:pointer">↻</button>
     </div>
-    <div id="statsGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
-    <div id="statsMostActive" style="margin-top:12px;font-size:.76rem;color:var(--text);background:var(--card);border:1px solid var(--border);border-radius:10px;padding:11px 13px"></div>
+    <div id="statsCards" style="display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-bottom:12px"></div>
+    <div id="statsMostActive" style="font-size:.76rem;color:var(--text);background:var(--card);border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin-bottom:12px"></div>
+    <input id="statsSearch" type="text" placeholder="🔍 Filter country or range…" oninput="filterStats()" style="width:100%;box-sizing:border-box;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font:inherit;font-size:.82rem;outline:none;margin-bottom:10px">
+    <div id="statsCountries"></div>
     <div style="margin-top:10px;font-size:.62rem;color:var(--muted);text-align:center">Admin-only · no user ranking · cached ~60s</div>
   </div>
 </div>
 
     <script>
-/* ═══ STATISTICS (admin-only) — additive; no app.js / api logic touched ═══ */
+/* ═══ ADMIN BADGE (robust + idempotent + logs role) ═══ */
 (function(){
   function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
+  function pill(role){
+    var label = role==='super'?'SUPER ADMIN':(role==='admin'?'ADMIN':''); if(!label) return '';
+    var grad = role==='super'?'linear-gradient(135deg,#f59e0b,#ef4444)':'linear-gradient(135deg,var(--accent),var(--accent2))';
+    return '<span class="role-pill" style="display:inline-block;font-size:.56rem;font-weight:900;letter-spacing:.06em;color:#fff;background:'+grad+';padding:2px 7px;border-radius:20px;margin-left:7px;vertical-align:middle">'+label+'</span>';
+  }
+  function place(role){
+    var html=pill(role); if(!html) return;
+    var pn=document.getElementById('profileName'); if(pn && !pn.parentElement.querySelector('.role-pill')) pn.insertAdjacentHTML('afterend', html);
+    var du=document.getElementById('dropUser');    if(du && !du.querySelector('.role-pill')) du.insertAdjacentHTML('beforeend', html);
+  }
+  ready(function(){
+    var tries=0;
+    var t=setInterval(function(){
+      tries++;
+      try{
+        var s=localStorage.getItem('app_session'); if(!s){ clearInterval(t); return; }
+        fetch('/api/auth/role',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:s})})
+          .then(function(r){return r.json();}).then(function(d){
+            console.log('[Zamil role]', d);
+            if(d&&d.ok&&d.role){ place(d.role); clearInterval(t); } else if(tries>=4) clearInterval(t);
+          }).catch(function(e){ console.log('[Zamil role] err', e); if(tries>=4) clearInterval(t); });
+      }catch(e){ if(tries>=4) clearInterval(t); }
+    }, 700);
+  });
+})();
+</script>
+<script>
+/* ═══ STATISTICS (admin-only) — hierarchical country → range → available ═══ */
+(function(){
+  function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
+  function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  var _statsData=null;
+
   window.openStatsPage  = function(){ var p=document.getElementById('statsPage'); if(p){ p.style.display='block'; window.scrollTo(0,0); loadStats(); } };
   window.closeStatsPage = function(){ var p=document.getElementById('statsPage'); if(p) p.style.display='none'; };
+
   window.loadStats = function(){
-    var box=document.getElementById('statsGrid'); if(!box) return;
-    box.innerHTML='<div style="grid-column:1/-1;text-align:center;color:var(--muted);padding:20px"><div class="spinner" style="width:22px;height:22px;margin:0 auto 8px"></div>Crunching numbers…</div>';
+    var box=document.getElementById('statsCards'); if(box) box.innerHTML='<div style="grid-column:1/-1;text-align:center;color:var(--muted);padding:18px"><div class="spinner" style="width:22px;height:22px;margin:0 auto 8px"></div>Crunching numbers…</div>';
     var s=localStorage.getItem('app_session');
     fetch('/api/stats',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:s})})
       .then(function(r){return r.json();}).then(function(d){
-        if(!d||!d.ok){ box.innerHTML='<div style="grid-column:1/-1;text-align:center;color:var(--red);padding:20px">'+((d&&d.error)||'Could not load statistics')+'</div>'; return; }
-        renderStats(d);
-      }).catch(function(){ box.innerHTML='<div style="grid-column:1/-1;text-align:center;color:var(--red);padding:20px">Connection error</div>'; });
+        if(!d||!d.ok){ if(box) box.innerHTML='<div style="grid-column:1/-1;text-align:center;color:var(--red);padding:18px">'+((d&&d.error)||'Could not load statistics')+'</div>'; return; }
+        _statsData=d; renderStats(d);
+      }).catch(function(){ if(box) box.innerHTML='<div style="grid-column:1/-1;text-align:center;color:var(--red);padding:18px">Connection error</div>'; });
   };
-  function card(v,l,sub){ return '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:13px 14px;text-align:center"><div style="font-size:1.5rem;font-weight:900;color:var(--accent);font-variant-numeric:tabular-nums;line-height:1">'+v+'</div><div style="font-size:.6rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-top:5px">'+l+'</div>'+(sub?'<div style="font-size:.6rem;color:var(--muted);margin-top:2px">'+sub+'</div>':'')+'</div>'; }
+
+  function scard(icon,v,l){ return '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 13px;display:flex;align-items:center;gap:10px"><div style="font-size:1.25rem;line-height:1">'+icon+'</div><div style="min-width:0"><div style="font-size:1.35rem;font-weight:900;color:var(--accent);line-height:1;font-variant-numeric:tabular-nums">'+v+'</div><div style="font-size:.58rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-top:3px">'+l+'</div></div></div>'; }
+
   function renderStats(d){
-    var box=document.getElementById('statsGrid'); if(!box) return;
-    var h='';
-    h+=card(d.totalCountries||0,'Countries');
-    h+=card(d.totalRanges||0,'Ranges');
-    h+=card(d.totalNumbers||0,'Numbers');
-    h+=card(d.allocated||0,'Allocated');
-    h+=card(d.available||0,'Available','left to allocate');
-    h+=card(d.otpToday!=null?d.otpToday:0,'OTPs Today');
-    h+=card(d.otpWeek!=null?d.otpWeek:0,'OTPs · 7 days');
-    h+=card(d.otpMonth!=null?d.otpMonth:0,'OTPs · 30 days');
-    box.innerHTML=h;
-    var mar=document.getElementById('statsMostActive'); if(mar) mar.innerHTML='🔥 Most active range today: <b>'+(d.mostActiveRange||'—')+'</b>'+(d.mostActiveCount?(' · '+d.mostActiveCount+' OTPs'):'');
-    var upd=document.getElementById('statsUpdated'); if(upd) upd.textContent='Updated '+new Date().toLocaleTimeString();
+    var c='';
+    c+=scard('🌍', d.totalCountries||0, 'Countries');
+    c+=scard('📡', d.totalRanges||0, 'Ranges');
+    c+=scard('🔢', d.totalNumbers||0, 'Numbers');
+    c+=scard('✅', d.allocated||0, 'Allocated');
+    c+=scard('🆓', d.available||0, 'Available');
+    c+=scard('📨', d.otpToday!=null?d.otpToday:0, 'OTPs Today');
+    c+=scard('🗓️', d.otpWeek!=null?d.otpWeek:0, 'OTPs · 7 days');
+    c+=scard('📆', d.otpMonth!=null?d.otpMonth:0, 'OTPs · 30 days');
+    document.getElementById('statsCards').innerHTML=c;
+    var ma=document.getElementById('statsMostActive'); if(ma) ma.innerHTML='🔥 Most active range today: <b>'+escH(d.mostActiveRange||'—')+'</b>'+(d.mostActiveCount?(' · '+d.mostActiveCount+' OTPs'):'');
+    var up=document.getElementById('statsUpdated'); if(up) up.textContent='Updated '+new Date().toLocaleTimeString();
+    renderCountries(d.countries||[], '');
   }
+
+  function renderCountries(list, q){
+    var box=document.getElementById('statsCountries'); if(!box) return;
+    q=(q||'').toLowerCase(); var html='';
+    list.forEach(function(co,ci){
+      var ranges = co.ranges.filter(function(r){ return !q || co.country.toLowerCase().includes(q) || r.range.toLowerCase().includes(q); });
+      if (q && !co.country.toLowerCase().includes(q) && ranges.length===0) return;
+      var coAvail = co.ranges.reduce(function(s,r){return s+r.available;},0);
+      html+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:8px;overflow:hidden">';
+      html+='<div onclick="toggleCountry('+ci+')" style="display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer">';
+      html+='<span style="font-size:1.55rem;line-height:1">'+co.flag+'</span>';
+      html+='<div style="flex:1;min-width:0"><div style="font-size:.9rem;font-weight:800;color:var(--text)">'+escH(co.country)+'</div><div style="font-size:.66rem;color:var(--muted)">'+co.ranges.length+' ranges · <b style="color:var(--accent)">'+coAvail+'</b> available</div></div>';
+      html+='<span id="chev'+ci+'" style="color:var(--muted);transition:transform .2s">▾</span></div>';
+      html+='<div id="coBody'+ci+'" style="display:none;border-top:1px solid var(--border);padding:4px 12px 8px">';
+      ranges.forEach(function(r){
+        var pct = r.total? Math.round(r.available/r.total*100):0;
+        html+='<div style="display:flex;align-items:center;gap:9px;padding:8px 2px;border-bottom:1px solid var(--border)">';
+        html+='<div style="flex:1;min-width:0"><div style="font-size:.78rem;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escH(r.range)+'</div>';
+        html+='<div style="height:4px;background:var(--border);border-radius:2px;margin-top:5px;overflow:hidden"><div style="height:4px;width:'+pct+'%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:2px"></div></div></div>';
+        html+='<div style="text-align:right;flex-shrink:0"><div style="font-size:.86rem;font-weight:900;color:'+(r.available>0?'var(--accent)':'var(--muted)')+'">'+r.available+'</div><div style="font-size:.55rem;color:var(--muted)">of '+r.total+'</div></div>';
+        html+='</div>';
+      });
+      html+='</div></div>';
+    });
+    box.innerHTML = html || '<div style="text-align:center;color:var(--muted);padding:24px">No matches</div>';
+  }
+
+  window.toggleCountry=function(ci){ var b=document.getElementById('coBody'+ci), ch=document.getElementById('chev'+ci); if(!b)return; var open=b.style.display==='block'; b.style.display=open?'none':'block'; if(ch)ch.style.transform=open?'':'rotate(180deg)'; };
+  window.filterStats=function(){ var q=(document.getElementById('statsSearch').value||''); if(_statsData) renderCountries(_statsData.countries||[], q); };
+  window.copyAvailList=function(){
+    if(!_statsData||!_statsData.countries){ if(typeof showToast==='function')showToast('Load stats first','error'); return; }
+    var lines=['📋 Available Ranges — Zamil SMS',''];
+    _statsData.countries.forEach(function(co){
+      var av=co.ranges.filter(function(r){return r.available>0;}); if(!av.length) return;
+      lines.push(co.flag+' '+co.country);
+      av.forEach(function(r){ lines.push('   • '+r.range+' — '+r.available+' available'); });
+    });
+    try{ navigator.clipboard&&navigator.clipboard.writeText(lines.join('\n')); if(typeof showToast==='function')showToast('Available list copied ✓','success'); }catch(e){}
+  };
+
   function gateMenu(){
-    try{
-      var s=localStorage.getItem('app_session'); if(!s) return;
+    try{ var s=localStorage.getItem('app_session'); if(!s)return;
       fetch('/api/auth/role',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:s})})
-        .then(function(r){return r.json();}).then(function(d){
-          var btn=document.getElementById('featStatsBtn');
-          if(btn) btn.style.display=(d&&d.ok&&(d.role==='super'||d.role==='admin'))?'flex':'none';
-        }).catch(function(){});
+        .then(function(r){return r.json();}).then(function(d){ var b=document.getElementById('featStatsBtn'); if(b) b.style.display=(d&&d.ok&&(d.role==='super'||d.role==='admin'))?'flex':'none'; }).catch(function(){});
     }catch(e){}
   }
   ready(function(){ gateMenu(); });
