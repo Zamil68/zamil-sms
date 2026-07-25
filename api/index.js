@@ -232,6 +232,25 @@ function resolveUrl(action) {
   if (action[0] === '/') return 'http://51.210.208.26' + action;
   return `${AGENT_BASE_URL}${action}`;
 }
+const DAILY_ALLOC_CAP = 2;
+function _todayPKT(){ return new Date(Date.now()+5*3600000).toISOString().slice(0,10); } // PKT calendar day (panel timestamps are PKT)
+async function countDailyAlloc(username, clientName){
+  try {
+    const d = await scrapeAgentData('res/data_smsbulkallocations.php', {
+      sEcho:1, iColumns:5, iDisplayStart:0, iDisplayLength:500, sSearch:'', bRegex:false, iSortingCols:1
+    });
+    if(!d || !d.aaData) return { used:0 };
+    const today = _todayPKT();
+    const want = [ (username||'').toLowerCase(), (clientName||'').toLowerCase() ].filter(Boolean);
+    let used = 0;
+    d.aaData.forEach(row => {
+      const day = String(row[0]||'').slice(0,10);
+      const who = String(row[1]||'').toLowerCase().trim();
+      if (day === today && want.some(w => who === w || who.includes(w) || w.includes(who))) used++;
+    });
+    return { used };
+  } catch(e){ return { used:0 }; } // a scrape hiccup must NEVER block a user
+}
 
 module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).json({ ...corsHeaders });
@@ -423,6 +442,13 @@ module.exports = async (req, res) => {
       return ok(res, { available, total });
     }
 
+    if (url === '/alloc/daily-used' && req.method === 'POST') {
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      const r = await countDailyAlloc(user.username, user.clientName);
+      return ok(res, { used:r.used, limit:DAILY_ALLOC_CAP, remaining:Math.max(0, DAILY_ALLOC_CAP - r.used) });
+    }
+
     // 8. ALLOCATE (real post + before/after proof)
     if (url === '/alloc/allocate' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
@@ -430,6 +456,11 @@ module.exports = async (req, res) => {
       const rangeId = String(req.body.rangeId || '').trim();
       const quantity = parseInt(req.body.quantity) || parseInt(req.body.qty) || 1;
       const payout = parseFloat(req.body.payout) || 0.01;
+      const _cap = await countDailyAlloc(user.username, user.clientName);
+      if (_cap.used >= DAILY_ALLOC_CAP) {
+        return ok(res, { limitReached:true, used:_cap.used, limit:DAILY_ALLOC_CAP, remaining:0, reason:'DAILY_CAP',
+          message:'Daily limit reached (0/2 left). Need more? Contact admin on WhatsApp.' });
+      }
 
       const form = await getAllocForm();
       const C = form ? form.controls : [];
@@ -519,7 +550,9 @@ module.exports = async (req, res) => {
       return ok(res, {
         reason, _server: serverInfo,
         allocatedReal, beforeAny, afterAny,
-        allocated: quantity, used: afterAny - beforeAny, remaining: available, limit: total,
+        allocated: quantity,
+        used: _cap.used + 1, limit: DAILY_ALLOC_CAP, remaining: Math.max(0, DAILY_ALLOC_CAP - (_cap.used + 1)),
+        _poolRemaining: available, _poolTotal: total,
         message: allocatedReal > 0 ? `Allocated ${allocatedReal} to ${user.clientName}` : (isFakeRange ? 'Range id not mapped to a real LaMix range' : 'Posted but no change detected'),
         _debug: { rangeId, isFakeRange, quantity, payout, paytermValue, clientId: user.clientId, clientName: user.clientName, clientValue,
           fieldMap: { range: fRange, client: fClient, payterm: fPayterm, qty: fQty, payout: fPayout },
