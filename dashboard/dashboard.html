@@ -187,6 +187,17 @@
                     <div id="smsRecentList" style="padding:4px 0"></div>
                 </div>
             </div>
+              <!-- DOR (Detail OTP Report) PAGE -->
+    <div id="dorPage" style="display:none">
+        <div class="section-hdr">
+            <div class="section-title">📊 Detail OTP Report (Global)</div>
+            <button class="btn btn-sm btn-ghost" onclick="loadDOR()">↻ Refresh</button>
+        </div>
+        <div class="sms-big-card">
+            <div style="padding:24px; text-align:center; color:var(--muted);" id="dorLoading">Loading global stats...</div>
+            <div id="dorList" style="display:none; padding: 4px 0;"></div>
+        </div>
+    </div>
 
         </div>
     </div>
@@ -215,18 +226,6 @@
             <span>Top 10</span>
         </button>
     </nav>
-
-    <!-- DOR (Detail OTP Report) PAGE -->
-    <div id="dorPage" style="display:none">
-        <div class="section-hdr">
-            <div class="section-title">📊 Detail OTP Report (Global)</div>
-            <button class="btn btn-sm btn-ghost" onclick="loadDOR()">↻ Refresh</button>
-        </div>
-        <div class="sms-big-card">
-            <div style="padding:24px; text-align:center; color:var(--muted);" id="dorLoading">Loading global stats...</div>
-            <div id="dorList" style="display:none; padding: 4px 0;"></div>
-        </div>
-    </div>
 
     <!-- MODALS -->
     <div id="numSmsModal" onclick="if(event.target===this)closeNumSmsModal()">
