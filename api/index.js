@@ -232,24 +232,36 @@ function resolveUrl(action) {
   if (action[0] === '/') return 'http://51.210.208.26' + action;
   return `${AGENT_BASE_URL}${action}`;
 }
-const DAILY_ALLOC_CAP = 2;
-function _todayPKT(){ return new Date(Date.now()+5*3600000).toISOString().slice(0,10); } // PKT calendar day (panel timestamps are PKT)
-async function countDailyAlloc(username, clientName){
+const DAILY_ALLOC_CAP = 3; // 🔥 per COUNTRY per day
+function _todayPKT(){ return new Date(Date.now()+5*3600000).toISOString().slice(0,10); } // PKT calendar day
+function _countryOfRange(rangeText){
+  const t = String(rangeText||'').trim();
+  if (typeof splitRangeName === 'function') { try { const s = splitRangeName(t); if (s && s.country) return s.country; } catch(e){} }
+  // fallback: leading words before the first "LX/MX/RX/DC" marker or before a digit run
+  const m = t.match(/^(.*?)[\s\-]*(?:LX|MX|RX|DC|LX2|MX2)\b/i) || t.match(/^(.*?)[\s\-]+\d{3,}/);
+  return (m && m[1] ? m[1] : t).trim();
+}
+// returns { byCountry: { 'Zimbabwe': 2, ... }, total: n }
+async function countDailyAllocByCountry(username, clientName){
   try {
     const d = await scrapeAgentData('res/data_smsbulkallocations.php', {
-      sEcho:1, iColumns:5, iDisplayStart:0, iDisplayLength:500, sSearch:'', bRegex:false, iSortingCols:1
+      sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:500, sSearch:'', bRegex:false, iSortingCols:1
     });
-    if(!d || !d.aaData) return { used:0 };
+    if(!d || !d.aaData) return { byCountry:{}, total:0 };
     const today = _todayPKT();
     const want = [ (username||'').toLowerCase(), (clientName||'').toLowerCase() ].filter(Boolean);
-    let used = 0;
+    const byCountry = {}; let total = 0;
     d.aaData.forEach(row => {
       const day = String(row[0]||'').slice(0,10);
       const who = String(row[1]||'').toLowerCase().trim();
-      if (day === today && want.some(w => who === w || who.includes(w) || w.includes(who))) used++;
+      if (day === today && want.some(w => who === w || who.includes(w) || w.includes(who))) {
+        total++;
+        const country = _countryOfRange(row[3] || row[2] || '');
+        byCountry[country] = (byCountry[country]||0) + 1;
+      }
     });
-    return { used };
-  } catch(e){ return { used:0 }; } // a scrape hiccup must NEVER block a user
+    return { byCountry, total };
+  } catch(e){ return { byCountry:{}, total:0 }; } // never block on a scrape hiccup
 }
 
 module.exports = async (req, res) => {
@@ -445,8 +457,58 @@ module.exports = async (req, res) => {
     if (url === '/alloc/daily-used' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
-      const r = await countDailyAlloc(user.username, user.clientName);
-      return ok(res, { used:r.used, limit:DAILY_ALLOC_CAP, remaining:Math.max(0, DAILY_ALLOC_CAP - r.used) });
+      const country = _countryOfRange(req.body.rangeTitle || req.body.country || '');
+      const r = await countDailyAllocByCountry(user.username, user.clientName);
+      const used = r.byCountry[country] || 0;
+      return ok(res, { country, used, limit: DAILY_ALLOC_CAP, remaining: Math.max(0, DAILY_ALLOC_CAP - used), byCountry: r.byCountry });
+    }
+    if (url === '/number-smscount' && req.method === 'POST') {
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      const number = String(req.body.number || '').replace(/[^0-9]/g, '');
+      if (!number) return ok(res, { number, count: 0, recent: [] });
+
+      // 1) Confirm the number belongs to this user (so counts can't be snooped across clients)
+      const nd = await scrapeAgentData('res/data_smsnumbers.php', {
+        frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1
+      });
+      const target1 = (user.clientName||'').toLowerCase().trim(), target2 = (user.username||'').toLowerCase().trim();
+      let owns = false;
+      if (nd && nd.aaData) {
+        owns = parseNumbersData(nd).some(n => {
+          const num = String(n.number||'').replace(/[^0-9]/g,'');
+          const c = (n.client||'').toLowerCase().trim();
+          return (num === number || num.endsWith(number) || number.endsWith(num)) &&
+                 c && (c === target1 || c === target2 || c.includes(target1) || c.includes(target2));
+        });
+      }
+      if (!owns) return ok(res, { number, count: 0, recent: [] });
+
+      // 2) Count today's OTPs for this number from the panel CDR (05:00→05:00 business day)
+      const today = businessDayUTC();
+      let count = 0; const recent = [];
+      try {
+        const cd = await scrapeAgentData('res/data_smscdr.php', {
+          sEcho:1, iColumns:10, iDisplayStart:0, iDisplayLength:500, sSearch:'', bRegex:false, iSortingCols:1
+        });
+        if (cd && cd.aaData) {
+          cd.aaData.forEach(row => {
+            const cells = row.map(c => String(c||'').replace(/<[^>]*>/g,'').trim());
+            const num = cells.find(c => c.replace(/[^0-9]/g,'').endsWith(number)) || '';
+            if (!num) return;
+            const day = (cells.find(c => /^\d{4}-\d{2}-\d{2}/.test(c)) || '').slice(0,10);
+            if (day && day !== today) return;
+            count++;
+            if (recent.length < 8) recent.push({
+              time: (cells.find(c => /^\d{4}-\d{2}-\d{2}/.test(c)) || '').slice(11,19),
+              cli: cells.find(c => /^[A-Za-z]/.test(c) && !/^\d{4}-\d{2}-\d{2}/.test(c)) || '',
+              message: cells.find(c => c.length > 12 && !/^\d{4}-\d{2}-\d{2}/.test(c)) || '',
+              number: num
+            });
+          });
+        }
+      } catch(e){}
+      return ok(res, { number, count, recent });
     }
 
     // 8. ALLOCATE (real post + before/after proof)
@@ -456,10 +518,12 @@ module.exports = async (req, res) => {
       const rangeId = String(req.body.rangeId || '').trim();
       const quantity = parseInt(req.body.quantity) || parseInt(req.body.qty) || 1;
       const payout = parseFloat(req.body.payout) || 0.01;
-      const _cap = await countDailyAlloc(user.username, user.clientName);
-      if (_cap.used >= DAILY_ALLOC_CAP) {
-        return ok(res, { limitReached:true, used:_cap.used, limit:DAILY_ALLOC_CAP, remaining:0, reason:'DAILY_CAP',
-          message:'Daily limit reached (0/2 left). Need more? Contact admin on WhatsApp.' });
+      const _country = _countryOfRange(req.body.rangeTitle || '');
+      const _cap = await countDailyAllocByCountry(user.username, user.clientName);
+      const _countryUsed = _cap.byCountry[_country] || 0;
+      if (_countryUsed >= DAILY_ALLOC_CAP) {
+        return ok(res, { limitReached:true, country:_country, used:_countryUsed, limit:DAILY_ALLOC_CAP, remaining:0, reason:'DAILY_CAP_COUNTRY',
+          message:`Daily limit reached for ${_country} (0/${DAILY_ALLOC_CAP} left). Other countries still available.` });
       }
 
       const form = await getAllocForm();
@@ -550,8 +614,8 @@ module.exports = async (req, res) => {
       return ok(res, {
         reason, _server: serverInfo,
         allocatedReal, beforeAny, afterAny,
-        allocated: quantity,
-        used: _cap.used + 1, limit: DAILY_ALLOC_CAP, remaining: Math.max(0, DAILY_ALLOC_CAP - (_cap.used + 1)),
+        allocated: quantity, country: _country,
+        used: _countryUsed + 1, limit: DAILY_ALLOC_CAP, remaining: Math.max(0, DAILY_ALLOC_CAP - (_countryUsed + 1)),
         _poolRemaining: available, _poolTotal: total,
         message: allocatedReal > 0 ? `Allocated ${allocatedReal} to ${user.clientName}` : (isFakeRange ? 'Range id not mapped to a real LaMix range' : 'Posted but no change detected'),
         _debug: { rangeId, isFakeRange, quantity, payout, paytermValue, clientId: user.clientId, clientName: user.clientName, clientValue,
