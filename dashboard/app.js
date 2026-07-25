@@ -311,8 +311,16 @@ function renderRanges(ranges) {
   var container = document.getElementById('rangesList');
   var countEl = document.getElementById('rangesCount');
   var list = ALL_RANGES || [];
+  list = list.slice().sort(function(a,b){
+    var sa = (typeof splitRangeName==='function') ? splitRangeName(a.title||'') : {country:'',detail:''};
+    var sb = (typeof splitRangeName==='function') ? splitRangeName(b.title||'') : {country:'',detail:''};
+    var ca = (sa.country||'').toLowerCase(), cb = (sb.country||'').toLowerCase();
+    if (ca !== cb) return ca < cb ? -1 : 1;
+    var da = (sa.detail||'').toLowerCase(), db = (sb.detail||'').toLowerCase();
+    return da < db ? -1 : (da > db ? 1 : 0);
+  });
   var q = ((document.getElementById('rangesSearch') || {}).value || '').toLowerCase().trim();
-  if (q && typeof filterRanges === 'function') list = filterRanges(ALL_RANGES, q);
+  if (q && typeof filterRanges === 'function') list = filterRanges(list, q);   // 🔧 changed: filter sorted list
   if (countEl) countEl.textContent = list.length;
   if (!list.length) {
     container.innerHTML = '<div class="empty"><div class="empty-icon">📭</div>No ranges found. Allocate numbers from the Add button.</div>';
