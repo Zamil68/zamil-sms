@@ -738,6 +738,45 @@ if (url === '/stats' && req.method === 'POST') {
       _statsCache = { ts: Date.now(), data: result };
       return ok(res, result);
     }    
+
+  if (url === '/admin/admins' && req.method === 'POST') {
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      if ((await getRole(user.username)) !== 'super') return error(res, 403, 'Super admin only');
+      if (!supaEnabled()) return error(res, 400, 'Supabase not configured');
+      try {
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/user_roles?select=username,role,added_by,created_at&order=created_at.asc`, { headers:{ 'apikey':SUPABASE_KEY, 'Authorization':'Bearer '+SUPABASE_KEY } });
+        const rows = await r.json();
+        return ok(res, { admins: Array.isArray(rows) ? rows : [] });
+      } catch(e){ return error(res, 500, 'Failed to load admins'); }
+    }
+    if (url === '/admin/promote' && req.method === 'POST') {
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      if ((await getRole(user.username)) !== 'super') return error(res, 403, 'Super admin only');
+      const target = String(req.body.username||'').trim().toLowerCase();
+      if (!target) return error(res, 400, 'Username required');
+      if (target === SUPER_ADMIN) return error(res, 400, 'Cannot modify the super admin');
+      if (!supaEnabled()) return error(res, 400, 'Supabase not configured');
+      try {
+        await fetch(`${SUPABASE_URL}/rest/v1/user_roles`, { method:'POST', headers:{ 'apikey':SUPABASE_KEY, 'Authorization':'Bearer '+SUPABASE_KEY, 'Content-Type':'application/json', 'Prefer':'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ username: target, role:'admin', added_by: user.username }) });
+        _roleCache.delete(target);
+        return ok(res, { message: target + ' is now an admin' });
+      } catch(e){ return error(res, 500, 'Failed to promote'); }
+    }
+    if (url === '/admin/demote' && req.method === 'POST') {
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      if ((await getRole(user.username)) !== 'super') return error(res, 403, 'Super admin only');
+      const target = String(req.body.username||'').trim().toLowerCase();
+      if (!target) return error(res, 400, 'Username required');
+      if (!supaEnabled()) return error(res, 400, 'Supabase not configured');
+      try {
+        await fetch(`${SUPABASE_URL}/rest/v1/user_roles?username=eq.${encodeURIComponent(target)}`, { method:'DELETE', headers:{ 'apikey':SUPABASE_KEY, 'Authorization':'Bearer '+SUPABASE_KEY } });
+        _roleCache.delete(target);
+        return ok(res, { message: target + ' removed' });
+      } catch(e){ return error(res, 500, 'Failed to remove'); }
+    }
   
     // 8. ALLOCATE (real post + before/after proof)
     if (url === '/alloc/allocate' && req.method === 'POST') {
