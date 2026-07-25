@@ -3,6 +3,7 @@ const path = require('path');
 const axios = require('axios');
 const cheerio = require('cheerio');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 
 const ALLOWED_ORIGIN = process.env.CORS_ORIGIN || '*';
 const JWT_SECRET = process.env.JWT_SECRET || 'zamil-sms-super-secret-key-2024';
@@ -325,6 +326,62 @@ function isMine(client, user){
   const c = (client||'').toLowerCase().trim();
   const t1 = (user.clientName||'').toLowerCase().trim(), t2 = (user.username||'').toLowerCase().trim();
   return c && (c===t1 || c===t2 || c.includes(t1) || c.includes(t2));
+}
+
+// ═══════════════════════════════════════════════════════════
+// 🔐 PASSWORDS — scrypt hashing (no dependency) + Supabase user_creds
+// ═══════════════════════════════════════════════════════════
+function hashPassword(pw){
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(String(pw), salt, 64).toString('hex');
+  return salt + ':' + hash;
+}
+function verifyPassword(pw, stored){
+  try {
+    if (!stored || typeof stored !== 'string' || !stored.includes(':')) return false;
+    const [salt, hash] = stored.split(':');
+    const test = crypto.scryptSync(String(pw), salt, 64).toString('hex');
+    const a = Buffer.from(hash, 'hex'), b = Buffer.from(test, 'hex');
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  } catch(e){ return false; }
+}
+async function supaGetCreds(username){
+  if (!supaEnabled()) return null;
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/user_creds?username=${encodeURIComponent('eq.'+username)}&select=*`, { headers:{ 'apikey':SUPABASE_KEY, 'Authorization':'Bearer '+SUPABASE_KEY } });
+    const rows = await r.json();
+    return Array.isArray(rows) && rows.length ? rows[0] : null;
+  } catch(e){ console.error('supaGetCreds:', e.message); return null; }
+}
+async function supaUpsertCreds(username, passHash, clientId, clientName, recoveryHash){
+  if (!supaEnabled()) return false;
+  try {
+    const body = { username, pass_hash: passHash, client_id: clientId||null, client_name: clientName||null, updated_at: new Date().toISOString() };
+    if (recoveryHash !== undefined) body.recovery_hash = recoveryHash; // omit → keep existing (merge)
+    await fetch(`${SUPABASE_URL}/rest/v1/user_creds`, { method:'POST', headers:{ 'apikey':SUPABASE_KEY, 'Authorization':'Bearer '+SUPABASE_KEY, 'Content-Type':'application/json', 'Prefer':'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(body) });
+    return true;
+  } catch(e){ console.error('supaUpsertCreds:', e.message); return false; }
+}
+async function lookupLaMixClient(username){
+  const cleanStrip = s => (s || '').replace(/<[^>]*>/g, '').trim();
+  const want = String(username).toLowerCase();
+  await ensureAgentSession();
+  try {
+    const fetchClients = async () => (await axios.get(`${AGENT_BASE_URL}res/data_clients.php`, {
+      params: { sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 1000, sSearch: '' },
+      headers: browserHeaders('http://51.210.208.26/ints/agent/Clients'), timeout: 10000, maxRedirects: 5, validateStatus: () => true
+    })).data;
+    let cd = await fetchClients();
+    if (looksLikeLogin(cd)) { await ensureAgentSession(true); cd = await fetchClients(); }
+    if (cd && Array.isArray(cd.aaData)) {
+      const found = cd.aaData.find(c => cleanStrip(c[1]).toLowerCase() === want || cleanStrip(c[2]).toLowerCase() === want);
+      if (found) {
+        const idMatch = (found[0] || '').match(/value=["'](\d+)["']/);
+        return { clientId: idMatch ? idMatch[1] : '0', clientName: cleanStrip(found[2]) || cleanStrip(found[1]) || username };
+      }
+    }
+  } catch (e) { console.error('lookupLaMixClient:', e.message); }
+  return null;
 }
 
 module.exports = async (req, res) => {
