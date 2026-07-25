@@ -16,6 +16,15 @@
             <img src="/branding/logo-light.png" class="header-logo-svg header-logo-light" alt="Logo">
         </div>
         <div class="header-right">
+            <!-- ⋮ Right-side Tools menu (CLI + future features live here) -->
+            <div style="position:relative">
+                <button class="theme-btn" onclick="toggleFeatMenu(event)" title="More tools" style="font-size:1.05rem">⋮</button>
+                <div id="featMenu" style="display:none;position:absolute;right:0;top:42px;min-width:196px;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.18);padding:6px;z-index:600">
+                    <div style="padding:8px 12px 4px;font-size:.66rem;font-weight:800;color:var(--muted);letter-spacing:.07em;text-transform:uppercase">⚡ More Tools</div>
+                    <button onclick="toggleFeatMenu();typeof showToast==='function'&&showToast('🔍 CLI Search coming soon','info')" style="display:flex;width:100%;align-items:center;gap:8px;padding:9px 12px;border:0;background:none;color:var(--text);font:inherit;font-size:.84rem;font-weight:600;border-radius:8px;cursor:pointer;text-align:left">🔍 CLI Search <span style="margin-left:auto;font-size:.6rem;color:var(--muted)">soon</span></button>
+                    <button onclick="toggleFeatMenu();typeof showToast==='function'&&showToast('📊 Statistics coming soon','info')" style="display:flex;width:100%;align-items:center;gap:8px;padding:9px 12px;border:0;background:none;color:var(--text);font:inherit;font-size:.84rem;font-weight:600;border-radius:8px;cursor:pointer;text-align:left">📊 Statistics <span style="margin-left:auto;font-size:.6rem;color:var(--muted)">soon</span></button>
+                </div>
+            </div>
             <button class="theme-btn" id="themeBtn" onclick="toggleTheme()">☀️</button>
             <div class="profile-wrap">
                 <div class="profile-btn" onclick="toggleDropdown()">
@@ -42,6 +51,16 @@
             <div id="mainScreen" style="display:block">
                 <!-- RANGES PANEL -->
                 <div id="rangesPanel">
+                    <!-- 🔥 Today's OTP hero counter (mirrors the live value — NO extra requests) -->
+                    <div class="otp-hero" id="otpHeroCard">
+                      <div class="otp-hero-ic">📬</div>
+                      <div class="otp-hero-info">
+                        <div class="otp-hero-label">Today's OTPs</div>
+                        <div class="otp-hero-num" id="rangesOtpToday">0</div>
+                        <div class="otp-hero-sub"><span class="live-dot"></span> Live · auto-updating</div>
+                      </div>
+                      <div class="otp-hero-refresh" onclick="if(typeof silentSmsRefresh==='function')silentSmsRefresh(true)" title="Refresh">↻</div>
+                    </div>
                         <div class="section-hdr" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
                         <div class="section-title">📡 Your Ranges <span class="badge" id="rangesCount">0</span></div>
                         <button class="btn btn-sm btn-ghost" onclick="loadRanges(true)" title="Force refresh ranges">↻ Refresh</button>
@@ -324,5 +343,26 @@
             });
         });
     </script>
+    <script>
+/* ═══ Visual-pack behaviour (additive; no app.js / backend changes) ═══ */
+(function(){
+  function syncHero(){
+    var src = document.getElementById('smsBigNum'), dst = document.getElementById('rangesOtpToday');
+    if (src && dst){ var v = (src.textContent||'').trim(); if (v !== '' && v !== dst.textContent) dst.textContent = v; }
+  }
+  try { var src = document.getElementById('smsBigNum');
+    if (src && window.MutationObserver) new MutationObserver(syncHero).observe(src, {childList:true, characterData:true, subtree:true});
+  } catch(e){}
+  setInterval(syncHero, 1500);                 // DOM-only mirror — NO network, NO console spam
+  try { var s = localStorage.getItem('app_session');   // one-time initial fill
+    if (s) fetch('/api/smscount',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:s})})
+      .then(function(r){return r.json();}).then(function(d){ if(d&&d.ok){ var dst=document.getElementById('rangesOtpToday'); if(dst) dst.textContent=(d.count!=null?d.count:0);} }).catch(function(){});
+  } catch(e){}
+
+  window.toggleFeatMenu = function(e){ if(e) e.stopPropagation(); var m=document.getElementById('featMenu'); if(m) m.style.display = (m.style.display==='block') ? 'none' : 'block'; };
+  document.addEventListener('click', function(){ var m=document.getElementById('featMenu'); if(m) m.style.display='none'; });
+  var fm = document.getElementById('featMenu'); if (fm) fm.addEventListener('click', function(e){ e.stopPropagation(); });
+})();
+</script>
 </body>
 </html>
