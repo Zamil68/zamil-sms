@@ -384,6 +384,30 @@ async function lookupLaMixClient(username){
   return null;
 }
 
+// ═══════════════════════════════════════════════════════════
+// 🛡️ ROLES — super (you) + admins; allocation caps waived for them
+// ═══════════════════════════════════════════════════════════
+const SUPER_ADMIN = (process.env.SUPER_ADMIN || 'Muzammil_Aziz').toLowerCase(); // change via env if your login name differs
+const _roleCache = new Map();
+async function getRole(username){
+  const u = String(username||'').toLowerCase().trim();
+  if (!u) return 'none';
+  if (u === SUPER_ADMIN) return 'super';            // you: no DB hit, zero latency
+  const c = _roleCache.get(u); if (c && (Date.now()-c.ts) < 30000) return c.role;
+  let role = 'none';
+  if (supaEnabled()) {
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/user_roles?username=eq.${encodeURIComponent(u)}&select=role`,
+        { headers:{ 'apikey':SUPABASE_KEY, 'Authorization':'Bearer '+SUPABASE_KEY } });
+      const rows = await r.json();
+      if (Array.isArray(rows) && rows[0] && rows[0].role) role = rows[0].role;
+    } catch(e){}
+  }
+  _roleCache.set(u, { ts: Date.now(), role });
+  return role;
+}
+function isAdminish(role){ return role === 'super' || role === 'admin'; }
+
 module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).json({ ...corsHeaders });
   const url = req.url.replace(/^\/api/, '');
@@ -473,6 +497,13 @@ module.exports = async (req, res) => {
       if (!verifyPassword(recovery, creds.recovery_hash)) return error(res, 401, 'Incorrect recovery code.');
       await supaUpsertCreds(username, hashPassword(newPassword), creds.client_id, creds.client_name, creds.recovery_hash);
       return ok(res, { message: 'Password reset. You can now sign in.' });
+    }
+
+    if (url === '/auth/role' && req.method === 'POST') {
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      const role = await getRole(user.username);
+      return ok(res, { role, username: user.username });
     }
 
     // 2. PING
@@ -644,9 +675,12 @@ module.exports = async (req, res) => {
       const payout = parseFloat(req.body.payout) || 0.01;
       const _country = _countryOfRange(req.body.rangeTitle || '');
       const _cap = await countDailyAllocByCountry(user.username, user.clientName);
-      const _countryUsed = _cap.byCountry[_country] || 0;
+     const _countryUsed = _cap.byCountry[_country] || 0;
       const _rangeUsed = (_cap.byRange && _cap.byRange[rangeId]) || 0;
-      if (supaEnabled()) {
+      const _role = await getRole(user.username);
+      if (isAdminish(_role)) {
+        // 🔓 super / admin: caps waived — you can test & add ranges freely
+      } else if (supaEnabled()) {
         if (_rangeUsed >= RANGE_CAP) return ok(res, { limitReached:true, capType:'range', country:_country, used:_rangeUsed, limit:RANGE_CAP, remaining:0, message:`Max ${RANGE_CAP} per range per day reached.` });
         if (_countryUsed >= COUNTRY_CAP) return ok(res, { limitReached:true, capType:'country', country:_country, used:_countryUsed, limit:COUNTRY_CAP, remaining:0, message:`Max ${COUNTRY_CAP} per country per day reached. Other countries still available.` });
       }
