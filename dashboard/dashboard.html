@@ -23,6 +23,7 @@
                     <div style="padding:8px 12px 4px;font-size:.66rem;font-weight:800;color:var(--muted);letter-spacing:.07em;text-transform:uppercase">⚡ More Tools</div>
                     <button onclick="toggleFeatMenu();typeof showToast==='function'&&showToast('🔍 CLI Search coming soon','info')" style="display:flex;width:100%;align-items:center;gap:8px;padding:9px 12px;border:0;background:none;color:var(--text);font:inherit;font-size:.84rem;font-weight:600;border-radius:8px;cursor:pointer;text-align:left">🔍 CLI Search <span style="margin-left:auto;font-size:.6rem;color:var(--muted)">soon</span></button>
                     <button id="featStatsBtn" onclick="toggleFeatMenu();openStatsPage()" style="display:none;width:100%;align-items:center;gap:8px;padding:9px 12px;border:0;background:none;color:var(--text);font:inherit;font-size:.84rem;font-weight:600;border-radius:8px;cursor:pointer;text-align:left">📊 Statistics</button>
+                    <button id="featAdminBtn" onclick="toggleFeatMenu();openAdminPage()" style="display:none;width:100%;align-items:center;gap:8px;padding:9px 12px;border:0;background:none;color:var(--text);font:inherit;font-size:.84rem;font-weight:600;border-radius:8px;cursor:pointer;text-align:left">🛡️ Admin Control</button>
                 </div>
             </div>
             <button class="theme-btn" id="themeBtn" onclick="toggleTheme()">☀️</button>
@@ -601,6 +602,80 @@
   ready(function(){ gateMenu(); });
 })();
 </script>
+<!-- ═══ ADMIN CONTROL PAGE (super-only) ═══ -->
+<div id="adminPage" style="display:none;position:fixed;inset:0;z-index:600;background:var(--bg);overflow-y:auto">
+  <div style="max-width:520px;margin:0 auto;padding:14px 14px 40px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+      <button onclick="closeAdminPage()" style="width:34px;height:34px;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:1rem">←</button>
+      <div style="flex:1"><div style="font-size:1.05rem;font-weight:800">🛡️ Admin Control</div><div style="font-size:.66rem;color:var(--muted)">Appoint & manage admins (stored in Supabase)</div></div>
+    </div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
+      <div style="font-size:.8rem;font-weight:800;margin-bottom:9px">Promote a user to Admin</div>
+      <div style="display:flex;gap:8px">
+        <input id="adminUserInput" type="text" placeholder="LaMix username (e.g. zml_ahsan)" style="flex:1;min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:10px 12px;color:var(--text);font:inherit;font-size:.84rem;outline:none">
+        <button onclick="promoteAdmin()" style="font-size:.8rem;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;border-radius:9px;padding:10px 16px;cursor:pointer;white-space:nowrap">Promote</button>
+      </div>
+      <div id="adminMsg" style="font-size:.74rem;font-weight:700;margin-top:9px;display:none"></div>
+      <div style="font-size:.62rem;color:var(--muted);margin-top:8px;line-height:1.4">Admins get every tool (stats, no allocation limit) <b>except</b> appointing other admins — only you (super) can do that.</div>
+    </div>
+    <div style="font-size:.66rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">Current Admins</div>
+    <div id="adminList"></div>
+  </div>
+</div>
+<script>
+/* ═══ ADMIN CONTROL (super-only) — promote / remove admins ═══ */
+(function(){
+  function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
+  function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;'); }
+  window.openAdminPage  = function(){ var p=document.getElementById('adminPage'); if(p){ p.style.display='block'; window.scrollTo(0,0); loadAdmins(); } };
+  window.closeAdminPage = function(){ var p=document.getElementById('adminPage'); if(p) p.style.display='none'; };
+  function showMsg(t,good){ var m=document.getElementById('adminMsg'); if(!m)return; m.style.display='block'; m.textContent=t; m.style.color=good?'var(--green)':'var(--red)'; }
+
+  window.loadAdmins = function(){
+    var box=document.getElementById('adminList'); if(!box)return;
+    box.innerHTML='<div style="text-align:center;color:var(--muted);padding:16px">Loading…</div>';
+    var s=localStorage.getItem('app_session');
+    fetch('/api/admin/admins',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:s})})
+      .then(function(r){return r.json();}).then(function(d){
+        if(!d||!d.ok){ box.innerHTML='<div style="color:var(--red);padding:12px;text-align:center">'+((d&&d.error)||'Failed')+'</div>'; return; }
+        var admins=d.admins||[];
+        if(!admins.length){ box.innerHTML='<div style="color:var(--muted);padding:14px;text-align:center">No admins yet — promote someone above.</div>'; return; }
+        box.innerHTML=admins.map(function(a){
+          return '<div style="display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin-bottom:7px">'
+            +'<div style="flex:1;min-width:0"><div style="font-size:.86rem;font-weight:800;color:var(--text)">'+escH(a.username)+'</div><div style="font-size:.62rem;color:var(--muted)">'+escH(a.role)+(a.added_by?(' · by '+escH(a.added_by)):'')+'</div></div>'
+            +'<button onclick="demoteAdmin(\''+escH(a.username)+'\')" style="font-size:.7rem;font-weight:800;color:#f87171;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.25);border-radius:8px;padding:6px 11px;cursor:pointer">Remove</button>'
+            +'</div>';
+        }).join('');
+      }).catch(function(){ box.innerHTML='<div style="color:var(--red);padding:12px;text-align:center">Connection error</div>'; });
+  };
+
+  window.promoteAdmin = function(){
+    var inp=document.getElementById('adminUserInput'); var u=(inp.value||'').trim();
+    if(!u){ showMsg('Enter a username', false); return; }
+    var s=localStorage.getItem('app_session');
+    fetch('/api/admin/promote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:s,username:u})})
+      .then(function(r){return r.json();}).then(function(d){ if(d&&d.ok){ showMsg('✅ '+u+' is now an admin', true); inp.value=''; loadAdmins(); } else showMsg((d&&d.error)||'Failed', false); })
+      .catch(function(){ showMsg('Connection error', false); });
+  };
+
+  window.demoteAdmin = function(u){
+    if(!confirm('Remove admin rights from '+u+'?')) return;
+    var s=localStorage.getItem('app_session');
+    fetch('/api/admin/demote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:s,username:u})})
+      .then(function(r){return r.json();}).then(function(d){ if(d&&d.ok){ showMsg('Removed '+u, true); loadAdmins(); } else showMsg((d&&d.error)||'Failed', false); })
+      .catch(function(){ showMsg('Connection error', false); });
+  };
+
+  function gateAdminMenu(){
+    try{ var s=localStorage.getItem('app_session'); if(!s)return;
+      fetch('/api/auth/role',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:s})})
+        .then(function(r){return r.json();}).then(function(d){ var b=document.getElementById('featAdminBtn'); if(b) b.style.display=(d&&d.ok&&d.role==='super')?'flex':'none'; }).catch(function(){});
+    }catch(e){}
+  }
+  ready(function(){ gateAdminMenu(); });
+})();
+</script>
+    
     
 </body>
 </html>
