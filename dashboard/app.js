@@ -16,13 +16,16 @@ function isFeatureLocked(feature){
 
 
 // ═══════════════════════════════════════════════════════════
-//  HYDER SMS — Main Script
+//  ZAMIL SMS — Main Script
 // ═══════════════════════════════════════════════════════════
 
 var ALL_NUMS = [], DISP_NUMS = [], STRIP_N = 0, CC_LEN = 0;
 var ACTIVE_RANGE = { id: "", title: "", count: 0 };
 var NEW_NUMS = new Set();
-var NUM_SMS_CACHE = {};
+function _otpToday(){ return new Date().toISOString().slice(0,10); } // UTC date flips at 05:00 PKT = the reset
+function _otpLoad(){ try { var o = JSON.parse(localStorage.getItem('zamil_otp_cache')||'null'); if (o && o.d === _otpToday() && o.c) return o.c; } catch(e){} return {}; }
+function _otpSave(){ try { localStorage.setItem('zamil_otp_cache', JSON.stringify({ d: _otpToday(), c: NUM_SMS_CACHE })); } catch(e){} }
+var NUM_SMS_CACHE = _otpLoad();
 var NUM_SMS_WATCHING = new Set();
 var NUM_SMS_PREV = {};
 var _smsInterval = null, _rangeInterval = null, _numSmsInterval = null, _numSmsBgInterval = null;
@@ -504,7 +507,7 @@ var mainNum = mainNumEl ? mainNumEl.textContent : "0";
     _PIL_FILTER="all";
     _pilRenderBar(_pilDetect(nums));
     renderNums();
-    NUM_SMS_CACHE={};
+    NUM_SMS_CACHE = _otpLoad();
     if(fromCache){
       var ageMin=Math.round((Date.now()-cached.ts)/60000);
       var ageLbl=ageMin<60?(ageMin+"m ago"):(Math.floor(ageMin/60)+"h "+(ageMin%60)+"m ago");
@@ -1107,7 +1110,7 @@ function fetchSingleNumSmsCount(n){
   if(el){ el.classList.add("loading"); }
   apiCall("/api/number-smscount",{session:SESSION,number:n},function(d){
     if(d&&d.ok){
-      NUM_SMS_CACHE[n]=d.count;
+      NUM_SMS_CACHE[n]=d.count; _otpSave();
       var el2=document.getElementById("sms_"+n);
       if(el2){ el2.textContent=d.count+"/"+SMS_DAILY_LIMIT; el2.className="num-sms-badge"+(d.count>0?" has-sms":""); }
     } else if(el){
@@ -1184,7 +1187,7 @@ function startNumSmsWatch(){
             new Notification("New SMS on "+number,{body:"+"+diff+" message"+(diff>1?"s":"")+(d.recent&&d.recent[0]?" — "+d.recent[0].message.substring(0,60):""),icon:""});
           }
         }
-        NUM_SMS_PREV[number]=d.count;
+       NUM_SMS_PREV[number]=d.count; NUM_SMS_CACHE[number]=d.count; _otpSave();
         var t=document.getElementById("numSmsTitle");
         if(t&&t.textContent===" "+number) renderNumSmsModal(d);
       });
