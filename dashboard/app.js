@@ -1498,7 +1498,14 @@ function selectAllocRange(el){
   document.getElementById("aSelRangeInfo").textContent="📡 "+title+" (ID: "+id+")";
   document.getElementById("aAllocResult").style.display="none";
   ASTATE.payterm="2"; ASTATE.payout="0.01";
-  document.getElementById("aLimitBar").innerHTML="📅 Daily limit: <strong>2 allocations</strong> per range per day";
+  var _ab0 = document.getElementById("aAllocBtn"); if (_ab0) _ab0.disabled = false;
+  document.getElementById("aLimitBar").innerHTML = "📅 Checking today's limit…";
+  apiCall("/alloc/daily-used", { session: SESSION }, function(dd){
+    var rem = (dd && dd.remaining != null) ? dd.remaining : 2;
+    var lim = (dd && dd.limit) || 2;
+    document.getElementById("aLimitBar").innerHTML = "📅 Attempts left today: <strong>" + rem + " / " + lim + "</strong>";
+    var ab = document.getElementById("aAllocBtn"); if (ab) ab.disabled = (rem <= 0);
+  });
   document.getElementById("aAllocCard").style.display="";
   document.getElementById("aAllocCard").scrollIntoView({behavior:"smooth",block:"nearest"});
 }
@@ -1544,18 +1551,14 @@ function doAllocate(){
       res.innerHTML = "❌ No response — please retry"; 
       return; 
     }
-    if(d.limitReached){ 
-      res.className = "alloc-result err"; 
-      res.innerHTML = "⚠️ Daily limit reached! "+d.used+"/"+d.limit+" used today."; 
-      showToast("⚠️ Daily limit reached","error"); 
-      return; 
-    }
+   if(d.limitReached){ res.className="alloc-result err"; res.innerHTML="⚠️ Daily limit reached — 0/"+(d.limit||2)+" left. Need more? <a href='https://wa.me/qr/4M2BZRDAFE6DJ1' target='_blank' style='color:inherit;text-decoration:underline'>WhatsApp admin</a>"; showToast("⚠️ Daily limit reached","error"); var _ab2=document.getElementById("aAllocBtn"); if(_ab2) _ab2.disabled=true; return; }
     if(d.ok){
       var ptLabel = PAYTERM_OPTS[ASTATE.payterm] || ASTATE.payterm;
       res.className = "alloc-result ok";
-      res.innerHTML = "✅ Allocated!<br/>Client: <b>"+escHtml(ASTATE.clientName)+"</b><br/>Range: <b>"+escHtml(ASTATE.selectedRangeTitle)+"</b><br/>Qty: <b>"+qty+"</b> • Payterm: <b>"+escHtml(ptLabel)+"</b><br/><span style=\"font-size:.75rem;opacity:.8\">Daily: "+d.used+"/"+d.limit+" used — "+d.remaining+" remaining</span>";
+      res.innerHTML="✅ Allocated!<br/>Client: <b>"+escHtml(ASTATE.clientName)+"</b><br/>Range: <b>"+escHtml(ASTATE.selectedRangeTitle)+"</b><br/>Qty: <b>"+qty+"</b> • Payterm: <b>"+escHtml(ptLabel)+"</b><br/><span style=\"font-size:.75rem;opacity:.8\">Attempts left today: "+d.remaining+"/"+d.limit+"</span>";
       showToast("✓ Allocated!","success");
-      document.getElementById("aLimitBar").innerHTML = "📅 Daily: <strong>"+d.used+"/"+d.limit+"</strong> — <strong>"+d.remaining+"</strong> remaining";
+      document.getElementById("aLimitBar").innerHTML="📅 Attempts left today: <strong>"+d.remaining+" / "+d.limit+"</strong>";
+      var _ab1 = document.getElementById("aAllocBtn"); if (_ab1) _ab1.disabled = ((d.remaining||0) <= 0);
       
       // Auto-refresh ranges so newly assigned numbers show up immediately
       try{ localStorage.removeItem(CACHE_KEY_RANGES); }catch(e){}
