@@ -1498,14 +1498,15 @@ function selectAllocRange(el){
   document.getElementById("aSelRangeInfo").textContent="📡 "+title+" (ID: "+id+")";
   document.getElementById("aAllocResult").style.display="none";
   ASTATE.payterm="2"; ASTATE.payout="0.01";
-  var _ab0 = document.getElementById("aAllocBtn"); if (_ab0) _ab0.disabled = false;
-  document.getElementById("aLimitBar").innerHTML = "📅 Checking today's limit…";
-  apiCall("/alloc/daily-used", { session: SESSION, rangeTitle: title }, function(dd){
-    var rem = (dd && dd.remaining != null) ? dd.remaining : 2;
-    var lim = (dd && dd.limit) || 2;
-    var _cty = (dd && dd.country) ? dd.country : '';
-    document.getElementById("aLimitBar").innerHTML = "📅 " + (_cty ? escHtml(_cty) + " — " : "") + "Attempts left today: <strong>" + rem + " / " + lim + "</strong>";
-    var ab = document.getElementById("aAllocBtn"); if (ab) ab.disabled = (rem <= 0);
+  var _ab0=document.getElementById("aAllocBtn"); if(_ab0) _ab0.disabled=false;
+  document.getElementById("aLimitBar").innerHTML="📅 Checking today's limits…";
+  apiCall("/api/alloc/daily-used",{session:SESSION,rangeTitle:title,rangeId:id},function(dd){
+    var _cty=(dd&&dd.country)?dd.country:'';
+    var _ru=(dd&&dd.rangeUsed!=null)?dd.rangeUsed:0, _rl=(dd&&dd.rangeLimit)||2;
+    var _cu=(dd&&dd.countryUsed!=null)?dd.countryUsed:0, _cl=(dd&&dd.countryLimit)||3;
+    var _rem=(dd&&dd.remaining!=null)?dd.remaining:Math.min(_rl-_ru,_cl-_cu);
+    document.getElementById("aLimitBar").innerHTML="📅 "+(_cty?escHtml(_cty)+" — ":"")+"Range <strong>"+_ru+"/"+_rl+"</strong> · Country <strong>"+_cu+"/"+_cl+"</strong>";
+    var ab=document.getElementById("aAllocBtn"); if(ab) ab.disabled=(_rem<=0);
   });
   document.getElementById("aAllocCard").style.display="";
   document.getElementById("aAllocCard").scrollIntoView({behavior:"smooth",block:"nearest"});
@@ -1535,14 +1536,7 @@ function doAllocate(){
   res.style.display = "none";
   
   // 🔥 Send dynamic client info to backend
-  apiCall("/api/alloc/allocate", {
-    session: SESSION,
-    rangeId: ASTATE.selectedRangeId,
-    quantity: qty,
-    payout: ASTATE.payout,
-    clientId: ASTATE.clientId,       // Dynamic from login
-    clientName: ASTATE.clientName    // Dynamic from login
-  }, function(d){
+  apiCall("/api/alloc/allocate",{session:SESSION,rangeId:ASTATE.selectedRangeId,rangeTitle:ASTATE.selectedRangeTitle,quantity:qty,payout:ASTATE.payout,payterm:ASTATE.payterm},function(d){
     btn.disabled = false; 
     sp.style.display = "none"; 
     res.style.display = "block";
@@ -2481,3 +2475,31 @@ function purpleDoAllocate(){
     }
   });
 }
+
+// ═══════════════════════════════════════════════════════════
+//  RESOURCE-FRIENDLY: pause polling when hidden + auto-logout after 1h idle
+// ═══════════════════════════════════════════════════════════
+(function(){
+  document.addEventListener('visibilitychange', function(){
+    if (document.hidden) {
+      if (typeof stopSmsAutoRefresh === 'function') stopSmsAutoRefresh();
+      if (window._smsRangeInterval) { clearInterval(window._smsRangeInterval); window._smsRangeInterval = null; }
+      if (window._dorInterval) { clearInterval(window._dorInterval); window._dorInterval = null; }
+    } else if (typeof SESSION !== 'undefined' && SESSION) {
+      if (typeof startSmsAutoRefresh === 'function') startSmsAutoRefresh();
+      if (typeof silentSmsRefresh === 'function') silentSmsRefresh(true);
+    }
+  });
+  var IDLE_MS = 60 * 60 * 1000; // 1 hour
+  var _idleTimer = null;
+  function _armIdle(){
+    if (_idleTimer) clearTimeout(_idleTimer);
+    _idleTimer = setTimeout(function(){
+      try { if (typeof doLogout === 'function') { doLogout(); return; } } catch(e){}
+      try { localStorage.removeItem('app_session'); } catch(e){}
+      location.replace('/login/index.html');
+    }, IDLE_MS);
+  }
+  ['click','keydown','touchstart','scroll'].forEach(function(ev){ document.addEventListener(ev, _armIdle, { passive:true, capture:true }); });
+  _armIdle();
+})();
