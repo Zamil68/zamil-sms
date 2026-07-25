@@ -441,31 +441,6 @@ module.exports = async (req, res) => {
       mine.sort((a,b) => b.datetime.localeCompare(a.datetime));
       return ok(res, { number, count: mine.length, recent: mine.slice(0,8).map(r => ({ time: r.time, cli: r.cli, message: r.message, number: r.number })) });
     }
-      try {
-        const nd = await scrapeAgentData('res/data_smsnumbers.php', { frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
-        const t1 = (user.clientName||'').toLowerCase().trim(), t2 = (user.username||'').toLowerCase().trim();
-        let owns = false;
-        if (nd && nd.aaData) owns = parseNumbersData(nd).some(n => {
-          const num = String(n.number||'').replace(/[^0-9]/g,''); const c = (n.client||'').toLowerCase().trim();
-          return (num===number || num.endsWith(number) || number.endsWith(num)) && c && (c===t1||c===t2||c.includes(t1)||c.includes(t2));
-        });
-        if (!owns) return ok(res, { number, count: 0, recent: [] });
-        const today = _todayPKT(); let count = 0; const recent = [];
-        try {
-          const cd = await scrapeAgentData('res/data_smscdr.php', { sEcho:1, iColumns:10, iDisplayStart:0, iDisplayLength:500, sSearch:'', bRegex:false, iSortingCols:1 });
-          if (cd && cd.aaData) cd.aaData.forEach(row => {
-            const cells = (row||[]).map(c => String(c==null?'':c).replace(/<[^>]*>/g,'').trim());
-            const numCell = cells.find(c => c.replace(/[^0-9]/g,'').endsWith(number)); if (!numCell) return;
-            const dateCell = cells.find(c => /^\d{4}-\d{2}-\d{2}/.test(c)) || '';
-            if (dateCell.slice(0,10) !== today) return;
-            count++;
-            if (recent.length < 8) recent.push({ time: dateCell.slice(11,19), cli: cells.find(c => /^[A-Za-z]/.test(c)) || '', message: cells.find(c => c.length>12 && !/^\d{4}-\d{2}-\d{2}/.test(c)) || '', number: numCell });
-          });
-        } catch(e){}
-        return ok(res, { number, count, recent });
-      } catch (e) { console.error('number-smscount:', e.message); return ok(res, { number, count: 0, recent: [], _debug: e.message }); }
-    }
-    
 
     if (url === '/smscount' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
