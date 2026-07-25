@@ -371,24 +371,34 @@ module.exports = async (req, res) => {
     }
 
     // 5. SMS COUNT
-    if (url === '/smscount' && req.method === 'POST') {
+    if (url === '/number-smscount' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
-      const data = await scrapeAgentData('res/data_smsnumbers.php', { frange: '', fclient: '', totnum: 100000, sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1 });
-      let userNumbers = [];
-      if (data && data.aaData) {
-        const allNumbers = parseNumbersData(data);
-        const target1 = (user.clientName || '').toLowerCase().trim();
-        const target2 = (user.username || '').toLowerCase().trim();
-        userNumbers = allNumbers.filter(n => { const c = (n.client || '').toLowerCase().trim(); return c && (c === target1 || c === target2 || c.includes(target1) || c.includes(target2)); }).map(n => n.number);
-      }
-      const today = new Date().toISOString().split('T')[0];
-      const response = await axios.get(LAMIX_API_URL, { params: { apikey: LAMIX_API_KEY, date_from: `${today} 00:00:00`, date_to: `${today} 23:59:59`, limit: 500 } });
-      let allSms = [];
-      if (Array.isArray(response.data.records)) allSms = response.data.records;
-      else if (Array.isArray(response.data)) allSms = response.data;
-      const userSms = allSms.filter(sms => { const num = String(sms.num || sms.number || '').replace(/[^0-9]/g, ''); return userNumbers.some(un => un.replace(/[^0-9]/g, '') === num); });
-      return ok(res, { count: userSms.length, recent: userSms.map(s => ({ time: s.dt ? s.dt.split(' ')[1] : '', number: s.num || s.number, cli: s.cli || s.sender, message: s.message || s.text })) });
+      const number = String(req.body.number || '').replace(/[^0-9]/g, '');
+      if (!number) return ok(res, { number, count: 0, recent: [] });
+      try {
+        const nd = await scrapeAgentData('res/data_smsnumbers.php', { frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
+        const t1 = (user.clientName||'').toLowerCase().trim(), t2 = (user.username||'').toLowerCase().trim();
+        let owns = false;
+        if (nd && nd.aaData) owns = parseNumbersData(nd).some(n => {
+          const num = String(n.number||'').replace(/[^0-9]/g,''); const c = (n.client||'').toLowerCase().trim();
+          return (num===number || num.endsWith(number) || number.endsWith(num)) && c && (c===t1||c===t2||c.includes(t1)||c.includes(t2));
+        });
+        if (!owns) return ok(res, { number, count: 0, recent: [] });
+        const today = _todayPKT(); let count = 0; const recent = [];
+        try {
+          const cd = await scrapeAgentData('res/data_smscdr.php', { sEcho:1, iColumns:10, iDisplayStart:0, iDisplayLength:500, sSearch:'', bRegex:false, iSortingCols:1 });
+          if (cd && cd.aaData) cd.aaData.forEach(row => {
+            const cells = (row||[]).map(c => String(c==null?'':c).replace(/<[^>]*>/g,'').trim());
+            const numCell = cells.find(c => c.replace(/[^0-9]/g,'').endsWith(number)); if (!numCell) return;
+            const dateCell = cells.find(c => /^\d{4}-\d{2}-\d{2}/.test(c)) || '';
+            if (dateCell.slice(0,10) !== today) return;
+            count++;
+            if (recent.length < 8) recent.push({ time: dateCell.slice(11,19), cli: cells.find(c => /^[A-Za-z]/.test(c)) || '', message: cells.find(c => c.length>12 && !/^\d{4}-\d{2}-\d{2}/.test(c)) || '', number: numCell });
+          });
+        } catch(e){}
+        return ok(res, { number, count, recent });
+      } catch (e) { console.error('number-smscount:', e.message); return ok(res, { number, count: 0, recent: [], _debug: e.message }); }
     }
 
     if (url === '/smscount-range' && req.method === 'POST') {
@@ -458,9 +468,12 @@ module.exports = async (req, res) => {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
       const country = _countryOfRange(req.body.rangeTitle || req.body.country || '');
+      const rangeId = String(req.body.rangeId || '').trim();
       const r = await countDailyAllocByCountry(user.username, user.clientName);
-      const used = r.byCountry[country] || 0;
-      return ok(res, { country, used, limit: DAILY_ALLOC_CAP, remaining: Math.max(0, DAILY_ALLOC_CAP - used), byCountry: r.byCountry });
+      const countryUsed = r.byCountry[country] || 0;
+      const rangeUsed = (r.byRange && r.byRange[rangeId]) || 0;
+      const remaining = supaEnabled() ? Math.max(0, Math.min(RANGE_CAP - rangeUsed, COUNTRY_CAP - countryUsed)) : COUNTRY_CAP;
+      return ok(res, { country, rangeUsed, rangeLimit:RANGE_CAP, countryUsed, countryLimit:COUNTRY_CAP, remaining, byCountry:r.byCountry, _src:r._src||'none' });
     }
     if (url === '/number-smscount' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
@@ -521,9 +534,13 @@ module.exports = async (req, res) => {
       const _country = _countryOfRange(req.body.rangeTitle || '');
       const _cap = await countDailyAllocByCountry(user.username, user.clientName);
       const _countryUsed = _cap.byCountry[_country] || 0;
-      if (_countryUsed >= DAILY_ALLOC_CAP) {
-        return ok(res, { limitReached:true, country:_country, used:_countryUsed, limit:DAILY_ALLOC_CAP, remaining:0, reason:'DAILY_CAP_COUNTRY',
-          message:`Daily limit reached for ${_country} (0/${DAILY_ALLOC_CAP} left). Other countries still available.` });
+      const _country = _countryOfRange(req.body.rangeTitle || '');
+      const _cap = await countDailyAllocByCountry(user.username, user.clientName);
+      const _countryUsed = _cap.byCountry[_country] || 0;
+      const _rangeUsed = (_cap.byRange && _cap.byRange[rangeId]) || 0;
+      if (supaEnabled()) {
+        if (_rangeUsed >= RANGE_CAP) return ok(res, { limitReached:true, capType:'range', country:_country, used:_rangeUsed, limit:RANGE_CAP, remaining:0, message:`Max ${RANGE_CAP} per range per day reached.` });
+        if (_countryUsed >= COUNTRY_CAP) return ok(res, { limitReached:true, capType:'country', country:_country, used:_countryUsed, limit:COUNTRY_CAP, remaining:0, message:`Max ${COUNTRY_CAP} per country per day reached. Other countries still available.` });
       }
 
       const form = await getAllocForm();
@@ -601,6 +618,7 @@ module.exports = async (req, res) => {
       const allocatedReal = Math.max(0, afterAny - beforeAny);
       if (allocatedReal > 0) reason = 'ALLOCATED_OK';
       else if (reason.indexOf('POSTED_') === 0) reason = 'POSTED_NOCHANGE_' + serverStatus;
+      if (looksSuccessful && supaEnabled()) await supaInsertEvent({ username: user.username, country: _country, range_id: rangeId, range_title: String(req.body.rangeTitle||''), qty: quantity });
 
       let total = 0, available = 0;
       try { const d = await scrapeAgentData('res/data_smsnumbers.php', { frange: rangeId, fclient: '', totnum: 100000, sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1 }); if (d && d.aaData) { const ns = parseNumbersData(d); total = ns.length; available = ns.filter(n => isAvailableClient(n.client)).length; } } catch (e) {}
