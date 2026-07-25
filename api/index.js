@@ -392,51 +392,87 @@ module.exports = async (req, res) => {
     // ═══════════════════════════════════════════════════════════
     // 1. LOGIN — dynamic LaMix lookup (username OR name) + fallback + self-healing cookie
     // ═══════════════════════════════════════════════════════════
-    if (url === '/login' && req.method === 'POST') {
+   if (url === '/login' && req.method === 'POST') {
       const rawUsername = (req.body.username || '').trim();
       const password = (req.body.password || '').trim();
       if (!rawUsername || !password) return error(res, 400, 'Username and password required');
-
-      const cleanStrip = s => (s || '').replace(/<[^>]*>/g, '').trim();
       const want = rawUsername.toLowerCase();
+
       const fallback = {
         'muzammil62': { clientId: '0', clientName: 'Agent', panelNum: 1 },
         'zml_ahsan':  { clientId: '169269', clientName: 'ZML_Ahsan', panelNum: 1 },
         'zml_anns':   { clientId: '169270', clientName: 'ZML_Anns', panelNum: 1 }
       };
 
-      let clientsSeen = 0; const sampleUsernames = [];
-      await ensureAgentSession();
-      try {
-        const fetchClients = async () => (await axios.get(`${AGENT_BASE_URL}res/data_clients.php`, {
-          params: { sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 1000, sSearch: '' },
-          headers: browserHeaders('http://51.210.208.26/ints/agent/Clients'),
-          timeout: 10000, maxRedirects: 5, validateStatus: () => true
-        })).data;
-        let cd = await fetchClients();
-        if (looksLikeLogin(cd)) { await ensureAgentSession(true); cd = await fetchClients(); }
-        if (cd && Array.isArray(cd.aaData)) {
-          clientsSeen = cd.aaData.length;
-          cd.aaData.slice(0, 8).forEach(c => sampleUsernames.push(cleanStrip(c[1])));
-          // 🔥 match by username (col 1) OR name (col 2)
-          const found = cd.aaData.find(c => cleanStrip(c[1]).toLowerCase() === want || cleanStrip(c[2]).toLowerCase() === want);
-          if (found) {
-            const idMatch = (found[0] || '').match(/value=["'](\d+)["']/);
-            const clientId = idMatch ? idMatch[1] : '0';
-            const clientName = cleanStrip(found[2]) || cleanStrip(found[1]) || rawUsername;
-            const token = jwt.sign({ username: rawUsername, clientId, clientName, panelNum: 1 }, JWT_SECRET, { expiresIn: '7d' });
-            return ok(res, { session: token, username: rawUsername, clientId, clientName, redirect: '/dashboard/dashboard.html' });
-          }
-        }
-      } catch (e) { console.error('Dynamic client lookup failed:', e.message); }
-
+      // Agent/fallback accounts (always reachable; verify hash only if one exists)
       if (fallback[want]) {
+        if (supaEnabled()) {
+          const creds = await supaGetCreds(rawUsername);
+          if (creds && creds.pass_hash && !verifyPassword(password, creds.pass_hash)) return error(res, 401, 'Incorrect password.');
+        }
         const u = fallback[want];
         const token = jwt.sign({ username: rawUsername, clientId: u.clientId, clientName: u.clientName, panelNum: u.panelNum }, JWT_SECRET, { expiresIn: '7d' });
         return ok(res, { session: token, username: rawUsername, clientId: u.clientId, clientName: u.clientName, redirect: '/dashboard/dashboard.html' });
       }
 
-      return res.status(401).json({ ok: false, error: 'Client not found in LaMix. Check the username.', _debug: { clientsSeen, sampleUsernames, cookiePrefix: AGENT_COOKIE.slice(0, 18) }, ...corsHeaders });
+      if (supaEnabled()) {
+        const creds = await supaGetCreds(rawUsername);
+        if (creds && creds.pass_hash) {
+          if (!verifyPassword(password, creds.pass_hash)) return error(res, 401, 'Incorrect password.');
+          const token = jwt.sign({ username: rawUsername, clientId: creds.client_id||'0', clientName: creds.client_name||rawUsername, panelNum: 1 }, JWT_SECRET, { expiresIn: '7d' });
+          return ok(res, { session: token, username: rawUsername, clientId: creds.client_id||'0', clientName: creds.client_name||rawUsername, redirect: '/dashboard/dashboard.html' });
+        }
+        // First-time: confirm the username exists in LaMix, then ask them to set a password
+        const lamix = await lookupLaMixClient(rawUsername);
+        if (lamix) return ok(res, { firstLogin: true, username: rawUsername, clientId: lamix.clientId, clientName: lamix.clientName });
+        return res.status(401).json({ ok: false, error: 'Client not found in LaMix. Check the username.', ...corsHeaders });
+      }
+
+      // Supabase not configured → legacy LaMix-only (any password)
+      const lamix = await lookupLaMixClient(rawUsername);
+      if (lamix) {
+        const token = jwt.sign({ username: rawUsername, clientId: lamix.clientId, clientName: lamix.clientName, panelNum: 1 }, JWT_SECRET, { expiresIn: '7d' });
+        return ok(res, { session: token, username: rawUsername, clientId: lamix.clientId, clientName: lamix.clientName, redirect: '/dashboard/dashboard.html' });
+      }
+      return res.status(401).json({ ok: false, error: 'Client not found in LaMix. Check the username.', ...corsHeaders });
+    }
+
+    // 🔐 FIRST-LOGIN: set password + recovery code, then sign in
+    if (url === '/auth/set-password' && req.method === 'POST') {
+      const { username, clientId, clientName, password, recovery } = req.body;
+      if (!username || !password || String(password).length < 6) return error(res, 400, 'Password must be at least 6 characters.');
+      if (!supaEnabled()) return error(res, 400, 'Password storage not configured.');
+      const recHash = (recovery && String(recovery).length >= 4) ? hashPassword(recovery) : null;
+      await supaUpsertCreds(username, hashPassword(password), clientId||'0', clientName||username, recHash);
+      const token = jwt.sign({ username, clientId: clientId||'0', clientName: clientName||username, panelNum: 1 }, JWT_SECRET, { expiresIn: '7d' });
+      return ok(res, { session: token, username, clientId: clientId||'0', clientName: clientName||username, redirect: '/dashboard/dashboard.html' });
+    }
+
+    // 🔐 CHANGE PASSWORD (profile)
+    if (url === '/auth/change-password' && req.method === 'POST') {
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      const oldPassword = req.body.oldPassword || '';
+      const newPassword = req.body.newPassword || '';
+      if (!newPassword || String(newPassword).length < 6) return error(res, 400, 'New password must be at least 6 characters.');
+      if (!supaEnabled()) return error(res, 400, 'Password storage not configured.');
+      const creds = await supaGetCreds(user.username);
+      if (!creds || !creds.pass_hash) return error(res, 404, 'No password set yet.');
+      if (!verifyPassword(oldPassword, creds.pass_hash)) return error(res, 401, 'Current password is incorrect.');
+      await supaUpsertCreds(user.username, hashPassword(newPassword), creds.client_id, creds.client_name); // recovery preserved
+      return ok(res, { message: 'Password updated.' });
+    }
+
+    // 🔐 FORGOT PASSWORD (login) — recovery code reset
+    if (url === '/auth/forgot-password' && req.method === 'POST') {
+      const { username, recovery, newPassword } = req.body;
+      if (!username || !recovery || !newPassword || String(newPassword).length < 6) return error(res, 400, 'All fields required (password ≥ 6 chars).');
+      if (!supaEnabled()) return error(res, 400, 'Password storage not configured.');
+      const creds = await supaGetCreds(username);
+      if (!creds || !creds.recovery_hash) return error(res, 401, 'Reset not available — contact admin on WhatsApp.');
+      if (!verifyPassword(recovery, creds.recovery_hash)) return error(res, 401, 'Incorrect recovery code.');
+      await supaUpsertCreds(username, hashPassword(newPassword), creds.client_id, creds.client_name, creds.recovery_hash);
+      return ok(res, { message: 'Password reset. You can now sign in.' });
     }
 
     // 2. PING
