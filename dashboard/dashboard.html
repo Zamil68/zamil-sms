@@ -22,7 +22,7 @@
                 <div id="featMenu" style="display:none;position:absolute;right:0;top:42px;min-width:196px;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.18);padding:6px;z-index:600">
                     <div style="padding:8px 12px 4px;font-size:.66rem;font-weight:800;color:var(--muted);letter-spacing:.07em;text-transform:uppercase">⚡ More Tools</div>
                     <button onclick="toggleFeatMenu();typeof showToast==='function'&&showToast('🔍 CLI Search coming soon','info')" style="display:flex;width:100%;align-items:center;gap:8px;padding:9px 12px;border:0;background:none;color:var(--text);font:inherit;font-size:.84rem;font-weight:600;border-radius:8px;cursor:pointer;text-align:left">🔍 CLI Search <span style="margin-left:auto;font-size:.6rem;color:var(--muted)">soon</span></button>
-                    <button onclick="toggleFeatMenu();typeof showToast==='function'&&showToast('📊 Statistics coming soon','info')" style="display:flex;width:100%;align-items:center;gap:8px;padding:9px 12px;border:0;background:none;color:var(--text);font:inherit;font-size:.84rem;font-weight:600;border-radius:8px;cursor:pointer;text-align:left">📊 Statistics <span style="margin-left:auto;font-size:.6rem;color:var(--muted)">soon</span></button>
+                    <button id="featStatsBtn" onclick="toggleFeatMenu();openStatsPage()" style="display:none;width:100%;align-items:center;gap:8px;padding:9px 12px;border:0;background:none;color:var(--text);font:inherit;font-size:.84rem;font-weight:600;border-radius:8px;cursor:pointer;text-align:left">📊 Statistics</button>
                 </div>
             </div>
             <button class="theme-btn" id="themeBtn" onclick="toggleTheme()">☀️</button>
@@ -461,6 +461,69 @@
       if(v && v!=='ranges' && v!=='numbers' && typeof bnSwitch==='function') bnSwitch(v);
     }catch(e){}
   });
+})();
+</script>
+
+<!-- ═══ STATISTICS PAGE (admin-only) ═══ -->
+<div id="statsPage" style="display:none;position:fixed;inset:0;z-index:600;background:var(--bg);overflow-y:auto">
+  <div style="max-width:520px;margin:0 auto;padding:14px 14px 40px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <button onclick="closeStatsPage()" style="width:34px;height:34px;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:1rem">←</button>
+      <div style="flex:1">
+        <div style="font-size:1rem;font-weight:800;letter-spacing:-.01em">📊 Statistics</div>
+        <div style="font-size:.66rem;color:var(--muted)" id="statsUpdated">Admin overview</div>
+      </div>
+      <button onclick="loadStats()" style="font-size:.74rem;font-weight:800;color:var(--text);background:var(--surface);border:1px solid var(--border);padding:9px 12px;border-radius:9px;cursor:pointer">↻</button>
+    </div>
+    <div id="statsGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
+    <div id="statsMostActive" style="margin-top:12px;font-size:.76rem;color:var(--text);background:var(--card);border:1px solid var(--border);border-radius:10px;padding:11px 13px"></div>
+    <div style="margin-top:10px;font-size:.62rem;color:var(--muted);text-align:center">Admin-only · no user ranking · cached ~60s</div>
+  </div>
+</div>
+
+    <script>
+/* ═══ STATISTICS (admin-only) — additive; no app.js / api logic touched ═══ */
+(function(){
+  function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
+  window.openStatsPage  = function(){ var p=document.getElementById('statsPage'); if(p){ p.style.display='block'; window.scrollTo(0,0); loadStats(); } };
+  window.closeStatsPage = function(){ var p=document.getElementById('statsPage'); if(p) p.style.display='none'; };
+  window.loadStats = function(){
+    var box=document.getElementById('statsGrid'); if(!box) return;
+    box.innerHTML='<div style="grid-column:1/-1;text-align:center;color:var(--muted);padding:20px"><div class="spinner" style="width:22px;height:22px;margin:0 auto 8px"></div>Crunching numbers…</div>';
+    var s=localStorage.getItem('app_session');
+    fetch('/api/stats',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:s})})
+      .then(function(r){return r.json();}).then(function(d){
+        if(!d||!d.ok){ box.innerHTML='<div style="grid-column:1/-1;text-align:center;color:var(--red);padding:20px">'+((d&&d.error)||'Could not load statistics')+'</div>'; return; }
+        renderStats(d);
+      }).catch(function(){ box.innerHTML='<div style="grid-column:1/-1;text-align:center;color:var(--red);padding:20px">Connection error</div>'; });
+  };
+  function card(v,l,sub){ return '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:13px 14px;text-align:center"><div style="font-size:1.5rem;font-weight:900;color:var(--accent);font-variant-numeric:tabular-nums;line-height:1">'+v+'</div><div style="font-size:.6rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-top:5px">'+l+'</div>'+(sub?'<div style="font-size:.6rem;color:var(--muted);margin-top:2px">'+sub+'</div>':'')+'</div>'; }
+  function renderStats(d){
+    var box=document.getElementById('statsGrid'); if(!box) return;
+    var h='';
+    h+=card(d.totalCountries||0,'Countries');
+    h+=card(d.totalRanges||0,'Ranges');
+    h+=card(d.totalNumbers||0,'Numbers');
+    h+=card(d.allocated||0,'Allocated');
+    h+=card(d.available||0,'Available','left to allocate');
+    h+=card(d.otpToday!=null?d.otpToday:0,'OTPs Today');
+    h+=card(d.otpWeek!=null?d.otpWeek:0,'OTPs · 7 days');
+    h+=card(d.otpMonth!=null?d.otpMonth:0,'OTPs · 30 days');
+    box.innerHTML=h;
+    var mar=document.getElementById('statsMostActive'); if(mar) mar.innerHTML='🔥 Most active range today: <b>'+(d.mostActiveRange||'—')+'</b>'+(d.mostActiveCount?(' · '+d.mostActiveCount+' OTPs'):'');
+    var upd=document.getElementById('statsUpdated'); if(upd) upd.textContent='Updated '+new Date().toLocaleTimeString();
+  }
+  function gateMenu(){
+    try{
+      var s=localStorage.getItem('app_session'); if(!s) return;
+      fetch('/api/auth/role',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:s})})
+        .then(function(r){return r.json();}).then(function(d){
+          var btn=document.getElementById('featStatsBtn');
+          if(btn) btn.style.display=(d&&d.ok&&(d.role==='super'||d.role==='admin'))?'flex':'none';
+        }).catch(function(){});
+    }catch(e){}
+  }
+  ready(function(){ gateMenu(); });
 })();
 </script>
     
