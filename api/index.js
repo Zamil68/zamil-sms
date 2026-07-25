@@ -271,22 +271,23 @@ async function countDailyAllocByCountry(username, clientName){
 // ═══════════════════════════════════════════════════════════
 // 🔥 CDR SCRAPER (real OTP/SMS source) + 05:00→05:00 PKT business day + 5s cache
 // ═══════════════════════════════════════════════════════════
+const RESET_HOUR_PKT = 5; // kept for the weekly/monthly snapshot roll (Phase 3); NOT used to hide messages
 function businessDayPKT(){
-  const pkt = new Date(Date.now() + 5*3600000);
-  const hour = pkt.getUTCHours();
-  let base = pkt.toISOString().slice(0,10);
-  if (hour < 5) base = new Date(pkt.getTime() - 86400000).toISOString().slice(0,10);
-  const next = new Date(new Date(base+'T00:00:00Z').getTime() + 86400000).toISOString().slice(0,10);
-  return { from: base + ' 05:00:00', to: next + ' 04:59:59', label: base };
+  const pkt = new Date(Date.now() + 5*3600000);          // "now" expressed in PKT
+  const base = pkt.toISOString().slice(0,10);            // PKT calendar date = what the panel calls "today"
+  return { from: base + ' 00:00:00', to: base + ' 23:59:59', label: base };
 }
+
 async function scrapeCDR(dateFrom, dateTo, extra){
   await ensureAgentSession();
+  const mp = {};
+  for (let i = 0; i < 9; i++){ mp['mDataProp_'+i] = i; mp['sSearch_'+i] = ''; mp['bRegex_'+i] = false; mp['bSearchable_'+i] = true; mp['bSortable_'+i] = (i !== 8); }
   const params = Object.assign({
     fdate1: dateFrom, fdate2: dateTo, frange:'', fclient:'', fnum:'', fcli:'',
     fgdate:'', fgmonth:'', fgrange:'', fgclient:'', fgnumber:'', fgcli:'', fg:0,
-    sEcho:1, iColumns:9, iDisplayStart:0, iDisplayLength:100000,
+    sEcho:1, iColumns:9, sColumns:',,,,,,,,', iDisplayStart:0, iDisplayLength:100000,
     sSearch:'', bRegex:false, iSortCol_0:0, sSortDir_0:'desc', iSortingCols:1
-  }, extra||{});
+  }, mp, extra||{});
   const doReq = async () => (await axios.get(`${AGENT_BASE_URL}res/data_smscdr.php`, { params, headers: browserHeaders('http://51.210.208.26/ints/agent/SMSCDRStats'), timeout: 20000, maxRedirects:5, validateStatus:()=>true })).data;
   try {
     let d = await doReq();
@@ -450,6 +451,20 @@ module.exports = async (req, res) => {
       const mine = rows.filter(r => isMine(r.client, user));
       mine.sort((a,b) => b.datetime.localeCompare(a.datetime));
       return ok(res, { count: mine.length, recent: mine.slice(0,50).map(r => ({ time: r.time, datetime: r.datetime, number: r.number, cli: r.cli, message: r.message, range: r.range })) });
+    }
+    
+    if (url === '/smscount-range' && req.method === 'POST') {
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      const bd = businessDayPKT();
+      const rows = await getCachedCDR(bd.from, bd.to);
+      const mine = rows.filter(r => isMine(r.client, user));
+      const byNumber = {}, byRange = {};
+      mine.forEach(r => {
+        const n = (r.number||'').replace(/[^0-9]/g,''); if (n) byNumber[n] = (byNumber[n]||0) + 1;
+        if (r.range) byRange[r.range] = (byRange[r.range]||0) + 1;
+      });
+      return ok(res, { count: mine.length, byNumber, byRange }); // defensive: whatever the frontend reads, it finds it
     }
 
     if (url === '/dor' && req.method === 'POST') {
@@ -650,7 +665,7 @@ module.exports = async (req, res) => {
         const pkt = new Date(Date.now() + 5*3600000);
         const end = pkt.toISOString().slice(0,10);
         const start = new Date(pkt.getTime() - (days-1)*86400000).toISOString().slice(0,10);
-        from = start + ' 05:00:00'; to = end + ' 23:59:59';
+        from = start + ' 00:00:00'; to = end + ' 23:59:59';
       }
       const rows = await scrapeCDR(from, to);
       const counts = {};
