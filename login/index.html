@@ -133,43 +133,63 @@
 </head>
 <body>
     <div id="loginScreen">
-        <div class="login-card">
+       <div class="login-card">
             <div class="login-brand">
                 <img src="/branding/logo-dark.png" alt="ZAMIL SMS" class="login-logo-svg header-logo-dark">
                 <img src="/branding/logo-light.png" alt="ZAMIL SMS" class="login-logo-svg header-logo-light">
             </div>
             <div class="login-sub">Sign in to your account</div>
-
-            <!-- LaMix Network Badge -->
-            <div class="lamix-badge">
-                <div class="lamix-badge-icon">⚡</div>
-                <span>Connected to LaMix Network</span>
-            </div>
-
+            <div class="lamix-badge"><div class="lamix-badge-icon">⚡</div><span>Connected to LaMix Network</span></div>
             <div id="loginErr" class="err-box"></div>
 
-            <div class="field">
-                <label for="inpUser">Username</label>
-                <input type="text" id="inpUser" autocomplete="username" placeholder="Enter your username">
-            </div>
-
-            <div class="field">
-                <label for="inpPass">Password</label>
-                <div class="pwd-wrap">
-                    <input type="password" id="inpPass" autocomplete="current-password" placeholder="Enter your password">
-                    <button type="button" class="pwd-toggle" onclick="var i=document.getElementById('inpPass');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'':'🙈';">👁</button>
+            <!-- LOGIN FORM -->
+            <div id="loginForm">
+                <div class="field"><label for="inpUser">Username</label>
+                    <input type="text" id="inpUser" autocomplete="username" placeholder="Enter your username"></div>
+                <div class="field"><label for="inpPass">Password</label>
+                    <div class="pwd-wrap">
+                        <input type="password" id="inpPass" autocomplete="current-password" placeholder="Enter your password">
+                        <button type="button" class="pwd-toggle" onclick="var i=document.getElementById('inpPass');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'':'🙈';">👁</button>
+                    </div>
+                    <div id="capsHint" class="caps-hint">⚠ Caps Lock is ON</div>
                 </div>
-                <div id="capsHint" class="caps-hint">⚠ Caps Lock is ON</div>
+                <button id="btnLogin" class="btn btn-primary" onclick="doLogin()">
+                    <span id="loginSpinner" class="spinner" style="display:none"></span>
+                    <span id="loginBtnText">Sign In</span> →
+                </button>
+                <div style="text-align:center;margin-top:12px">
+                    <a href="javascript:void(0)" onclick="showForgot()" style="font-size:.76rem;color:var(--accent);font-weight:600;text-decoration:none">Forgot password?</a>
+                </div>
+                <div class="login-foot">Encrypted · Your data is protected end-to-end</div>
             </div>
 
-            <button id="btnLogin" class="btn btn-primary" onclick="doLogin()">
-                <span id="loginSpinner" class="spinner" style="display:none"></span>
-                <span id="loginBtnText">Sign In</span> →
-            </button>
+            <!-- SET PASSWORD (first login) -->
+            <div id="setPassPanel" style="display:none">
+                <div style="font-size:.85rem;font-weight:700;margin-bottom:4px">🔐 Activate your account</div>
+                <div style="font-size:.76rem;color:var(--muted);margin-bottom:14px">Welcome <b id="spUser"></b>! Set your Zamil SMS password.</div>
+                <div class="field"><label>New Password</label><input type="password" id="spNew" placeholder="Min 6 characters"></div>
+                <div class="field"><label>Confirm Password</label><input type="password" id="spConfirm" placeholder="Repeat password"></div>
+                <div class="field"><label>Recovery Code</label><input type="text" id="spRecovery" placeholder="A secret code to reset your password later"></div>
+                <button class="btn btn-primary" onclick="submitSetPassword()">Activate & Sign In →</button>
+                <div style="text-align:center;margin-top:10px"><a href="javascript:void(0)" onclick="backToLogin()" style="font-size:.74rem;color:var(--muted)">← Back to login</a></div>
+            </div>
 
-            <div class="login-foot">Encrypted · Your data is protected end-to-end</div>
+            <!-- FORGOT PASSWORD -->
+            <div id="forgotPanel" style="display:none">
+                <div style="font-size:.85rem;font-weight:700;margin-bottom:4px">🔑 Reset your password</div>
+                <div style="font-size:.76rem;color:var(--muted);margin-bottom:14px">Enter your username, recovery code, and a new password.</div>
+                <div class="field"><label>Username</label><input type="text" id="fpUser" placeholder="Your username"></div>
+                <div class="field"><label>Recovery Code</label><input type="text" id="fpRecovery" placeholder="The code you set"></div>
+                <div class="field"><label>New Password</label><input type="password" id="fpNew" placeholder="Min 6 characters"></div>
+                <div class="field"><label>Confirm New Password</label><input type="password" id="fpConfirm" placeholder="Repeat password"></div>
+                <button class="btn btn-primary" onclick="submitForgot()">Reset Password →</button>
+                <div style="text-align:center;margin-top:10px">
+                    <a href="javascript:void(0)" onclick="backToLogin()" style="font-size:.74rem;color:var(--muted)">← Back to login</a>
+                    &nbsp;·&nbsp;
+                    <a href="https://wa.me/qr/4M2BZRDAFE6DJ1" target="_blank" style="font-size:.74rem;color:var(--accent);text-decoration:none">Lost code? WhatsApp admin</a>
+                </div>
+            </div>
         </div>
-    </div>
 
     <div id="loadingOverlay" class="loading-overlay">
         <div class="spinner" style="width:32px;height:32px;border-width:3px"></div>
@@ -187,5 +207,63 @@
         document.getElementById('capsHint').classList.toggle('show', isCaps);
     });
 </script>
+
+<script>
+    (function(){
+      var _pending = null;
+      function $(id){ return document.getElementById(id); }
+      function showErr(m){ var e=$('loginErr'); e.textContent=m; e.classList.add('show'); }
+      function hideErr(){ var e=$('loginErr'); e.textContent=''; e.classList.remove('show'); }
+      function busy(on){ var s=$('loginSpinner'), b=$('btnLogin'); if(s)s.style.display=on?'inline-block':'none'; if(b)b.disabled=on; }
+      function go(d, fallbackUser){
+        localStorage.setItem('app_session', d.session);
+        localStorage.setItem('app_username', d.username || fallbackUser);
+        if(d.clientId) localStorage.setItem('app_client_id', String(d.clientId));
+        if(d.clientName) localStorage.setItem('app_client_name', String(d.clientName));
+        location.replace(d.redirect || '/dashboard/dashboard.html');
+      }
+
+      window.doLogin = function(){
+        hideErr();
+        var u=$('inpUser').value.trim(), p=$('inpPass').value;
+        if(!u||!p){ showErr('Enter username and password'); return; }
+        busy(true);
+        fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})})
+          .then(function(r){return r.json();}).then(function(d){
+            busy(false);
+            if(d && d.firstLogin){ _pending={username:d.username,clientId:d.clientId,clientName:d.clientName}; $('spUser').textContent=d.username; $('loginForm').style.display='none'; $('setPassPanel').style.display='block'; return; }
+            if(d && (d.ok||d.success) && d.session){ go(d, u); return; }
+            showErr((d&&d.error)||'Login failed');
+          }).catch(function(){ busy(false); showErr('Connection error. Try again.'); });
+      };
+
+      window.submitSetPassword = function(){
+        hideErr();
+        var p1=$('spNew').value, p2=$('spConfirm').value, rc=$('spRecovery').value.trim();
+        if(!p1||p1.length<6){ showErr('Password must be at least 6 characters'); return; }
+        if(p1!==p2){ showErr('Passwords do not match'); return; }
+        if(!rc||rc.length<4){ showErr('Set a recovery code (min 4 chars)'); return; }
+        busy(true);
+        fetch('/api/auth/set-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:_pending.username,clientId:_pending.clientId,clientName:_pending.clientName,password:p1,recovery:rc})})
+          .then(function(r){return r.json();}).then(function(d){ busy(false); if(d&&d.ok&&d.session){ go(d, _pending.username); } else showErr((d&&d.error)||'Could not set password'); })
+          .catch(function(){ busy(false); showErr('Connection error'); });
+      };
+
+      window.showForgot = function(){ hideErr(); $('loginForm').style.display='none'; $('forgotPanel').style.display='block'; };
+      window.backToLogin = function(){ hideErr(); $('setPassPanel').style.display='none'; $('forgotPanel').style.display='none'; $('loginForm').style.display='block'; };
+      window.submitForgot = function(){
+        hideErr();
+        var u=$('fpUser').value.trim(), rc=$('fpRecovery').value.trim(), p1=$('fpNew').value, p2=$('fpConfirm').value;
+        if(!u||!rc||!p1){ showErr('Fill all fields'); return; }
+        if(p1.length<6){ showErr('Password must be at least 6 characters'); return; }
+        if(p1!==p2){ showErr('Passwords do not match'); return; }
+        busy(true);
+        fetch('/api/auth/forgot-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,recovery:rc,newPassword:p1})})
+          .then(function(r){return r.json();}).then(function(d){ busy(false); if(d&&d.ok){ alert('Password reset! You can now sign in.'); backToLogin(); } else showErr((d&&d.error)||'Reset failed'); })
+          .catch(function(){ busy(false); showErr('Connection error'); });
+      };
+    })();
+    </script>
+        
 </body>
 </html>
