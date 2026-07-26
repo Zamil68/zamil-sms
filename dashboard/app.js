@@ -194,11 +194,11 @@ function splitRangeName(title){
   var detailStart  = words.length;
   for(var i=0;i<words.length;i++){
     var w = words[i];
-    // Stop at: digit-leading token, range marker (LX/MX/RX/d), or paren tag like (K)
-    if(/^\d/.test(w) || /^(LX|MX|RX|d)\b/i.test(w) || /^\(.+\)$/.test(w)){
-      detailStart = i;
-      break;
-    }
+   // Stop at: digit-leading token, range marker (LX/MX/RX/d), or paren tag like (K)
+      if(/^\d/.test(w) || /^(LX|MX|RX|d)\b/i.test(w) || /^\(/.test(w)){
+        detailStart = i;
+        break;
+      }
     countryWords.push(w);
   }
   var country = countryWords.join(" ").trim() || words[0];
