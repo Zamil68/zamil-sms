@@ -22,7 +22,7 @@ const AGENT_BASE_URL = 'http://51.210.208.26/ints/agent/';
 // ═══════════════════════════════════════════════════════════
 // 🔥 SELF-HEALING AGENT SESSION (no more expired-cookie breakage)
 // ═══════════════════════════════════════════════════════════
-let AGENT_COOKIE = 'PHPSESSID=0950059eaead99816b1e27139bf2d227'; // starting point; auto-refreshed
+let AGENT_COOKIE = 'PHPSESSID=bd51a90a169f206256b1d9187d81613e'; // starting point; auto-refreshed
 let _cookieTs = 0;        // when we last got a fresh cookie
 let _lastLoginTry = 0;    // throttle login attempts
 const AGENT_USER = 'muzammil62';
@@ -30,25 +30,32 @@ const AGENT_PASS = 'Zamil6262#$&#$&@';
 const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36';
 
 async function ensureAgentSession(force) {
-  const fresh = (Date.now() - _cookieTs) < 8 * 60 * 1000;
+  const fresh = (Date.now() - _cookieTs) < 20 * 60 * 1000;          // treat cookie as fresh for 20 min
   if (!force && fresh && AGENT_COOKIE) return AGENT_COOKIE;
-  if (!force && (Date.now() - _lastLoginTry) < 60 * 1000) return AGENT_COOKIE; // throttle
+  if (!force && (Date.now() - _lastLoginTry) < 60 * 1000) return AGENT_COOKIE; // throttle retries
   _lastLoginTry = Date.now();
-  const urls = [`${AGENT_BASE_URL}signin`, 'http://51.210.208.26/ints/signin'];
+  const urls = [
+    `${AGENT_BASE_URL}signin`,
+    'http://51.210.208.26/ints/signin',
+    `${AGENT_BASE_URL}login`,
+    'http://51.210.208.26/ints/agent/'
+  ];
   for (const u of urls) {
     try {
       const res = await axios.post(u, new URLSearchParams({ username: AGENT_USER, password: AGENT_PASS }).toString(), {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': UA, 'Referer': 'http://51.210.208.26/ints/agent/' },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': UA, 'Referer': 'http://51.210.208.26/ints/agent/', 'Origin': 'http://51.210.208.26' },
         maxRedirects: 0, validateStatus: () => true, timeout: 10000
       });
       const sc = res.headers['set-cookie'];
+      console.log('[agent-login]', u, 'status=' + res.status, sc ? 'set-cookie:YES' : 'set-cookie:no');
       if (sc) {
         const joined = Array.isArray(sc) ? sc.join('; ') : String(sc);
         const m = joined.match(/PHPSESSID=([^;]+)/);
-        if (m) { AGENT_COOKIE = 'PHPSESSID=' + m[1]; _cookieTs = Date.now(); return AGENT_COOKIE; }
+        if (m) { AGENT_COOKIE = 'PHPSESSID=' + m[1]; _cookieTs = Date.now(); console.log('[agent-login] cookie refreshed OK'); return AGENT_COOKIE; }
       }
-    } catch (e) { /* try next url */ }
+    } catch (e) { console.log('[agent-login] error', u, e.message); }
   }
+  console.log('[agent-login] no endpoint returned a fresh cookie — keeping current');
   return AGENT_COOKIE;
 }
 
