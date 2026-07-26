@@ -698,6 +698,9 @@
     <button class="drw-item" id="drawerAdminBtn" style="display:none" onclick="closeDrawer();openAdminPage()">
       <span>🛡️</span><span>Admin Control</span>
     </button>
+      <button class="drw-item" id="drawerLimitBtn" style="display:none" onclick="closeDrawer();openLimitPage()">
+      <span>🔓</span><span>Limit Increase</span>
+    </button>
   </div>
   <div class="zdrawer-sec" style="border-top:1px solid var(--border)">
     <div class="zdrawer-sec-title">⚙️ Account</div>
@@ -928,6 +931,93 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
   });
 })();
 </script> 
-    
+    <!-- ═══ LIMIT INCREASE PAGE (admin + super) ═══ -->
+<div id="limitPage" style="display:none;position:fixed;inset:0;z-index:600;background:var(--bg);overflow-y:auto">
+  <div style="max-width:520px;margin:0 auto;padding:14px 14px 40px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+      <button onclick="closeLimitPage()" style="width:34px;height:34px;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:1rem">←</button>
+      <div style="flex:1"><div style="font-size:1.05rem;font-weight:800">🆓 Limit Increase</div><div style="font-size:.66rem;color:var(--muted)">Free a try = remove 1 attempt row · max +3/user/day</div></div>
+    </div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px">
+      <div style="font-size:.8rem;font-weight:800;margin-bottom:9px">Search a user</div>
+      <div style="display:flex;gap:8px">
+        <input id="limitUserInput" type="text" placeholder="LaMix username (e.g. zml_ahsan)" style="flex:1;min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:10px 12px;color:var(--text);font:inherit;font-size:.84rem;outline:none">
+        <button onclick="loadLimitStatus()" style="font-size:.8rem;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;border-radius:9px;padding:10px 16px;cursor:pointer;white-space:nowrap">Search</button>
+      </div>
+      <div id="limitMsg" style="font-size:.74rem;font-weight:700;margin-top:9px;display:none"></div>
+    </div>
+    <div id="limitResults"></div>
+  </div>
+</div>
+
+<script>
+/* ═══ LIMIT INCREASE (admin + super) — free a try by deleting 1 alloc_events row ═══ */
+(function(){
+  function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
+  function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;').replace(/"/g,'&quot;'); }
+  var _limitUser='';
+  window.openLimitPage  = function(){ var p=document.getElementById('limitPage'); if(p){ p.style.display='block'; window.scrollTo(0,0); } };
+  window.closeLimitPage = function(){ var p=document.getElementById('limitPage'); if(p) p.style.display='none'; };
+  function msg(t,good){ var m=document.getElementById('limitMsg'); if(!m)return; m.style.display='block'; m.textContent=t; m.style.color=good?'var(--green)':'var(--red)'; }
+
+  window.loadLimitStatus = function(){
+    var u=(document.getElementById('limitUserInput').value||'').trim();
+    if(!u){ msg('Enter a username', false); return; }
+    _limitUser=u;
+    var box=document.getElementById('limitResults'); if(box) box.innerHTML='<div style="text-align:center;color:var(--muted);padding:16px">Loading…</div>';
+    fetch('/api/admin/limit-status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:localStorage.getItem('app_session'),username:u})})
+      .then(function(r){return r.json();}).then(function(d){
+        if(!d||!d.ok){ if(box) box.innerHTML='<div style="color:var(--red);padding:12px;text-align:center">'+((d&&d.error)||'Failed')+'</div>'; return; }
+        renderLimit(d);
+      }).catch(function(){ if(box) box.innerHTML='<div style="color:var(--red);padding:12px;text-align:center">Connection error</div>'; });
+  };
+
+  function freeBtn(rowId){ return '<button onclick="freeTry('+JSON.stringify(rowId)+')" style="font-size:.68rem;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;border-radius:8px;padding:6px 11px;cursor:pointer;white-space:nowrap">+1 try</button>'; }
+
+  function renderLimit(d){
+    var box=document.getElementById('limitResults'); if(!box) return;
+    var ranges=d.ranges||[], countries=d.countries||[];
+    if(!ranges.length && !countries.length){ box.innerHTML='<div style="color:var(--muted);padding:16px;text-align:center">✅ '+escH(d.username)+' has no range/country at its limit right now — nothing to free.</div>'; return; }
+    var h='';
+    if(ranges.length){
+      h+='<div style="font-size:.64rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin:4px 0 8px">Ranges at limit ('+ranges.length+')</div>';
+      ranges.forEach(function(r){
+        h+='<div style="display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin-bottom:7px">'
+          +'<div style="flex:1;min-width:0"><div style="font-size:.84rem;font-weight:800;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escH(r.rangeTitle)+'</div>'
+          +'<div style="font-size:.62rem;color:var(--muted)">'+escH(r.country)+' · <b style="color:var(--red)">'+r.used+'/'+r.limit+'</b> used</div></div>'
+          +freeBtn(r.ids[r.ids.length-1])+'</div>';
+      });
+    }
+    if(countries.length){
+      h+='<div style="font-size:.64rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin:12px 0 8px">Countries at limit ('+countries.length+')</div>';
+      countries.forEach(function(c){
+        h+='<div style="display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin-bottom:7px">'
+          +'<div style="flex:1;min-width:0"><div style="font-size:.84rem;font-weight:800;color:var(--text)">'+escH(c.country)+'</div>'
+          +'<div style="font-size:.62rem;color:var(--muted)"><b style="color:var(--red)">'+c.used+'/'+c.limit+'</b> used today</div></div>'
+          +freeBtn(c.ids[c.ids.length-1])+'</div>';
+      });
+    }
+    box.innerHTML=h;
+  }
+
+  window.freeTry = function(rowId){
+    if(!confirm('Free 1 try for '+_limitUser+'?\n\nThis removes 1 attempt row so they get one more allocation.')) return;
+    fetch('/api/admin/free-try',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:localStorage.getItem('app_session'),username:_limitUser,rowId:rowId})})
+      .then(function(r){return r.json();}).then(function(d){
+        if(d&&d.ok){ msg('✅ Freed 1 try for '+_limitUser, true); loadLimitStatus(); }
+        else msg((d&&d.error)||'Failed', false);
+      }).catch(function(){ msg('Connection error', false); });
+  };
+
+  // show the drawer item for admins + super
+  function gate(){
+    try{ var s=localStorage.getItem('app_session'); if(!s)return;
+      fetch('/api/auth/role',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:s})})
+        .then(function(r){return r.json();}).then(function(d){ var b=document.getElementById('drawerLimitBtn'); if(b) b.style.display=(d&&d.ok&&(d.role==='super'||d.role==='admin'))?'flex':'none'; }).catch(function(){});
+    }catch(e){}
+  }
+  ready(gate);
+})();
+</script>
 </body>
 </html>
