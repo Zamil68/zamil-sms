@@ -10,37 +10,23 @@
     <link rel="stylesheet" href="dashboard.css">
 </head>
 <body>
-    <header class="header">
-        <div class="logo">
-            <img src="/branding/logo-dark.png" class="header-logo-svg header-logo-dark" alt="Logo">
-            <img src="/branding/logo-light.png" class="header-logo-svg header-logo-light" alt="Logo">
+<header class="header">
+        <div class="header-left">
+            <button class="hamburger" onclick="openDrawer()" aria-label="Menu">
+                <span></span><span></span><span></span>
+            </button>
+            <div class="logo">
+                <img src="/branding/logo-dark.png" class="header-logo-svg header-logo-dark" alt="Logo">
+                <img src="/branding/logo-light.png" class="header-logo-svg header-logo-light" alt="Logo">
+            </div>
         </div>
         <div class="header-right">
-            <!-- ⋮ Right-side Tools menu (CLI + future features live here) -->
-            <div style="position:relative">
-                <button class="theme-btn" onclick="toggleFeatMenu(event)" title="More tools" style="font-size:1.05rem">⋮</button>
-                <div id="featMenu" style="display:none;position:absolute;right:0;top:42px;min-width:196px;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.18);padding:6px;z-index:600">
-                    <div style="padding:8px 12px 4px;font-size:.66rem;font-weight:800;color:var(--muted);letter-spacing:.07em;text-transform:uppercase">⚡ More Tools</div>
-                    <button onclick="toggleFeatMenu();typeof showToast==='function'&&showToast('🔍 CLI Search coming soon','info')" style="display:flex;width:100%;align-items:center;gap:8px;padding:9px 12px;border:0;background:none;color:var(--text);font:inherit;font-size:.84rem;font-weight:600;border-radius:8px;cursor:pointer;text-align:left">🔍 CLI Search <span style="margin-left:auto;font-size:.6rem;color:var(--muted)">soon</span></button>
-                    <button id="featStatsBtn" onclick="toggleFeatMenu();openStatsPage()" style="display:none;width:100%;align-items:center;gap:8px;padding:9px 12px;border:0;background:none;color:var(--text);font:inherit;font-size:.84rem;font-weight:600;border-radius:8px;cursor:pointer;text-align:left">📊 Statistics</button>
-                    <button id="featAdminBtn" onclick="toggleFeatMenu();openAdminPage()" style="display:none;width:100%;align-items:center;gap:8px;padding:9px 12px;border:0;background:none;color:var(--text);font:inherit;font-size:.84rem;font-weight:600;border-radius:8px;cursor:pointer;text-align:left">🛡️ Admin Control</button>
-                </div>
-            </div>
-            <button class="theme-btn" id="themeBtn" onclick="toggleTheme()">☀️</button>
             <div class="profile-wrap">
-                <div class="profile-btn" onclick="toggleDropdown()">
+                <div class="profile-btn" onclick="openDrawer()">
                     <div class="profile-avatar" id="profileAvatar">US</div>
-                    <span class="profile-name" id="profileName">User</span>
-                </div>
-                <div class="dropdown" id="profileDropdown">
-                    <div class="dropdown-item">
-                        <span>👤</span> <span id="dropUser">User</span>
-                        <span class="provider-chip" id="dropProviderChip">LaMix</span>
+                    <div class="profile-text">
+                        <span class="profile-name" id="profileName">User</span>
                     </div>
-                    <div class="dropdown-divider"></div>
-                    <div class="dropdown-item" onclick="openChangePasswordModal()">🔑 Change Password</div>
-                    <div class="dropdown-divider"></div>
-                    <div class="dropdown-item danger" onclick="doLogout()">🚪 Sign Out</div>
                 </div>
             </div>
         </div>
@@ -74,7 +60,7 @@
                 </div>
 
                 <!-- NUMBERS PANEL -->
-                <div id="numbersPanel">
+              <div id="numbersPanel">
                     <!-- ✅ Prominent Back Button -->
                     <button class="panel-back" onclick="showRanges()" style="margin-bottom:12px; font-size:0.95rem; font-weight:700; padding:8px 0;">
                         ← Back to Ranges
@@ -208,17 +194,17 @@
                 </div>
             </div>
               <!-- DOR (Detail OTP Report) PAGE -->
-    <div id="dorPage" style="display:none">
-        <div class="section-hdr">
-            <div class="section-title">📊 Detail OTP Report (Global)</div>
-            <button class="btn btn-sm btn-ghost" onclick="loadDOR()">↻ Refresh</button>
-        </div>
-        <div class="sms-big-card">
-            <div style="padding:24px; text-align:center; color:var(--muted);" id="dorLoading">Loading global stats...</div>
-            <div id="dorList" style="display:none; padding: 4px 0;"></div>
-        </div>
-    </div>
-
+            <div id="dorPage" style="display:none">
+                <div class="dor-hdr">
+                    <div class="dor-title">📊 OTP Report</div>
+                    <div class="dor-sub">Global · today</div>
+                    <button class="btn btn-sm btn-ghost" onclick="loadDOR()">↻ Refresh</button>
+                </div>
+                <div class="dor-card">
+                    <div id="dorLoading" style="padding:18px;text-align:center;color:var(--muted);font-size:.8rem">Loading…</div>
+                    <div id="dorList" style="display:none;padding:2px 0"></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -487,18 +473,21 @@
 </div>
 
     <script>
-/* ═══ ADMIN BADGE (robust + idempotent + logs role) ═══ */
+/* ═══ ROLE: header pill + drawer identity + drawer tool gating (single fetch) ═══ */
 (function(){
   function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
-  function pill(role){
+  function pillHtml(role,big){
     var label = role==='super'?'SUPER ADMIN':(role==='admin'?'ADMIN':''); if(!label) return '';
     var grad = role==='super'?'linear-gradient(135deg,#f59e0b,#ef4444)':'linear-gradient(135deg,var(--accent),var(--accent2))';
-    return '<span class="role-pill" style="display:inline-block;font-size:.56rem;font-weight:900;letter-spacing:.06em;color:#fff;background:'+grad+';padding:2px 7px;border-radius:20px;margin-left:7px;vertical-align:middle">'+label+'</span>';
+    return '<span class="role-pill" style="display:inline-block;font-size:'+(big?'.62rem':'.56rem')+';font-weight:900;letter-spacing:.06em;color:#fff;background:'+grad+';padding:2px 8px;border-radius:20px;white-space:nowrap">'+label+'</span>';
   }
-  function place(role){
-    var html=pill(role); if(!html) return;
-    var pn=document.getElementById('profileName'); if(pn && !pn.parentElement.querySelector('.role-pill')) pn.insertAdjacentHTML('afterend', html);
-    var du=document.getElementById('dropUser');    if(du && !du.querySelector('.role-pill')) du.insertAdjacentHTML('beforeend', html);
+  function apply(role){
+    var pn=document.getElementById('profileName');
+    if(pn){ var old=pn.parentElement.querySelector('.role-pill'); if(old) old.remove(); if(role!=='none') pn.insertAdjacentHTML('afterend', pillHtml(role,false)); }
+    var du=document.getElementById('drawerUsername'); if(du && typeof USERNAME!=='undefined' && USERNAME) du.textContent=USERNAME;
+    var drp=document.getElementById('drawerRolePill'); if(drp) drp.innerHTML=(role!=='none')?pillHtml(role,true):'';
+    var sb=document.getElementById('drawerStatsBtn'); if(sb) sb.style.display=(role==='super'||role==='admin')?'flex':'none';
+    var ab=document.getElementById('drawerAdminBtn'); if(ab) ab.style.display=(role==='super')?'flex':'none';
   }
   ready(function(){
     var tries=0;
@@ -508,11 +497,10 @@
         var s=localStorage.getItem('app_session'); if(!s){ clearInterval(t); return; }
         fetch('/api/auth/role',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:s})})
           .then(function(r){return r.json();}).then(function(d){
-            console.log('[Zamil role]', d);
-            if(d&&d.ok&&d.role){ place(d.role); clearInterval(t); } else if(tries>=4) clearInterval(t);
-          }).catch(function(e){ console.log('[Zamil role] err', e); if(tries>=4) clearInterval(t); });
+            if(d&&d.ok&&d.role){ apply(d.role); clearInterval(t); } else if(tries>=4){ apply('none'); clearInterval(t); }
+          }).catch(function(){ if(tries>=4){ apply('none'); clearInterval(t); } });
       }catch(e){ if(tries>=4) clearInterval(t); }
-    }, 700);
+    },700);
   });
 })();
 </script>
@@ -675,7 +663,105 @@
   ready(function(){ gateAdminMenu(); });
 })();
 </script>
-    
+
+    <!-- ═══ LEFT DRAWER (nav) ═══ -->
+<div class="zdrawer-overlay" id="zdrawerOverlay" onclick="closeDrawer()"></div>
+<aside class="zdrawer" id="zdrawer" aria-hidden="true">
+  <div class="zdrawer-hdr">
+    <img src="/branding/logo-dark.png" class="header-logo-dark" alt="Zamil SMS" style="height:26px;width:auto">
+    <img src="/branding/logo-light.png" class="header-logo-light" alt="Zamil SMS" style="height:26px;width:auto">
+    <button class="zdrawer-close" onclick="closeDrawer()" aria-label="Close">✕</button>
+  </div>
+  <div class="zdrawer-user">
+    <div class="zdrawer-user-label">Logged in as</div>
+    <div class="zdrawer-user-name" id="drawerUsername">User</div>
+    <div id="drawerRolePill" style="margin-top:6px"></div>
+  </div>
+  <div class="zdrawer-sec">
+    <div class="zdrawer-sec-title">⚡ Tools</div>
+    <button class="drw-item" onclick="closeDrawer();typeof showToast==='function'&&showToast('🔍 CLI Search coming soon','info')">
+      <span>🔍</span><span>CLI Search</span><span class="drw-soon">soon</span>
+    </button>
+    <button class="drw-item" id="drawerStatsBtn" style="display:none" onclick="closeDrawer();openStatsPage()">
+      <span>📊</span><span>Statistics</span>
+    </button>
+    <button class="drw-item" id="drawerAdminBtn" style="display:none" onclick="closeDrawer();openAdminPage()">
+      <span>🛡️</span><span>Admin Control</span>
+    </button>
+  </div>
+  <div class="zdrawer-sec" style="border-top:1px solid var(--border)">
+    <div class="zdrawer-sec-title">⚙️ Account</div>
+    <button class="drw-item" onclick="toggleTheme();syncDrawerTheme()">
+      <span id="drawerThemeIcon">☀️</span><span>Theme</span>
+    </button>
+    <button class="drw-item" onclick="closeDrawer();openChangePasswordModal()">
+      <span>🔑</span><span>Change Password</span>
+    </button>
+    <button class="drw-item danger" onclick="closeDrawer();doLogout()">
+      <span>🚪</span><span>Sign Out</span>
+    </button>
+  </div>
+  <!-- hidden target so app.js theme code never errors after we removed the header theme button -->
+  <span id="themeBtn" aria-hidden="true" style="display:none"></span>
+</aside>
+
+<script>
+/* ═══ Drawer open/close + theme icon sync ═══ */
+function openDrawer(){ var d=document.getElementById('zdrawer'),o=document.getElementById('zdrawerOverlay'); if(d)d.classList.add('open'); if(o)o.classList.add('open'); syncDrawerTheme(); }
+function closeDrawer(){ var d=document.getElementById('zdrawer'),o=document.getElementById('zdrawerOverlay'); if(d)d.classList.remove('open'); if(o)o.classList.remove('open'); }
+function syncDrawerTheme(){ var ic=document.getElementById('drawerThemeIcon'); if(ic){ var t=(typeof THEME!=='undefined')?THEME:(document.documentElement.getAttribute('data-theme')||'light'); ic.textContent=(t==='dark'?'🌙':'️'); } }
+document.addEventListener('DOMContentLoaded', syncDrawerTheme);
+</script>
+
+<style>
+/* ═══ UI COMPACT PACK + LEFT DRAWER (additive only) ═══ */
+.header-left{display:flex;align-items:center;min-width:0}
+.hamburger{display:flex;flex-direction:column;justify-content:center;gap:4px;width:34px;height:34px;padding:7px 6px;border:1px solid var(--border);border-radius:8px;background:var(--surface);cursor:pointer;flex-shrink:0;margin-right:8px}
+.hamburger span{display:block;width:100%;height:2px;background:var(--text);border-radius:2px}
+.hamburger span:nth-child(2){width:65%}
+.header-right .profile-text{display:flex;flex-direction:column;align-items:flex-end;gap:2px;min-width:0}
+.header-right .profile-wrap .profile-name,.header-right .profile-name{max-width:132px;font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.header-right .profile-text .role-pill{margin-left:0}
+.zdrawer-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:800;backdrop-filter:blur(2px)}
+.zdrawer-overlay.open{display:block}
+.zdrawer{position:fixed;top:0;left:0;height:100%;width:280px;max-width:84vw;background:var(--card);border-right:1px solid var(--border);z-index:801;transform:translateX(-100%);transition:transform .25s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column;overflow-y:auto}
+.zdrawer.open{transform:translateX(0)}
+.zdrawer-hdr{padding:15px 16px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.zdrawer-hdr .zdrawer-close{margin-left:auto;width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;font-size:.85rem}
+[data-theme="dark"] .zdrawer-hdr .header-logo-light{display:none}
+[data-theme="dark"] .zdrawer-hdr .header-logo-dark{display:block}
+[data-theme="light"] .zdrawer-hdr .header-logo-dark{display:none}
+[data-theme="light"] .zdrawer-hdr .header-logo-light{display:block}
+.zdrawer-user{padding:14px 16px;border-bottom:1px solid var(--border)}
+.zdrawer-user-label{font-size:.6rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.zdrawer-user-name{font-size:.98rem;font-weight:800;color:var(--text);word-break:break-all;line-height:1.2}
+.zdrawer-sec{padding:6px 0}
+.zdrawer-sec-title{padding:9px 16px 4px;font-size:.56rem;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.drw-item{display:flex;align-items:center;gap:11px;width:100%;padding:11px 16px;border:0;background:none;cursor:pointer;font-family:inherit;font-size:.86rem;font-weight:600;color:var(--text);text-align:left;-webkit-tap-highlight-color:transparent}
+.drw-item:active{background:var(--surface)}
+.drw-item.danger{color:#f87171}
+.drw-item>span:first-child{width:22px;text-align:center;font-size:1rem;flex-shrink:0}
+.drw-soon{margin-left:auto;font-size:.58rem;color:var(--muted);font-weight:700}
+.num-top-row{display:flex;align-items:center;gap:8px;padding:8px 0 10px}
+.num-top-row .panel-back{margin:0;padding:6px 11px;font-size:.8rem;font-weight:700;flex-shrink:0}
+.num-top-title{flex:1;min-width:0;font-weight:800;font-size:.92rem;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.num-top-row #btnRefreshNums{flex-shrink:0;white-space:nowrap}
+.dor-hdr{display:flex;align-items:center;gap:8px;padding:8px 0 10px}
+.dor-title{font-size:.98rem;font-weight:800;letter-spacing:-.01em}
+.dor-sub{font-size:.64rem;color:var(--muted);font-weight:600}
+.dor-hdr .btn{margin-left:auto;flex-shrink:0}
+.dor-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+#addNumPage .an-header{padding:6px 2px 8px}
+#addNumPage .an-title{font-size:1.05rem}
+#addNumPage .an-subtitle{font-size:.74rem;margin-top:2px}
+#addNumPage .alloc-card{padding:12px 13px;margin-bottom:10px;border-radius:12px}
+#addNumPage .alloc-card-title{font-size:.72rem;margin-bottom:9px}
+#addNumPage .alloc-client-info{font-size:.8rem}
+#addNumPage .alloc-input{padding:10px 12px;font-size:.85rem;border-radius:9px}
+#addNumPage .alloc-search-row{gap:8px}
+#addNumPage .alloc-search-row .btn{padding:10px 14px;font-size:.82rem;white-space:nowrap}
+#addNumPage .alloc-field label{font-size:.66rem}
+</style>
     
 </body>
 </html>
