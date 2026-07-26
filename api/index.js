@@ -769,6 +769,61 @@ if (url === '/stats' && req.method === 'POST') {
         return ok(res, { message: target + ' removed' });
       } catch(e){ return error(res, 500, 'Failed to remove'); }
     }
+    // 🆓 ADMIN: show a user's at-limit ranges/countries (only those that hit a cap)
+    if (url === '/admin/limit-status' && req.method === 'POST') {
+      const caller = getUserFromSession(req.body.session);
+      if (!caller) return error(res, 401, 'Unauthorized');
+      if (!isAdminish(await getRole(caller.username))) return error(res, 403, 'Admins only');
+      const target = String(req.body.username || '').trim();
+      if (!target) return error(res, 400, 'Username required');
+      if (!supaEnabled()) return error(res, 400, 'Supabase not configured');
+      try {
+        const start = encodeURIComponent('gte.' + _todayStartUTC());
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/alloc_events?username=${encodeURIComponent('eq.' + target)}&created_at=${start}&select=id,country,range_id,range_title,created_at&order=created_at.asc`,
+          { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+        const rows = await r.json();
+        if (!Array.isArray(rows)) return ok(res, { username: target, ranges: [], countries: [] });
+        const byRange = {}, byCountry = {};
+        rows.forEach(x => {
+          const rk = x.range_id || x.range_title || 'Unknown';
+          if (!byRange[rk]) byRange[rk] = { rangeId: x.range_id || '', rangeTitle: x.range_title || rk, country: x.country || '', count: 0, ids: [] };
+          byRange[rk].count++; byRange[rk].ids.push(x.id);
+          const ck = x.country || 'Unknown';
+          if (!byCountry[ck]) byCountry[ck] = { country: ck, count: 0, ids: [] };
+          byCountry[ck].count++; byCountry[ck].ids.push(x.id);
+        });
+        const ranges = Object.values(byRange).filter(o => o.count >= RANGE_CAP).map(o => ({ rangeId: o.rangeId, rangeTitle: o.rangeTitle, country: o.country, used: o.count, limit: RANGE_CAP, ids: o.ids }));
+        const countries = Object.values(byCountry).filter(o => o.count >= COUNTRY_CAP).map(o => ({ country: o.country, used: o.count, limit: COUNTRY_CAP, ids: o.ids }));
+        return ok(res, { username: target, ranges, countries });
+      } catch (e) { return error(res, 500, 'Failed to load status'); }
+    }
+
+    // 🆓 ADMIN: free one try = delete ONE alloc_events row (count drops by 1 → +1 attempt)
+    if (url === '/admin/free-try' && req.method === 'POST') {
+      const caller = getUserFromSession(req.body.session);
+      if (!caller) return error(res, 401, 'Unauthorized');
+      if (!isAdminish(await getRole(caller.username))) return error(res, 403, 'Admins only');
+      const target = String(req.body.username || '').trim();
+      const rowId = req.body.rowId;
+      if (!target || rowId == null) return error(res, 400, 'username and rowId required');
+      if (!supaEnabled()) return error(res, 400, 'Supabase not configured');
+      try {
+        const dayStart = _todayStartUTC();
+        // guard: max +3 frees per target per day
+        const g = await fetch(`${SUPABASE_URL}/rest/v1/alloc_frees?target=eq.${encodeURIComponent(target)}&created_at=${encodeURIComponent('gte.' + dayStart)}&select=id`,
+          { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+        const granted = await g.json();
+        if (Array.isArray(granted) && granted.length >= 3) return error(res, 400, 'Max +3 tries per user per day reached.');
+        // delete exactly one alloc_events row (the actual "free a try")
+        const del = await fetch(`${SUPABASE_URL}/rest/v1/alloc_events?id=eq.${encodeURIComponent(String(rowId))}&username=eq.${encodeURIComponent(target)}`,
+          { method: 'DELETE', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=representation' } });
+        const deleted = await del.json();
+        if (!Array.isArray(deleted) || !deleted.length) return error(res, 404, 'Row not found (already freed?).');
+        // record the grant for the +3/day guard
+        await fetch(`${SUPABASE_URL}/rest/v1/alloc_frees`, { method: 'POST', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' }, body: JSON.stringify({ target, granted_by: caller.username }) });
+        return ok(res, { message: 'Freed 1 try for ' + target, deletedId: rowId });
+      } catch (e) { return error(res, 500, 'Failed to free try'); }
+    }
   
     // 8. ALLOCATE (real post + before/after proof)
     if (url === '/alloc/allocate' && req.method === 'POST') {
