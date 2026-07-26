@@ -731,21 +731,6 @@ if (url === '/stats' && req.method === 'POST') {
       return ok(res, result);
     }
 
-      // OTP volumes from CDR
-      const todayRows = await getCachedCDR(bd.from, bd.to);
-      const otpToday = todayRows.length;
-      const otpWeek  = (await getCachedCDR(dayBack(6) + ' 00:00:00',  today + ' 23:59:59')).length;
-      const otpMonth = (await getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')).length;
-      const rangeCounts = {};
-      todayRows.forEach(r => { if (r.range) rangeCounts[r.range] = (rangeCounts[r.range] || 0) + 1; });
-      let mostActiveRange = '—', mostActiveCount = 0;
-      Object.entries(rangeCounts).forEach(([rg, c]) => { if (c > mostActiveCount) { mostActiveCount = c; mostActiveRange = rg; } });
-
-      const result = { totalCountries: countriesSet.size, totalRanges: rangesSet.size, totalNumbers, allocated, available, otpToday, otpWeek, otpMonth, mostActiveRange, mostActiveCount };
-      _statsCache = { ts: Date.now(), data: result };
-      return ok(res, result);
-    }    
-
   if (url === '/admin/admins' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
