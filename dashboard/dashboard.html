@@ -167,7 +167,7 @@
                     <button class="notif-banner-close" onclick="dismissNotifBanner()">✕</button>
                 </div>
 
-                <div class="sms-big-card" id="smsCounterCard">
+                <div class="sms-big-card" id="smsCounterCard" style="position:relative">
                     <div class="sms-big-inner">
                         <div>
                             <div class="sms-big-label">Total SMS Today</div>
@@ -175,6 +175,7 @@
                             <div class="sms-big-sub" id="smsBigSub"><span class="live-dot"></span> Updated just now</div>
                         </div>
                     </div>
+                    <button class="sms-big-refresh" onclick="if(typeof silentSmsRefresh==='function')silentSmsRefresh(true)" title="Refresh now">↻</button>
                 </div>
 
                 <div class="sms-stats-row" style="margin-bottom:16px">
@@ -380,37 +381,49 @@
 
 <script>
 /* ═══════════════════════════════════════════════════════════
-   🟢 ADD-ON 1 — Real-time floating OTP (toast + sound + notification)
-   Rides the EXISTING 3s poll → NO extra requests, NO console spam.
-   It only takes over the *visual + sound* alert; detection and the
-   browser push-notification stay owned by app.js (so nothing doubles).
-   Delete this whole IIFE to revert.
+   🟢 ADD-ON 1 — Real-time floating OTP (toast + ✕ + sound + dedupe)
+   Rides the EXISTING 3s poll → NO extra requests.
+   Baseline-dedupe: a toast only fires for a message that arrives
+   AFTER this page's baseline, so a stale "top" message never
+   re-floats (fixes "float shows even when nothing new").
    ═══════════════════════════════════════════════════════════ */
 (function(){
   function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
   function codeOf(m){ var x=String(m||'').match(/\b(\d{4,8})\b/); return x?x[1]:''; }
   function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function keyOf(r){ return ((r&&(r.datetime||r.time))||'')+'|'+((r&&r.number)||''); }
+
+  // baseline dedupe set (shared with the cache layer add-on)
+  window._floatSeen = window._floatSeen || new Set();
+  window.seedFloatSeen = function(recent){ try{ (recent||[]).forEach(function(r){ window._floatSeen.add(keyOf(r)); }); }catch(e){} };
 
   var actx=null;
   function ensureCtx(){ if(!actx){ try{ actx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } if(actx&&actx.state==='suspended'){ actx.resume().catch(function(){}); } return actx; }
   function chime(){ var c=ensureCtx(); if(!c) return; try{ var now=c.currentTime;
-    [[880,0],[1320,0.12]].forEach(function(p){ var o=c.createOscillator(),g=c.createGain(); o.connect(g);g.connect(c.destination); o.type='sine'; o.frequency.value=p[0]; var t=now+p[1]; g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.22,t+0.02); g.gain.exponentialRampToValueAtTime(0.0001,t+0.32); o.start(t); o.stop(t+0.34); });
+    [[660,0],[880,0.10],[1320,0.20]].forEach(function(p){ var o=c.createOscillator(),g=c.createGain(); o.connect(g);g.connect(c.destination); o.type='sine'; o.frequency.value=p[0]; var t=now+p[1]; g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.30,t+0.02); g.gain.exponentialRampToValueAtTime(0.0001,t+0.34); o.start(t); o.stop(t+0.36); });
   }catch(e){} }
   ['click','keydown','touchstart'].forEach(function(ev){ document.addEventListener(ev, ensureCtx, {once:true, passive:true}); });
 
   var host=null, hideT=null;
   function toastHost(){ if(host) return host; host=document.createElement('div'); host.id='otpFloat'; document.body.appendChild(host); return host; }
+  window.hideOtpFloat = function(){ if(host) host.classList.remove('show'); clearTimeout(hideT); };
   function showFloat(text, recent){
-    var r=(recent&&recent[0])||null, code=r?codeOf(r.message):'', cli=r?(r.cli||'OTP'):'OTP', num=r?(r.number||''):'', t=r?(r.time||''):'', more=(recent&&recent.length>1)?(' +'+(recent.length-1)+' more'):'';
+    var r=(recent&&recent[0])||null;
+    var k=keyOf(r);
+    if(!r || window._floatSeen.has(k)) return;          // ← baseline dedupe: not new → no float
+    window._floatSeen.add(k);
+    var code=codeOf(r.message), cli=(r.cli||'OTP'), num=(r.number||''), t=(r.time||''), more=(recent&&recent.length>1)?(' +'+(recent.length-1)+' more'):'';
+    if(!code && !num) return;                            // nothing meaningful → no float
     var h=toastHost();
     h.innerHTML='<div class="otp-float-card" title="Tap to copy '+(code||num)+'">'
+      +'<button class="otp-float-close" onclick="event.stopPropagation();hideOtpFloat()" aria-label="Dismiss">✕</button>'
       +'<div class="otp-float-top"><div class="otp-float-cli">📨 <b>'+esc(cli)+more+'</b></div><div class="otp-float-time">'+esc(t)+'</div></div>'
       +(code?'<div class="otp-float-code">'+esc(code)+'</div>':'')
       +(num?'<div class="otp-float-num">📱 '+esc(num)+'</div>':'')
-      +(r&&r.message?'<div class="otp-float-msg">'+esc(r.message)+'</div>':'')
-      +'<div class="otp-float-hint">tap to copy code</div></div>';
+      +(r.message?'<div class="otp-float-msg">'+esc(r.message)+'</div>':'')
+      +'<div class="otp-float-hint">tap card to copy code</div></div>';
     var card=h.querySelector('.otp-float-card'); if(card) card.onclick=function(){ var v=code||num; if(v&&navigator.clipboard) navigator.clipboard.writeText(v).catch(function(){}); };
-    h.classList.add('show'); clearTimeout(hideT); hideT=setTimeout(function(){ h.classList.remove('show'); }, 8000);
+    h.classList.add('show'); clearTimeout(hideT); hideT=setTimeout(window.hideOtpFloat, 4000);   // ← 4s
     if(!document.hidden) chime();
   }
   function enhanceCodes(){ try{ document.querySelectorAll('#smsRecentList .rsms-body').forEach(function(el){
@@ -426,9 +439,6 @@
 
 /* ═══════════════════════════════════════════════════════════
    🟢 ADD-ON 2 — Remember the active tab across a browser refresh.
-   Saves the current view to sessionStorage; restores it on load.
-   If anything is missing it silently falls back to Ranges (safe).
-   Delete this whole IIFE to revert.
    ═══════════════════════════════════════════════════════════ */
 (function(){
   function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
@@ -762,6 +772,153 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
 #addNumPage .alloc-search-row .btn{padding:10px 14px;font-size:.82rem;white-space:nowrap}
 #addNumPage .alloc-field label{font-size:.66rem}
 </style>
+
+   <style>
+/* float ✕ + inbox refresh button */
+.otp-float-close{position:absolute;top:6px;right:8px;width:22px;height:22px;border:0;border-radius:50%;
+  background:var(--surface);color:var(--muted);font-size:.8rem;cursor:pointer;line-height:1;
+  display:flex;align-items:center;justify-content:center}
+.otp-float-card{position:relative}
+.sms-big-refresh{position:absolute;top:12px;right:12px;width:34px;height:34px;border-radius:50%;
+  border:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:1rem;cursor:pointer;
+  display:flex;align-items:center;justify-content:center}
+</style>
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+   🟢 ADD-ON 3 — DURABLE CACHE LAYER (instant paint everywhere)
+   Wraps existing functions from the OUTSIDE → app.js / api untouched.
+   Rule: always paint the last-good data INSTANTLY, then let the live
+   2–3s backend refresh update it. A transient empty/error response
+   never wipes a good cached list.
+   ═══════════════════════════════════════════════════════════ */
+(function(){
+  function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
+  function zget(k){ try{ var v=localStorage.getItem(k); return v?JSON.parse(v):null; }catch(e){ return null; } }
+  function zset(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+  function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  /* ── RANGES: persistent mirror + 2.5s fallback fill on network glitch ── */
+  if(typeof renderRanges==='function'){
+    var _rr=renderRanges;
+    window.renderRanges=function(list){
+      try{
+        var q=((document.getElementById('rangesSearch')||{}).value||'').trim();
+        if(list && list.length && !q) zset('zamil_cache_ranges', list);   // persist only full (non-search) lists
+      }catch(e){}
+      return _rr.apply(this, arguments);
+    };
+  }
+  if(typeof loadRanges==='function'){
+    var _lr=loadRanges;
+    window.loadRanges=function(force){
+      var r=_lr.apply(this, arguments);
+      try{
+        setTimeout(function(){
+          var el=document.getElementById('rangesList'); if(!el) return;
+          var failed = el.querySelector('.empty button') || /⚠|Error|retry/i.test(el.textContent||'');
+          var blank  = !el.children.length;
+          if(failed || blank){
+            var c=zget('zamil_cache_ranges');
+            if(c && c.length && typeof renderRanges==='function') renderRanges(c);   // cache wins over a glitch
+          }
+        }, 2500);
+      }catch(e){}
+      return r;
+    };
+  }
+
+  /* ── INBOX: cache last smscount → instant big number + recent list ── */
+  var _asrSeeded=false;
+  if(typeof _applySmsResult==='function'){
+    var _asr=_applySmsResult;
+    window._applySmsResult=function(d){
+      try{
+        if(d && d.ok){ zset('zamil_cache_smscount', { count:d.count, recent:(d.recent||[]).slice(0,30), ts:Date.now() }); }
+        if(!_asrSeeded){ _asrSeeded=true; if(d && d.recent && typeof window.seedFloatSeen==='function') window.seedFloatSeen(d.recent); }
+      }catch(e){}
+      return _asr.apply(this, arguments);
+    };
+  }
+
+  /* ── DOR: cached override (reads cache first, refreshes after) ── */
+  function dorRows(recent){
+    var h="<div style='display:flex;flex-direction:column;gap:8px;'>";
+    var show=(recent||[]).slice(0,50);
+    for(var i=0;i<show.length;i++){ var r=show[i];
+      h+="<div class='recent-item' style='margin-bottom:0;'><div class='rsms-inner'>"
+        +"<div class='rsms-head-row'><div class='rsms-cli-wrap'><div class='rsms-cli-icon'>🔒</div><span class='rsms-name'>"+escH(r.cli||'Unknown')+"</span></div><span class='rsms-dev-time'>🕒 "+escH(r.time)+"</span></div>"
+        +"<div class='rsms-msg-box'><div class='rsms-shield'>📩</div><div class='rsms-body'>"+escH(r.message||'')+"</div></div>"
+        +"<div class='rsms-num-line'>📱 "+escH(r.number)+"</div></div></div>";
+    }
+    if((recent||[]).length>50) h+="<div style='text-align:center;padding:12px;color:var(--muted);font-size:.75rem;'>Showing latest 50 of "+recent.length+" total</div>";
+    return h+"</div>";
+  }
+  if(typeof loadDOR==='function'){
+    window.loadDOR=function(){
+      var loading=document.getElementById('dorLoading'), list=document.getElementById('dorList');
+      var cached=zget('zamil_cache_dor');
+      if(cached && cached.recent && cached.recent.length){           // instant paint from cache
+        if(loading) loading.style.display='none';
+        if(list){ list.style.display='block'; list.innerHTML=dorRows(cached.recent); }
+      }
+      if(typeof apiCall!=='function') return;
+      apiCall('/api/dor', { session: (typeof SESSION!=='undefined'?SESSION:'') }, function(d){
+        if(loading) loading.style.display='none';
+        if(!list) return;
+        if(d && d.ok && d.recent && d.recent.length){
+          zset('zamil_cache_dor', { recent:d.recent.slice(0,200), ts:Date.now() });
+          list.style.display='block'; list.innerHTML=dorRows(d.recent);
+        } else if(!(cached && cached.recent && cached.recent.length)){   // only show empty if NO cache to keep
+          list.style.display='block';
+          list.innerHTML="<div style='padding:24px;text-align:center;color:var(--muted)'>📭 No global messages found today.</div>";
+        }
+        // if network empty but cache exists → keep the cached list (do nothing)
+      });
+    };
+  }
+
+  /* ── LEADERBOARD: per-range cache → instant on switch/refresh ── */
+  if(typeof renderLeaderboard==='function'){
+    var _rlb=renderLeaderboard;
+    window.renderLeaderboard=function(users){
+      try{
+        if(users && users.length){ var rg=(typeof LB_RANGE!=='undefined'?LB_RANGE:'today'); zset('zamil_cache_lb_'+rg, users); }
+        else { var rg2=(typeof LB_RANGE!=='undefined'?LB_RANGE:'today'); var c=zget('zamil_cache_lb_'+rg2); if(c && c.length){ return _rlb(c); } }  // empty response → keep cached board
+      }catch(e){}
+      return _rlb.apply(this, arguments);
+    };
+  }
+  if(typeof loadLeaderboard==='function'){
+    var _llb=loadLeaderboard;
+    window.loadLeaderboard=function(range){
+      try{
+        var rg=range || (typeof LB_RANGE!=='undefined'?LB_RANGE:'today');
+        var c=zget('zamil_cache_lb_'+rg);
+        if(c && c.length && typeof renderLeaderboard==='function'){
+          var coming=document.getElementById('lbComing'), list=document.getElementById('lbList');
+          if(coming) coming.style.display='none';
+          if(list) list.style.display='block';
+          renderLeaderboard(c);   // instant cached board; live fetch updates below
+        }
+      }catch(e){}
+      return _llb.apply(this, arguments);
+    };
+  }
+
+  /* ── ON LOAD: paint cached inbox so the top card is never 0 ── */
+  ready(function(){
+    try{
+      if(!localStorage.getItem('app_session')) return;
+      var c=zget('zamil_cache_smscount');
+      if(c && typeof window._applySmsResult==='function'){
+        var el=document.getElementById('smsBigNum');
+        if(el && (el.textContent||'').trim()==='0'){ window._applySmsResult({ ok:true, count:c.count, recent:c.recent||[] }); }
+      }
+    }catch(e){}
+  });
+})();
+</script> 
     
 </body>
 </html>
