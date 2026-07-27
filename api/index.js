@@ -415,6 +415,7 @@ async function getRole(username){
 }
 function isAdminish(role){ return role === 'super' || role === 'admin'; }
 let _statsCache = { ts: 0, data: null };
+const _asCache = new Map();   // per-query search cache (8s)
 const STATS_TTL = 60000; // 60s
 
 const COUNTRY_ISO = { 'pakistan':'PK','sri lanka':'LK','malaysia':'MY','myanmar':'MM','afghanistan':'AF','tajikistan':'TJ','tanzania':'TZ','kyrgyzstan':'KG','uzbekistan':'UZ','sudan':'SD','angola':'AO','algeria':'DZ','zimbabwe':'ZW','bolivia':'BO','india':'IN','bangladesh':'BD','nepal':'NP','indonesia':'ID','philippines':'PH','vietnam':'VN','thailand':'TH','cambodia':'KH','egypt':'EG','nigeria':'NG','kenya':'KE','uganda':'UG','ghana':'GH','south africa':'ZA','brazil':'BR','mexico':'MX','united states':'US','usa':'US','united kingdom':'GB','germany':'DE','france':'FR','spain':'ES','italy':'IT','russia':'RU','turkey':'TR','iran':'IR','iraq':'IQ','saudi arabia':'SA','united arab emirates':'AE','qatar':'QA','kuwait':'KW','jordan':'JO','lebanon':'LB','morocco':'MA','tunisia':'TN','libya':'LY','ethiopia':'ET','somalia':'SO','rwanda':'RW','zambia':'ZM','mozambique':'MZ','botswana':'BW','namibia':'NA','senegal':'SN','mali':'ML','niger':'NE','benin':'BJ','togo':'TG','burkina faso':'BF','guinea':'GN','ivory coast':'CI','cameroon':'CM','congo':'CG','gabon':'GA','madagascar':'MG','malawi':'MW','kazakhstan':'KZ','azerbaijan':'AZ','armenia':'AM','georgia':'GE','ukraine':'UA','poland':'PL','romania':'RO','greece':'GR','netherlands':'NL','belgium':'BE','switzerland':'CH','sweden':'SE','norway':'NO','denmark':'DK','finland':'FI','ireland':'IE','canada':'CA','australia':'AU','new zealand':'NZ','japan':'JP','south korea':'KR','china':'CN','singapore':'SG','argentina':'AR','chile':'CL','colombia':'CO','peru':'PE','venezuela':'VE','ecuador':'EC','paraguay':'PY','uruguay':'UY','panama':'PA','costa rica':'CR','guatemala':'GT','honduras':'HN','cuba':'CU','dominican republic':'DO','haiti':'HT','jamaica':'JM','portugal':'PT','austria':'AT','belarus':'BY','hungary':'HU','czechia':'CZ','slovakia':'SK','bulgaria':'BG','serbia':'RS','croatia':'HR','yemen':'YE','oman':'OM','bahrain':'BH','syria':'SY','mongolia':'MN','laos':'LA','bhutan':'BT','maldives':'MV','fiji':'FJ' };
@@ -598,32 +599,32 @@ module.exports = async (req, res) => {
       return ok(res, { count: mine.length, recent: mine.slice(0,50).map(r => ({ time: r.time, datetime: r.datetime, number: r.number, cli: r.cli, message: r.message, range: r.range })) });
     }
     
-    if (url === '/smscount-range' && req.method === 'POST') {
+        if (url === '/smscount-range' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
-      const bd = businessDayPKT();
-      const rows = await getCachedCDR(bd.from, bd.to);
+      const range = (req.body.range || 'today');
+      const bd = businessDayPKT(); const today = bd.label;
+      const dayBack = (n) => new Date(new Date(today + 'T00:00:00Z').getTime() - n * 86400000).toISOString().slice(0, 10);
+      let from, to;
+      if (range === 'week')       { from = dayBack(6)  + ' 00:00:00'; to = today + ' 23:59:59'; }
+      else if (range === 'month') { from = dayBack(29) + ' 00:00:00'; to = today + ' 23:59:59'; }
+      else                        { from = bd.from;                  to = bd.to; }
+      const rows = await getCachedCDR(from, to, range === 'today' ? CDR_TTL : CDR_TTL_WIDE);
       const mine = rows.filter(r => isMine(r.client, user));
       const byNumber = {}, byRange = {};
-      mine.forEach(r => {
-        const n = (r.number||'').replace(/[^0-9]/g,''); if (n) byNumber[n] = (byNumber[n]||0) + 1;
-        if (r.range) byRange[r.range] = (byRange[r.range]||0) + 1;
-      });
-      return ok(res, { count: mine.length, byNumber, byRange }); // defensive: whatever the frontend reads, it finds it
-    }
-
-    if (url === '/dor' && req.method === 'POST') {
-      const bd = businessDayPKT();
-      const rows = await getCachedCDR(bd.from, bd.to);
-      rows.sort((a,b) => b.datetime.localeCompare(a.datetime));
-      return ok(res, { date: bd.label, total: rows.length, recent: rows.slice(0,200).map(r => ({ time: r.time, datetime: r.datetime, number: r.number, cli: r.cli, client: r.client, message: r.message, range: r.range })) });
+      mine.forEach(r => { const n = (r.number||'').replace(/[^0-9]/g,''); if (n) byNumber[n] = (byNumber[n]||0)+1; if (r.range) byRange[r.range] = (byRange[r.range]||0)+1; });
+      return ok(res, { count: mine.length, byNumber, byRange });
     }
 
     // 6. SEARCH RANGES (real ids + available counts)
-    if (url === '/alloc/search-ranges' && req.method === 'POST') {
+       if (url === '/alloc/search-ranges' && req.method === 'POST') {
       const query = (req.body.query || '').toLowerCase().trim();
-      const data = await scrapeAgentData('res/data_smsnumbers.php', { frange: '', fclient: '', totnum: 100000, sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1 });
-      if (!data || !data.aaData) return ok(res, { ranges: [], _debug: 'No data from LaMix' });
+      const ch = _asCache.get(query);
+      if (ch && (Date.now() - ch.ts) < 8000) return ok(res, { ranges: ch.ranges, _debug: Object.assign({}, ch._debug, { cached: true }) });
+
+      let data = await scrapeAgentData('res/data_smsnumbers.php', { frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
+      if (!data || !data.aaData) { await ensureAgentSession(true); data = await scrapeAgentData('res/data_smsnumbers.php', { frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 }); }
+      if (!data || !data.aaData) { if (ch) return ok(res, { ranges: ch.ranges, _debug: Object.assign({}, ch._debug, { cached: true }) }); return ok(res, { ranges: [], _debug: 'No data from LaMix' }); }
 
       const allNumbers = parseNumbersData(data);
       const rangesMap = new Map();
@@ -633,7 +634,6 @@ module.exports = async (req, res) => {
         const r = rangesMap.get(key); r.total++;
         if (isAvailableClient(n.client)) r.available++;
       });
-
       const rangeOpts = await getRangeOptions();
       const optKeys = Array.from(rangeOpts.keys());
       let mapped = 0; const unmatched = [];
@@ -646,20 +646,11 @@ module.exports = async (req, res) => {
         if (id) { r.id = id; mapped++; } else { unmatched.push(`${r.country} - ${r.title}`); }
       });
       let i = 0; rangesMap.forEach(r => { if (!r.id) r.id = 'alloc_' + (i++); });
-
       const filtered = Array.from(rangesMap.values()).filter(r => `${r.country} ${r.title}`.toLowerCase().includes(query));
       const withAvail = filtered.filter(r => r.available > 0);
-      const ourRangeSample = Array.from(rangesMap.values()).slice(0, 8).map(r => `${r.country} - ${r.title}`);
-
-      return ok(res, {
-        ranges: withAvail,
-        _debug: {
-          query, totalScraped: allNumbers.length, rangesFound: filtered.length, withAvailable: withAvail.length,
-          realIdsMapped: mapped, rangeOptsCount: optKeys.length,
-          rangeOptsRaw: rangeOpts._raw || '', rangeOptsSample: rangeOpts._sample || [],
-          ourRangeSample, unmatchedSample: unmatched.slice(0, 8)
-        }
-      });
+      const _debug = { query, totalScraped: allNumbers.length, rangesFound: filtered.length, withAvailable: withAvail.length, realIdsMapped: mapped, rangeOptsCount: optKeys.length, unmatchedSample: unmatched.slice(0, 8) };
+      if (withAvail.length) _asCache.set(query, { ts: Date.now(), ranges: withAvail, _debug });   // only cache NON-empty → a transient empty never hides real ranges
+      return ok(res, { ranges: withAvail, _debug });
     }
 
     // 7. CHECK AVAILABILITY
