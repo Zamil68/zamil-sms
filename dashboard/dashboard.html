@@ -1468,18 +1468,18 @@ window.copyTeamReport = function(){
       }).catch(function(){ slot.innerHTML=''; });
   };
 
-    /* ── PIN existing users into a team ── */
+   /* ── PIN existing users into a team ── */
   function ensurePinCard(){
     if(document.getElementById('teamPinCard')) { loadPinOptions(); return; }
     var list=document.getElementById('teamList'); if(!list) return;
     var html='<div id="teamPinCard" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px">'
-      +'<div style="font-size:.8rem;font-weight:800;margin-bottom:4px">📌 Pin an existing user to a team</div>'
-      +'<div style="font-size:.62rem;color:var(--muted);margin-bottom:10px;line-height:1.4">For users whose name does NOT start with a team prefix (e.g. <b>Muzammil_Aziz</b>) — pin them into the right team so their numbers & OTPs count there.</div>'
+      +'<div style="font-size:.8rem;font-weight:700;margin-bottom:4px">📌 Pin an existing user to a team</div>'
+      +'<div style="font-size:.66rem;color:var(--muted);margin-bottom:10px;line-height:1.5">For users whose name does NOT start with a team prefix (e.g. <b>Muzammil_Aziz</b>) — pin them so their numbers & OTPs count there.</div>'
       +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
       +'<select id="pinPrefix" style="flex:1;min-width:120px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:9px 11px;color:var(--text);font:inherit;font-size:.82rem;outline:none"><option value="">Loading teams…</option></select>'
       +'<input id="pinUser" type="text" placeholder="Exact username e.g. Muzammil_Aziz" style="flex:1.4;min-width:150px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:9px 11px;color:var(--text);font:inherit;font-size:.82rem;outline:none">'
-      +'<button onclick="pinClient()" style="font-size:.78rem;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;border-radius:9px;padding:9px 16px;cursor:pointer;white-space:nowrap">📌 Pin</button></div>'
-      +'<div id="pinMsg" style="font-size:.72rem;font-weight:700;margin-top:8px;display:none"></div></div>';
+      +'<button onclick="pinClient()" style="font-size:.78rem;font-weight:700;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;border-radius:9px;padding:9px 16px;cursor:pointer;white-space:nowrap">📌 Pin</button></div>'
+      +'<div id="pinMsg" style="font-size:.72rem;font-weight:600;margin-top:8px;display:none"></div></div>';
     list.insertAdjacentHTML('beforebegin', html);
     loadPinOptions();
   }
@@ -1503,14 +1503,13 @@ window.copyTeamReport = function(){
       .catch(function(){ m('Connection error', false); });
   };
   window.unpinClient=function(username){
-    zconfirm('Unpin <b>'+escH(username)+'</b> from this team?<br><span style="font-size:.74rem;color:var(--muted);font-weight:600">They move back to System Generated (or their natural prefix team).</span>', function(){
+    zconfirm('Unpin <b>'+escH(username)+'</b> from this team?<br><span style="font-size:.74rem;color:var(--muted)">They move back to System Generated (or their natural prefix team).</span>', function(){
       fetch('/api/admin/unpin-client',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:sess(),username:username})})
         .then(function(r){return r.json();}).then(function(d){ if(d&&d.ok){ if(typeof showToast==='function') showToast('Unpinned '+username,'success'); loadMyClients(true); } else if(typeof showToast==='function') showToast((d&&d.error)||'Unpin failed','error'); })
         .catch(function(){ if(typeof showToast==='function') showToast('Connection error','error'); });
     }, {icon:'📌', yesText:'Unpin'});
   };
   window.prefillPin=function(u){ var i=document.getElementById('pinUser'); if(i){ i.value=u; i.focus(); var c=document.getElementById('teamPinCard'); if(c) c.scrollIntoView({behavior:'smooth',block:'center'}); } };
-    
   ready(function(){
     if(typeof window.openAdminPage==='function' && !window.openAdminPage._bw){ var _oa=window.openAdminPage; window.openAdminPage=function(){ var r=_oa.apply(this,arguments); try{ renderTargetCard(); }catch(e){} return r; }; window.openAdminPage._bw=1; }
     if(typeof window.openTeamReport==='function' && !window.openTeamReport._bw){ var _otr=window.openTeamReport; window.openTeamReport=function(){ var r=_otr.apply(this,arguments); try{ loadTeamBonus(); }catch(e){} return r; }; window.openTeamReport._bw=1; }
