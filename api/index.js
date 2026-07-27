@@ -866,6 +866,109 @@ if (url === '/stats' && req.method === 'POST') {
       const teams = Object.values(groups).map(g => ({ prefix: g.prefix, admin: g.admin, label: g.label, count: g.clients.length, clients: g.clients }));
       return ok(res, { teams, total: scoped.length, cached: !force });
     }
+
+// 👥 CREATE a client on LaMix (admin: own prefix only; super: any prefix)
+    if (url === '/admin/create-client' && req.method === 'POST') {
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      const role = await getRole(user.username);
+      if (!isAdminish(role)) return error(res, 403, 'Admins only');
+      if (!supaEnabled()) return error(res, 400, 'Supabase not configured');
+
+      const suffix = String(req.body.suffix || '').trim();
+      let prefix = String(req.body.prefix || '').trim();
+      const password = String(req.body.password || '').trim();
+      const name = String(req.body.name || '').trim();
+
+      const allPrefixes = await supaGetPrefixes();
+      const myPrefixes = prefixesFor(role, user.username, allPrefixes);
+      if (!prefix) {
+        if (myPrefixes.length === 1) prefix = myPrefixes[0].prefix;
+        else return error(res, 400, 'Select a team prefix first.');
+      }
+      if (role !== 'super' && !myPrefixes.some(p => p.prefix === prefix)) {
+        return error(res, 403, 'You can only create IDs under your own team prefix.');
+      }
+
+      const username = prefix + suffix;
+      if (!/^[A-Za-z0-9_]{6,15}$/.test(username)) {
+        const minS = Math.max(1, 6 - prefix.length), maxS = 15 - prefix.length;
+        return error(res, 400, 'Username must be 6–15 chars (letters/numbers/_). With prefix "' + prefix + '", the suffix must be ' + minS + '–' + maxS + ' characters.');
+      }
+      const finalPass = password || username;
+      if (finalPass.length < 6) return error(res, 400, 'Password must be at least 6 characters.');
+
+      const before = await getCachedClients(true);
+      if (before.some(c => c.username.toLowerCase() === username.toLowerCase())) {
+        return error(res, 400, 'Username "' + username + '" already exists.');
+      }
+
+      await ensureAgentSession();
+      const fields = { action: 'add', username, password: finalPass, email: '', skype: '', contact: '', name: name || username, cname: '', address: '', country: 'Pakistan' };
+      const boundary = '----ZamilClientBoundary' + Date.now().toString(16) + Math.random().toString(16).slice(2);
+      let body = '';
+      for (const [k, v] of Object.entries(fields)) body += '--' + boundary + '\r\nContent-Disposition: form-data; name="' + k + '"\r\n\r\n' + v + '\r\n';
+      body += '--' + boundary + '--\r\n';
+      const postCreate = () => axios.post(AGENT_BASE_URL + 'Clients', body, {
+        headers: Object.assign({}, browserHeaders('http://51.210.208.26/ints/agent/Clients'), { 'Content-Type': 'multipart/form-data; boundary=' + boundary }),
+        transformRequest: [(d) => d], maxRedirects: 5, validateStatus: () => true, timeout: 25000
+      });
+      let serverStatus = null, serverBody = '';
+      try {
+        let postRes = await postCreate();
+        if (looksLikeLogin(postRes.data)) { await ensureAgentSession(true); postRes = await postCreate(); }
+        serverStatus = postRes.status;
+        serverBody = (postRes.data == null ? '' : String(typeof postRes.data === 'string' ? postRes.data : JSON.stringify(postRes.data)));
+      } catch (e) { return error(res, 500, 'LaMix request failed: ' + (e.code || e.message)); }
+
+      const after = await getCachedClients(true);
+      const created = after.find(c => c.username.toLowerCase() === username.toLowerCase());
+      const saidOk = /client added/i.test(serverBody);
+      if (created || saidOk) {
+        return ok(res, { message: 'Created ' + username, username, clientId: created ? created.id : null, _server: 'HTTP ' + serverStatus + (saidOk ? ' · "Client Added"' : '') });
+      }
+      const snippet = serverBody.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').slice(0, 200);
+      return error(res, 400, 'LaMix did not confirm creation (HTTP ' + serverStatus + '). ' + (snippet || 'Check the username/password rules.'));
+    }
+
+    // 👥 DELETE a client from LaMix (admin: own team only; super: any)
+    if (url === '/admin/delete-client' && req.method === 'POST') {
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      const role = await getRole(user.username);
+      if (!isAdminish(role)) return error(res, 403, 'Admins only');
+
+      const clientId = String(req.body.clientId || '').trim();
+      const targetUsername = String(req.body.username || '').trim();
+      const before = await getCachedClients(true);
+      let target = clientId ? before.find(c => String(c.id) === clientId) : null;
+      if (!target && targetUsername) target = before.find(c => c.username.toLowerCase() === targetUsername.toLowerCase());
+      if (!target) return error(res, 404, 'Client not found.');
+
+      if (role !== 'super') {
+        const myPrefixes = prefixesFor(role, user.username, await supaGetPrefixes());
+        if (!myPrefixes.some(p => p.prefix && target.username.indexOf(p.prefix) === 0)) {
+          return error(res, 403, 'You can only delete clients in your own team.');
+        }
+      }
+
+      await ensureAgentSession();
+      const body = 'cbarr%5B%5D=' + encodeURIComponent(target.id);
+      let serverStatus = null;
+      try {
+        const postRes = await axios.post(AGENT_BASE_URL + 'res/removeallclients.php', body, {
+          headers: Object.assign({}, browserHeaders('http://51.210.208.26/ints/agent/Clients'), { 'Content-Type': 'application/x-www-form-urlencoded' }),
+          transformRequest: [(d) => d], maxRedirects: 5, validateStatus: () => true, timeout: 20000
+        });
+        serverStatus = postRes.status;
+      } catch (e) { return error(res, 500, 'Delete request failed: ' + (e.code || e.message)); }
+
+      const after = await getCachedClients(true);
+      const gone = !after.some(c => String(c.id) === String(target.id));
+      if (gone) return ok(res, { message: 'Deleted ' + target.username, username: target.username });
+      return error(res, 400, 'LaMix did not confirm deletion (HTTP ' + serverStatus + '). The client may still exist.');
+    }
+    
     
     // 🆓 ADMIN: show a user's at-limit ranges/countries (only those that hit a cap)
     if (url === '/admin/limit-status' && req.method === 'POST') {
