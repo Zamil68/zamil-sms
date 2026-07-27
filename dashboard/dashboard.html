@@ -1469,7 +1469,7 @@ window.copyTeamReport = function(){
   };
 
    /* ── PIN existing users into a team ── */
-  function ensurePinCard(){
+  window.ensurePinCard = function(){
     if(document.getElementById('teamPinCard')) { loadPinOptions(); return; }
     var list=document.getElementById('teamList'); if(!list) return;
     var html='<div id="teamPinCard" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px">'
@@ -1483,7 +1483,7 @@ window.copyTeamReport = function(){
     list.insertAdjacentHTML('beforebegin', html);
     loadPinOptions();
   }
-  function loadPinOptions(){
+  window.loadPinOptions = function(){
     var sel=document.getElementById('pinPrefix'); if(!sel) return;
     fetch('/api/admin/team-prefixes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:sess()})})
       .then(function(r){return r.json();}).then(function(d){
