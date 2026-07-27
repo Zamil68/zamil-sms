@@ -1116,7 +1116,7 @@ window.zconfirm=function(msg,onYes,opts){
     if(!teams.length){ box.innerHTML='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;text-align:center;color:var(--muted)">No team prefixes yet. A super admin must assign one first.</div>'; return; }
     var h='';
     teams.forEach(function(t,ti){
-      var head = t.prefix ? (escH(t.prefix)+'*  '+(t.label?'<span style="color:var(--muted);font-weight:600">'+escH(t.label)+'</span> · ':'')+'<span style="color:var(--muted);font-weight:600">'+escH(t.admin)+'</span>') : '<span style="color:var(--muted)">'+escH(t.label||'System Generated'))+'</span>';
+      var head = t.prefix ? (escH(t.prefix)+'*  '+(t.label?'<span style="color:var(--muted);font-weight:600">'+escH(t.label)+'</span> · ':'')+'<span style="color:var(--muted);font-weight:600">'+escH(t.admin)+'</span>') : '<span style="color:var(--muted)">'+escH(t.label||'System Generated')+'</span>';
       h+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:8px;overflow:hidden">';
       h+='<div onclick="toggleTeam('+ti+')" style="display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer"><div style="flex:1;min-width:0;font-size:.86rem;font-weight:800;color:var(--text)">'+head+'</div><span style="font-size:.72rem;font-weight:800;color:var(--accent)">'+t.count+'</span><span id="tchev'+ti+'" style="color:var(--muted);transition:transform .2s">▾</span></div>';
       h+='<div id="tbody'+ti+'" style="display:none;border-top:1px solid var(--border);padding:4px 12px 8px">';
@@ -1359,7 +1359,7 @@ window.zconfirm=function(msg,onYes,opts){
   function renderReport(d){
     var sub=document.getElementById('trSub'); if(sub) sub.textContent=(d.date||'')+' · '+(d.cached?'cached':'fresh');
     var hot=document.getElementById('trHot');
-    if(hot){ if(d.hottest){ hot.style.display='block'; hot.innerHTML='<div style="background:linear-gradient(135deg,rgba(245,158,11,.14),rgba(239,68,68,.12));border:1px solid rgba(245,158,11,.3);border-radius:12px;padding:12px 14px;font-size:.82rem;font-weight:700;color:var(--text)">🔥 Hottest team today: <b>'+(escH(d.hottest.prefix)||'System Generated')+'</b> · '+d.hottest.otpToday+' OTPs</div>'; } else hot.style.display='none'; }
+    if(hot){ if(d.hottest){ hot.style.display='block'; hot.innerHTML='<div style="background:linear-gradient(135deg,rgba(245,158,11,.14),rgba(239,68,68,.12));border:1px solid rgba(245,158,11,.3);border-radius:12px;padding:12px 14px;font-size:.82rem;font-weight:700;color:var(--text)">🔥 Hottest team today: <b>'+(escH(d.hottest.prefix)||'System Generated'))+'</b> · '+d.hottest.otpToday+' OTPs</div>'; } else hot.style.display='none'; }
     var box=document.getElementById('trList'); if(!box) return;
     var teams=d.teams||[]; if(!teams.length){ box.innerHTML='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;text-align:center;color:var(--muted)">No teams yet.</div>'; return; }
     var max=Math.max(1, teams.reduce(function(m,t){ return Math.max(m, t.otpToday||0); }, 0));
