@@ -1359,7 +1359,7 @@ window.zconfirm=function(msg,onYes,opts){
   function renderReport(d){
     var sub=document.getElementById('trSub'); if(sub) sub.textContent=(d.date||'')+' · '+(d.cached?'cached':'fresh');
     var hot=document.getElementById('trHot');
-    if(hot){ if(d.hottest){ hot.style.display='block'; hot.innerHTML='<div style="background:linear-gradient(135deg,rgba(245,158,11,.14),rgba(239,68,68,.12));border:1px solid rgba(245,158,11,.3);border-radius:12px;padding:12px 14px;font-size:.82rem;font-weight:700;color:var(--text)">🔥 Hottest team today: <b>'+(escH(d.hottest.prefix)||'System Generated'))+'</b> · '+d.hottest.otpToday+' OTPs</div>'; } else hot.style.display='none'; }
+    if(hot){ if(d.hottest){ hot.style.display='block'; hot.innerHTML='<div style="background:linear-gradient(135deg,rgba(245,158,11,.14),rgba(239,68,68,.12));border:1px solid rgba(245,158,11,.3);border-radius:12px;padding:12px 14px;font-size:.82rem;font-weight:700;color:var(--text)">🔥 Hottest team today: <b>'+(escH(d.hottest.prefix)||'System Generated')+'</b> · '+d.hottest.otpToday+' OTPs</div>'; } else hot.style.display='none'; }
     var box=document.getElementById('trList'); if(!box) return;
     var teams=d.teams||[]; if(!teams.length){ box.innerHTML='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;text-align:center;color:var(--muted)">No teams yet.</div>'; return; }
     var max=Math.max(1, teams.reduce(function(m,t){ return Math.max(m, t.otpToday||0); }, 0));
