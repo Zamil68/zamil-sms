@@ -483,6 +483,7 @@ function weekKey(dateStr){
 }
 
 // ═══ TEAM PINS — manual override of the prefix rule ═══
+// ═══ TEAM PINS + helpers (top-level, above module.exports) ═══
 let _pinsCache = { ts: 0, map: null };
 async function getPinsMap() {
   if (_pinsCache.map && (Date.now() - _pinsCache.ts) < 30000) return _pinsCache.map;
@@ -498,17 +499,23 @@ async function getPinsMap() {
   return map;
 }
 function invalidatePins() { _pinsCache = { ts: 0, map: null }; }
-function prefixTeam(username, allPrefixes) {           // natural prefix match only (no pins)
+function prefixTeam(username, allPrefixes) {
   const un = String(username || '').toLowerCase();
   const sorted = allPrefixes.slice().sort((a, b) => (b.prefix || '').length - (a.prefix || '').length);
   for (const p of sorted) { const pf = String(p.prefix || '').toLowerCase(); if (pf && un.indexOf(pf) === 0) return p.prefix; }
   return '';
 }
-function resolveTeam(username, allPrefixes, pinsMap) { // pin wins, else prefix match
+function resolveTeam(username, allPrefixes, pinsMap) {
   const un = String(username || '').toLowerCase();
   const pin = pinsMap ? pinsMap[un] : null;
   if (pin) { const m = allPrefixes.find(p => String(p.prefix || '').toLowerCase() === String(pin).toLowerCase()); if (m) return m.prefix; }
   return prefixTeam(username, allPrefixes);
+}
+function weekKey(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00Z');
+  const day = d.getUTCDay();
+  const diff = (day === 0 ? -6 : 1 - day);
+  return new Date(d.getTime() + diff * 86400000).toISOString().slice(0, 10);
 }
 
 module.exports = async (req, res) => {
