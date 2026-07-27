@@ -482,6 +482,35 @@ function weekKey(dateStr){
   return new Date(d.getTime() + diff * 86400000).toISOString().slice(0, 10);
 }
 
+// ═══ TEAM PINS — manual override of the prefix rule ═══
+let _pinsCache = { ts: 0, map: null };
+async function getPinsMap() {
+  if (_pinsCache.map && (Date.now() - _pinsCache.ts) < 30000) return _pinsCache.map;
+  const map = {};
+  if (supaEnabled()) {
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/client_team_pins?select=username,prefix`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+      const rows = await r.json();
+      if (Array.isArray(rows)) rows.forEach(x => { map[String(x.username).toLowerCase()] = x.prefix; });
+    } catch (e) {}
+  }
+  _pinsCache = { ts: Date.now(), map };
+  return map;
+}
+function invalidatePins() { _pinsCache = { ts: 0, map: null }; }
+function prefixTeam(username, allPrefixes) {           // natural prefix match only (no pins)
+  const un = String(username || '').toLowerCase();
+  const sorted = allPrefixes.slice().sort((a, b) => (b.prefix || '').length - (a.prefix || '').length);
+  for (const p of sorted) { const pf = String(p.prefix || '').toLowerCase(); if (pf && un.indexOf(pf) === 0) return p.prefix; }
+  return '';
+}
+function resolveTeam(username, allPrefixes, pinsMap) { // pin wins, else prefix match
+  const un = String(username || '').toLowerCase();
+  const pin = pinsMap ? pinsMap[un] : null;
+  if (pin) { const m = allPrefixes.find(p => String(p.prefix || '').toLowerCase() === String(pin).toLowerCase()); if (m) return m.prefix; }
+  return prefixTeam(username, allPrefixes);
+}
+
 module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).json({ ...corsHeaders });
   const url = req.url.replace(/^\/api/, '');
@@ -869,16 +898,20 @@ if (url === '/stats' && req.method === 'POST') {
       const force = !!req.body.force;
       const allClients = await getCachedClients(force);
       const allPrefixes = await supaGetPrefixes();
+      const pinsMap = await getPinsMap();
       const myPrefixes = prefixesFor(role, user.username, allPrefixes);
-      const mySet = myPrefixes.map(p => p.prefix);
-      const scoped = (role === 'super') ? allClients : allClients.filter(c => mySet.some(pf => pf && c.username.indexOf(pf) === 0));
+      const mySet = new Set(myPrefixes.map(p => p.prefix));
+      const scoped = (role === 'super') ? allClients : allClients.filter(c => mySet.has(resolveTeam(c.username, allPrefixes, pinsMap)));
       const groups = {};
       myPrefixes.forEach(p => { groups[p.prefix] = { prefix: p.prefix, admin: p.admin_username, label: p.label || '', clients: [] }; });
-      if (role === 'super') groups[''] = { prefix: '', admin: '—', label: 'Unassigned', clients: [] };
+      if (role === 'super') groups[''] = { prefix: '', admin: '—', label: 'System Generated', clients: [] };
       scoped.forEach(c => {
-        const t = teamOf(c.username, allPrefixes);
-        const key = (role === 'super') ? (t || '') : t;
-        if (groups[key]) groups[key].clients.push(c);
+        const team = resolveTeam(c.username, allPrefixes, pinsMap);
+        const key = (role === 'super') ? (team || '') : team;
+        if (groups[key]) {
+          const pinned = (key !== '' && prefixTeam(c.username, allPrefixes) !== key);
+          groups[key].clients.push(Object.assign({}, c, { pinned }));
+        }
       });
       const teams = Object.values(groups).map(g => ({ prefix: g.prefix, admin: g.admin, label: g.label, count: g.clients.length, clients: g.clients }));
       return ok(res, { teams, total: scoped.length, cached: !force });
@@ -982,6 +1015,52 @@ if (url === '/stats' && req.method === 'POST') {
       return error(res, 400, 'LaMix did not confirm deletion (HTTP ' + serverStatus + '). The client may still exist.');
     }
 
+    if (url === '/admin/pin-client' && req.method === 'POST') {
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      const role = await getRole(user.username);
+      if (!isAdminish(role)) return error(res, 403, 'Admins only');
+      if (!supaEnabled()) return error(res, 400, 'Supabase not configured');
+      const username = String(req.body.username || '').trim();
+      const prefix = String(req.body.prefix || '').trim();
+      if (!username || !prefix) return error(res, 400, 'username and prefix required');
+      const allPrefixes = await supaGetPrefixes();
+      if (!allPrefixes.some(p => p.prefix === prefix)) return error(res, 400, 'Unknown team prefix.');
+      if (role !== 'super') {
+        const myPrefixes = prefixesFor(role, user.username, allPrefixes);
+        if (!myPrefixes.some(p => p.prefix === prefix)) return error(res, 403, 'You can only pin users into your own team.');
+      }
+      const clients = await getCachedClients(false);
+      if (!clients.some(c => c.username.toLowerCase() === username.toLowerCase())) return error(res, 404, 'User not found in the panel.');
+      try {
+        await fetch(`${SUPABASE_URL}/rest/v1/client_team_pins`, { method: 'POST', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ username: username.toLowerCase(), prefix, pinned_by: user.username }) });
+        invalidatePins();
+        return ok(res, { message: username + ' pinned to ' + prefix });
+      } catch (e) { return error(res, 500, 'Failed to pin'); }
+    }
+    if (url === '/admin/unpin-client' && req.method === 'POST') {
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      const role = await getRole(user.username);
+      if (!isAdminish(role)) return error(res, 403, 'Admins only');
+      if (!supaEnabled()) return error(res, 400, 'Supabase not configured');
+      const username = String(req.body.username || '').trim().toLowerCase();
+      if (!username) return error(res, 400, 'username required');
+      const pinsMap = await getPinsMap();
+      const pin = pinsMap[username];
+      if (!pin) return error(res, 400, 'That user is not pinned.');
+      if (role !== 'super') {
+        const allPrefixes = await supaGetPrefixes();
+        const myPrefixes = prefixesFor(role, user.username, allPrefixes);
+        if (!myPrefixes.some(p => String(p.prefix).toLowerCase() === String(pin).toLowerCase())) return error(res, 403, 'You can only unpin users from your own team.');
+      }
+      try {
+        await fetch(`${SUPABASE_URL}/rest/v1/client_team_pins?username=eq.${encodeURIComponent(username)}`, { method: 'DELETE', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+        invalidatePins();
+        return ok(res, { message: username + ' unpinned' });
+      } catch (e) { return error(res, 500, 'Failed to unpin'); }
+    }
+
     if (url === '/admin/client-details' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
@@ -1054,15 +1133,15 @@ if (url === '/stats' && req.method === 'POST') {
       const todayRows = await getCachedCDR(bd.from, bd.to, force ? 0 : CDR_TTL_WIDE);
       const weekRows  = await getCachedCDR(dayBack(6) + ' 00:00:00', today + ' 23:59:59', force ? 0 : CDR_TTL_WIDE);
       const allPrefixes = await supaGetPrefixes();
-      const myPrefixes = prefixesFor(role, user.username, allPrefixes);
-      const teamOfClient = (cli) => { const un = String(cli || '').toLowerCase(); const sorted = allPrefixes.slice().sort((a, b) => (b.prefix || '').length - (a.prefix || '').length); for (const p of sorted) { if (p.prefix && un.indexOf(p.prefix.toLowerCase()) === 0) return p.prefix; } return ''; };
+      const pinsMap = await getPinsMap();
+      const teamOfClient = (cli) => resolveTeam(cli, allPrefixes, pinsMap);
       const tally = (rows) => { const m = {}; rows.forEach(r => { const k = teamOfClient(r.client) || '__none__'; m[k] = (m[k] || 0) + 1; }); return m; };
       const tToday = tally(todayRows), tWeek = tally(weekRows);
       const clients = await getCachedClients(false);
       const cCount = {}; clients.forEach(c => { const k = teamOfClient(c.username) || '__none__'; cCount[k] = (cCount[k] || 0) + 1; });
       const build = (p) => ({ prefix: p.prefix, admin: p.admin_username, label: p.label || '', otpToday: tToday[p.prefix] || 0, otpWeek: tWeek[p.prefix] || 0, clients: cCount[p.prefix] || 0 });
       let teams = myPrefixes.map(build);
-      if (role === 'super') teams.push({ prefix: '', admin: '—', label: 'Unassigned', otpToday: tToday['__none__'] || 0, otpWeek: tWeek['__none__'] || 0, clients: cCount['__none__'] || 0 });
+      if (role === 'super') teams.push({ prefix: '', admin: '—', label: 'System Generated', otpToday: tToday['__none__'] || 0, otpWeek: tWeek['__none__'] || 0, clients: cCount['__none__'] || 0 });
       teams.sort((a, b) => b.otpToday - a.otpToday);
       const hottest = (teams[0] && teams[0].otpToday > 0) ? teams[0] : null;
       return ok(res, { teams, hottest, date: today, cached: !force });
@@ -1116,7 +1195,8 @@ if (url === '/stats' && req.method === 'POST') {
       const dayBack = (n) => new Date(new Date(today + 'T00:00:00Z').getTime() - n * 86400000).toISOString().slice(0, 10);
       const rows = (period === 'weekly') ? await getCachedCDR(dayBack(6) + ' 00:00:00', today + ' 23:59:59', CDR_TTL_WIDE) : await getCachedCDR(bd.from, bd.to, CDR_TTL_WIDE);
       const allPrefixes = await supaGetPrefixes();
-      const teamOfClient = (cli) => { const un = String(cli || '').toLowerCase(); const sorted = allPrefixes.slice().sort((a, b) => (b.prefix || '').length - (a.prefix || '').length); for (const p of sorted) { if (p.prefix && un.indexOf(p.prefix.toLowerCase()) === 0) return p.prefix; } return ''; };
+      const pinsMap = await getPinsMap();
+      const teamOfClient = (cli) => resolveTeam(cli, allPrefixes, pinsMap);
       const otps = {}; rows.forEach(r => { const t = teamOfClient(r.client); if (t) otps[t] = (otps[t] || 0) + 1; });
       const target = Number(config.target_otps) || 0, topN = Number(config.top_n) || 5, reward = Number(config.reward_usd) || 0;
       const windowKey = (period === 'weekly') ? weekKey(today) : today;
