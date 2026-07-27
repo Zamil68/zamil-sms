@@ -624,6 +624,7 @@
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <input id="pfPrefix" type="text" placeholder="Prefix e.g. ZML_" style="flex:1;min-width:110px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:9px 11px;color:var(--text);font:inherit;font-size:.82rem;outline:none">
         <input id="pfAdmin" type="text" placeholder="admin username" style="flex:1;min-width:110px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:9px 11px;color:var(--text);font:inherit;font-size:.82rem;outline:none">
+        <input id="pfLabel" type="text" placeholder="Display name e.g. Zml / Alm" style="flex:1;min-width:130px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:9px 11px;color:var(--text);font:inherit;font-size:.82rem;outline:none">
         <button onclick="setPrefix()" style="font-size:.78rem;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;border-radius:9px;padding:9px 14px;cursor:pointer;white-space:nowrap">Assign</button>
       </div>
       <div id="pfMsg" style="font-size:.72rem;font-weight:700;margin-top:8px;display:none"></div>
@@ -1232,23 +1233,54 @@ window.zconfirm=function(msg,onYes,opts){
 
   /* ── Prefix manager (super) ── */
   function pfMsg(t,good){ var m=document.getElementById('pfMsg'); if(!m)return; m.style.display='block'; m.textContent=t; m.style.color=good?'var(--green)':'var(--red)'; }
+  var _pfList=[], _editingPrefix=null;
   window.loadPrefixes = function(){
     var box=document.getElementById('pfList'); if(!box) return;
     fetch('/api/admin/team-prefixes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:sess()})})
       .then(function(r){return r.json();}).then(function(d){
         if(!d||!d.ok){ box.innerHTML=''; return; }
-        var list=d.prefixes||[];
-        if(!list.length){ box.innerHTML='<div style="color:var(--muted);font-size:.74rem">No prefixes assigned yet.</div>'; return; }
-        box.innerHTML=list.map(function(p){
-          return '<div style="display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:9px 12px;margin-bottom:6px"><div style="flex:1;min-width:0"><div style="font-size:.82rem;font-weight:800;color:var(--text)">'+escH(p.prefix)+'*</div><div style="font-size:.62rem;color:var(--muted)">'+escH(p.admin_username)+(p.label?(' · '+escH(p.label)):'')+'</div></div><button onclick="delPrefix(\''+escH(p.prefix)+'\')" style="font-size:.68rem;font-weight:800;color:#f87171;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.25);border-radius:8px;padding:6px 10px;cursor:pointer">Remove</button></div>';
+        _pfList = d.prefixes||[];
+        if(!_pfList.length){ box.innerHTML='<div style="color:var(--muted);font-size:.74rem">No prefixes assigned yet.</div>'; return; }
+        box.innerHTML = _pfList.map(function(p,i){
+          var editing = (_editingPrefix === p.prefix);
+          var labelLine;
+          if(editing){
+            labelLine = '<div style="display:flex;gap:6px;align-items:center;margin-top:5px">'
+              +'<input id="pfEditInput" type="text" value="'+escH(p.label||'')+'" placeholder="Display name e.g. Zml / Alm" onkeydown="pfEditKey(event,'+i+')" style="flex:1;min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 9px;color:var(--text);font:inherit;font-size:.76rem;outline:none">'
+              +'<button onclick="savePrefixLabel('+i+')" style="font-size:.66rem;font-weight:800;color:#fff;background:var(--accent);border:0;border-radius:7px;padding:6px 9px;cursor:pointer">Save</button>'
+              +'<button onclick="cancelPrefixLabel()" style="font-size:.66rem;font-weight:800;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:6px 9px;cursor:pointer">✕</button>'
+              +'</div>';
+          } else {
+            var ln = p.label ? '<span style="color:var(--text);font-weight:700">'+escH(p.label)+'</span>' : '<span style="color:var(--muted);font-style:italic">no display name</span>';
+            labelLine = '<div style="display:flex;align-items:center;gap:8px;margin-top:4px;font-size:.72rem">'+ln+'<button onclick="editPrefixLabel('+i+')" title="Set / change the team display name" style="font-size:.64rem;font-weight:800;color:var(--accent);background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.25);border-radius:7px;padding:3px 8px;cursor:pointer">✏️ Name</button></div>';
+          }
+          return '<div style="display:flex;align-items:flex-start;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:9px 12px;margin-bottom:6px">'
+            +'<div style="flex:1;min-width:0">'
+            +'<div style="font-size:.82rem;font-weight:800;color:var(--text)">'+escH(p.prefix)+'* <span style="color:var(--muted);font-weight:600;font-size:.66rem">'+escH(p.admin_username)+'</span></div>'
+            +labelLine
+            +'</div>'
+            +'<button onclick="delPrefix(\''+escH(p.prefix)+'\')" style="flex-shrink:0;font-size:.68rem;font-weight:800;color:#f87171;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.25);border-radius:8px;padding:6px 10px;cursor:pointer">Remove</button>'
+            +'</div>';
         }).join('');
+        if(_editingPrefix){ var ei=document.getElementById('pfEditInput'); if(ei) ei.focus(); }
       }).catch(function(){ if(box) box.innerHTML=''; });
+  };
+  window.editPrefixLabel   = function(i){ _editingPrefix = (_pfList[i]&&_pfList[i].prefix)||null; loadPrefixes(); };
+  window.cancelPrefixLabel = function(){ _editingPrefix=null; loadPrefixes(); };
+  window.pfEditKey = function(e,i){ if(e.key==='Enter'){ e.preventDefault(); savePrefixLabel(i); } else if(e.key==='Escape'){ cancelPrefixLabel(); } };
+  window.savePrefixLabel = function(i){
+    var p=_pfList[i]; if(!p) return;
+    var inp=document.getElementById('pfEditInput'); var lbl=inp?(inp.value||'').trim():'';
+    fetch('/api/admin/set-prefix',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:sess(),prefix:p.prefix,admin:p.admin_username,label:lbl})})
+      .then(function(r){return r.json();}).then(function(d){ if(d&&d.ok){ _editingPrefix=null; pfMsg('Name saved for '+p.prefix, true); loadPrefixes(); } else pfMsg((d&&d.error)||'Failed', false); })
+      .catch(function(){ pfMsg('Connection error', false); });
   };
   window.setPrefix = function(){
     var pf=(document.getElementById('pfPrefix').value||'').trim(), ad=(document.getElementById('pfAdmin').value||'').trim();
+    var lbEl=document.getElementById('pfLabel'); var lb=lbEl?(lbEl.value||'').trim():'';
     if(!pf||!ad){ pfMsg('Enter prefix and admin username', false); return; }
-    fetch('/api/admin/set-prefix',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:sess(),prefix:pf,admin:ad})})
-      .then(function(r){return r.json();}).then(function(d){ if(d&&d.ok){ pfMsg('Assigned '+pf+' → '+ad, true); document.getElementById('pfPrefix').value=''; document.getElementById('pfAdmin').value=''; loadPrefixes(); } else pfMsg((d&&d.error)||'Failed', false); })
+    fetch('/api/admin/set-prefix',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:sess(),prefix:pf,admin:ad,label:lb})})
+      .then(function(r){return r.json();}).then(function(d){ if(d&&d.ok){ pfMsg('Assigned '+pf+' → '+ad+(lb?' ('+lb+')':''), true); document.getElementById('pfPrefix').value=''; document.getElementById('pfAdmin').value=''; if(lbEl) lbEl.value=''; loadPrefixes(); } else pfMsg((d&&d.error)||'Failed', false); })
       .catch(function(){ pfMsg('Connection error', false); });
   };
   window.delPrefix = function(pf){
