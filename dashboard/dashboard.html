@@ -716,6 +716,9 @@
       <button class="drw-item" id="drawerTeamBtn" style="display:none" onclick="closeDrawer();openTeamPage()">
       <span>👥</span><span>My Team</span>
     </button>
+      <button class="drw-item" id="drawerReportBtn" style="display:none" onclick="closeDrawer();openTeamReport()">
+      <span>📈</span><span>Team Report</span>
+    </button>
   </div>
   <div class="zdrawer-sec" style="border-top:1px solid var(--border)">
     <div class="zdrawer-sec-title">⚙️ Account</div>
@@ -1087,14 +1090,15 @@ window.zconfirm=function(msg,onYes,opts){
 </div>
 
 <script>
-/* ═══ TEAMS: prefix manager (super) + My Team list (admin+super) ═══ */
+/* ═══ TEAMS: prefixes + My Team list + CREATE + EDIT + DELETE ═══ */
 (function(){
   function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
   function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;').replace(/"/g,'&quot;'); }
   function sess(){ return localStorage.getItem('app_session'); }
+  var _editId='';
 
   /* ── My Team page ── */
-  window.openTeamPage  = function(){ var p=document.getElementById('teamPage'); if(p){ p.style.display='block'; window.scrollTo(0,0); loadMyClients(false); } };
+  window.openTeamPage  = function(){ var p=document.getElementById('teamPage'); if(p){ p.style.display='block'; window.scrollTo(0,0); ensureCreateCard(); loadMyClients(false); } };
   window.closeTeamPage = function(){ var p=document.getElementById('teamPage'); if(p) p.style.display='none'; };
   window.loadMyClients = function(force){
     var box=document.getElementById('teamList'); if(!box) return;
@@ -1117,7 +1121,12 @@ window.zconfirm=function(msg,onYes,opts){
       h+='<div id="tbody'+ti+'" style="display:none;border-top:1px solid var(--border);padding:4px 12px 8px">';
       if(!t.clients.length){ h+='<div style="padding:10px 2px;color:var(--muted);font-size:.76rem">No clients in this team yet.</div>'; }
       else t.clients.forEach(function(c){
-        h+='<div style="display:flex;align-items:center;gap:9px;padding:8px 2px;border-bottom:1px solid var(--border)"><div style="flex:1;min-width:0"><div style="font-size:.82rem;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escH(c.username)+'</div><div style="font-size:.62rem;color:var(--muted)">ID '+escH(c.id)+(c.name?(' · '+escH(c.name)):'')+'</div></div></div>';
+        h+='<div style="display:flex;align-items:center;gap:8px;padding:8px 2px;border-bottom:1px solid var(--border)">'
+          +'<div style="flex:1;min-width:0"><div style="font-size:.82rem;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escH(c.username)+'</div>'
+          +'<div style="font-size:.62rem;color:var(--muted)">ID '+escH(c.id)+(c.name?(' · '+escH(c.name)):'')+'</div></div>'
+          +'<button onclick="editClient(\''+escH(c.id)+'\',\''+escH(c.username)+'\')" title="Edit" style="flex-shrink:0;font-size:.72rem;font-weight:800;color:var(--accent);background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.25);border-radius:8px;padding:6px 9px;cursor:pointer">✏️</button>'
+          +'<button onclick="delClient(\''+escH(c.id)+'\',\''+escH(c.username)+'\')" title="Delete" style="flex-shrink:0;font-size:.72rem;font-weight:800;color:#f87171;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.25);border-radius:8px;padding:6px 9px;cursor:pointer">🗑</button>'
+          +'</div>';
       });
       h+='</div></div>';
     });
@@ -1125,7 +1134,103 @@ window.zconfirm=function(msg,onYes,opts){
   }
   window.toggleTeam=function(ti){ var b=document.getElementById('tbody'+ti), ch=document.getElementById('tchev'+ti); if(!b)return; var open=b.style.display==='block'; b.style.display=open?'none':'block'; if(ch)ch.style.transform=open?'':'rotate(180deg)'; };
 
-  /* ── Prefix manager (super) — lives inside Admin Control page ── */
+  /* ── EDIT client (pre-reads current details so nothing gets wiped) ── */
+  window.editClient = function(id, username){
+    _editId=id;
+    var m=document.getElementById('editClientModal'); if(!m) return;
+    m.classList.add('shr-open');
+    var msg=document.getElementById('ecMsg'); if(msg){ msg.style.display='none'; msg.textContent=''; }
+    ['ecPass','ecName','ecContact','ecEmail','ecCountry'].forEach(function(i){ var e=document.getElementById(i); if(e) e.value=''; });
+    document.getElementById('ecUser').value=username+'  (loading…)';
+    var btn=document.getElementById('ecBtn'); if(btn){ btn.disabled=true; btn.textContent='Loading…'; }
+    fetch('/api/admin/client-details',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:sess(),clientId:id})})
+      .then(function(r){return r.json();}).then(function(d){
+        if(btn){ btn.disabled=false; btn.textContent='Save Changes'; }
+        if(!d||!d.ok){ if(msg){ msg.style.display='block'; msg.style.color='var(--red)'; msg.textContent=(d&&d.error)||'Could not load details'; } return; }
+        document.getElementById('ecUser').value=d.username;
+        document.getElementById('ecName').value=d.name||'';
+        document.getElementById('ecContact').value=d.contact||'';
+        document.getElementById('ecEmail').value=d.email||'';
+        document.getElementById('ecCountry').value=d.country||'Pakistan';
+        var ac=document.getElementById('ecActive'); if(ac) ac.checked=(d.active!==false);
+      }).catch(function(){ if(btn){ btn.disabled=false; btn.textContent='Save Changes'; } if(msg){ msg.style.display='block'; msg.style.color='var(--red)'; msg.textContent='Connection error'; } });
+  };
+  window.closeEditClient = function(){ var m=document.getElementById('editClientModal'); if(m) m.classList.remove('shr-open'); };
+  window.submitEditClient = function(){
+    var msg=document.getElementById('ecMsg');
+    function show(t,good){ if(msg){ msg.style.display='block'; msg.textContent=t; msg.style.color=good?'var(--green)':'var(--red)'; } }
+    var btn=document.getElementById('ecBtn'); if(btn){ btn.disabled=true; btn.textContent='Saving…'; }
+    fetch('/api/admin/edit-client',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      session:sess(), clientId:_editId,
+      username:document.getElementById('ecUser').value.replace(/\s*\(loading…\)$/,'').trim(),
+      password:document.getElementById('ecPass').value,
+      name:document.getElementById('ecName').value, contact:document.getElementById('ecContact').value,
+      email:document.getElementById('ecEmail').value, country:document.getElementById('ecCountry').value||'Pakistan',
+      active:document.getElementById('ecActive').checked
+    })})
+      .then(function(r){return r.json();}).then(function(d){
+        if(btn){ btn.disabled=false; btn.textContent='Save Changes'; }
+        if(d&&d.ok){ show('✅ '+d.message, true); if(typeof showToast==='function') showToast('✅ '+d.message,'success'); setTimeout(closeEditClient, 900); loadMyClients(true); }
+        else show((d&&d.error)||'Update failed', false);
+      }).catch(function(){ if(btn){ btn.disabled=false; btn.textContent='Save Changes'; } show('Connection error', false); });
+  };
+
+  /* ── CREATE card ── */
+  function ensureCreateCard(){
+    if(document.getElementById('teamCreateCard')) { loadPrefixOptions(); return; }
+    var list=document.getElementById('teamList'); if(!list) return;
+    var html='<div id="teamCreateCard" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px">'
+      +'<div style="font-size:.8rem;font-weight:800;margin-bottom:10px">➕ Create a new ID</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'
+      +'<select id="tcPrefix" style="flex:1;min-width:120px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:9px 11px;color:var(--text);font:inherit;font-size:.82rem;outline:none"><option value="">Loading prefixes…</option></select>'
+      +'<input id="tcSuffix" type="text" placeholder="Suffix e.g. Bilal" style="flex:1;min-width:120px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:9px 11px;color:var(--text);font:inherit;font-size:.82rem;outline:none"></div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'
+      +'<input id="tcPass" type="text" placeholder="Password (blank = same as ID)" style="flex:1;min-width:120px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:9px 11px;color:var(--text);font:inherit;font-size:.82rem;outline:none">'
+      +'<input id="tcName" type="text" placeholder="Display name (optional)" style="flex:1;min-width:120px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:9px 11px;color:var(--text);font:inherit;font-size:.82rem;outline:none"></div>'
+      +'<div style="font-size:.6rem;color:var(--muted);margin-bottom:8px;line-height:1.4">Full ID = prefix + suffix · 6–15 chars · country auto = Pakistan · password defaults to the full ID.</div>'
+      +'<button id="tcBtn" onclick="createClient()" style="font-size:.78rem;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;border-radius:9px;padding:9px 16px;cursor:pointer">➕ Create ID</button>'
+      +'<div id="tcMsg" style="font-size:.72rem;font-weight:700;margin-top:8px;display:none"></div></div>';
+    list.insertAdjacentHTML('beforebegin', html);
+    loadPrefixOptions();
+  }
+  function loadPrefixOptions(){
+    var sel=document.getElementById('tcPrefix'); if(!sel) return;
+    fetch('/api/admin/team-prefixes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:sess()})})
+      .then(function(r){return r.json();}).then(function(d){
+        var list=(d&&d.prefixes)||[];
+        if(!list.length){ sel.innerHTML='<option value="">No prefixes — ask super admin</option>'; return; }
+        sel.innerHTML=list.map(function(p){ return '<option value="'+escH(p.prefix)+'">'+escH(p.prefix)+' ('+escH(p.admin_username)+')</option>'; }).join('');
+        if(list.length===1) sel.value=list[0].prefix;
+      }).catch(function(){ sel.innerHTML='<option value="">Failed to load</option>'; });
+  }
+  window.createClient = function(){
+    var pfEl=document.getElementById('tcPrefix'); var prefix=pfEl?pfEl.value:'';
+    var suffix=(document.getElementById('tcSuffix').value||'').trim();
+    var pass=(document.getElementById('tcPass').value||'').trim();
+    var name=(document.getElementById('tcName').value||'').trim();
+    var msgEl=document.getElementById('tcMsg');
+    function m(t,good){ if(msgEl){ msgEl.style.display='block'; msgEl.textContent=t; msgEl.style.color=good?'var(--green)':'var(--red)'; } }
+    if(!prefix){ m('Select a team prefix', false); return; }
+    if(!suffix){ m('Enter a suffix (e.g. Bilal)', false); return; }
+    var btn=document.getElementById('tcBtn'); if(btn){ btn.disabled=true; btn.textContent='Creating…'; }
+    fetch('/api/admin/create-client',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:sess(),prefix:prefix,suffix:suffix,password:pass,name:name})})
+      .then(function(r){return r.json();}).then(function(d){
+        if(btn){ btn.disabled=false; btn.textContent='➕ Create ID'; }
+        if(d&&d.ok){ m('✅ Created '+d.username+(d.clientId?' (ID '+d.clientId+')':''), true); document.getElementById('tcSuffix').value=''; document.getElementById('tcPass').value=''; document.getElementById('tcName').value=''; if(typeof showToast==='function') showToast('✅ Created '+d.username,'success'); loadMyClients(true); }
+        else m((d&&d.error)||'Failed', false);
+      }).catch(function(){ if(btn){ btn.disabled=false; btn.textContent='➕ Create ID'; } m('Connection error', false); });
+  };
+  window.delClient = function(id, username){
+    zconfirm('Delete <b>'+escH(username)+'</b>?<br><span style="font-size:.74rem;color:var(--muted);font-weight:600">This removes the client from the LaMix panel. This cannot be undone.</span>', function(){
+      fetch('/api/admin/delete-client',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:sess(),clientId:id,username:username})})
+        .then(function(r){return r.json();}).then(function(d){
+          if(d&&d.ok){ if(typeof showToast==='function') showToast('🗑 Deleted '+username,'success'); loadMyClients(true); }
+          else if(typeof showToast==='function') showToast((d&&d.error)||'Delete failed','error');
+        }).catch(function(){ if(typeof showToast==='function') showToast('Connection error','error'); });
+    }, {icon:'🗑', yesText:'Delete'});
+  };
+
+  /* ── Prefix manager (super) ── */
   function pfMsg(t,good){ var m=document.getElementById('pfMsg'); if(!m)return; m.style.display='block'; m.textContent=t; m.style.color=good?'var(--green)':'var(--red)'; }
   window.loadPrefixes = function(){
     var box=document.getElementById('pfList'); if(!box) return;
@@ -1154,18 +1259,102 @@ window.zconfirm=function(msg,onYes,opts){
     }, {icon:'🏷️', yesText:'Remove'});
   };
 
-  /* ── gate the drawer item (admin + super); load prefixes when Admin Control opens ── */
   function gate(){
     try{ var s=sess(); if(!s)return;
       fetch('/api/auth/role',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:s})})
         .then(function(r){return r.json();}).then(function(d){ var b=document.getElementById('drawerTeamBtn'); if(b) b.style.display=(d&&d.ok&&(d.role==='super'||d.role==='admin'))?'flex':'none'; }).catch(function(){});
     }catch(e){}
   }
-  // hook prefix loading into the existing Admin Control open
   ready(function(){
     gate();
     if(typeof window.openAdminPage==='function'){ var _oa=window.openAdminPage; window.openAdminPage=function(){ var r=_oa.apply(this,arguments); try{ loadPrefixes(); }catch(e){} return r; }; }
   });
+})();
+</script>
+
+<!-- ═══ EDIT CLIENT MODAL ═══ -->
+<div id="editClientModal" class="shr-overlay" onclick="if(event.target===this)closeEditClient()">
+  <div class="shr-box" style="max-width:420px">
+    <div class="shr-header"><div class="shr-title">✏️ Edit Client</div><button class="shr-close" onclick="closeEditClient()">✕</button></div>
+    <div class="shr-body">
+      <div class="alloc-field"><label>Username (locked)</label><input id="ecUser" class="alloc-input" disabled></div>
+      <div class="alloc-field"><label>New Password (blank = no change)</label><input id="ecPass" type="text" class="alloc-input" placeholder="Only fill to change password"></div>
+      <div class="alloc-field"><label>Display Name</label><input id="ecName" class="alloc-input"></div>
+      <div class="alloc-field"><label>Contact No.</label><input id="ecContact" class="alloc-input"></div>
+      <div class="alloc-field"><label>Email</label><input id="ecEmail" class="alloc-input"></div>
+      <div class="alloc-field"><label>Country</label><input id="ecCountry" class="alloc-input" value="Pakistan"></div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:.8rem;font-weight:700;color:var(--text);margin:6px 0 10px"><input id="ecActive" type="checkbox" checked> Active</label>
+      <div id="ecMsg" style="display:none;font-size:.74rem;font-weight:700;margin-bottom:10px"></div>
+      <button id="ecBtn" class="btn btn-primary" onclick="submitEditClient()" style="width:100%">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TEAM REPORT PAGE (admin + super) ═══ -->
+<div id="teamReportPage" style="display:none;position:fixed;inset:0;z-index:600;background:var(--bg);overflow-y:auto">
+  <div style="max-width:560px;margin:0 auto;padding:14px 14px 40px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <button onclick="closeTeamReport()" style="width:34px;height:34px;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:1rem">←</button>
+      <div style="flex:1;min-width:0"><div style="font-size:1.05rem;font-weight:800">📈 Team OTP Report</div><div style="font-size:.66rem;color:var(--muted)" id="trSub">Daily & weekly OTPs per team</div></div>
+      <button onclick="copyTeamReport()" style="font-size:.72rem;font-weight:800;color:var(--text);background:var(--surface);border:1px solid var(--border);padding:9px 11px;border-radius:9px;cursor:pointer;white-space:nowrap">📋 Copy</button>
+      <button onclick="loadTeamReport(true)" style="font-size:.74rem;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;padding:9px 12px;border-radius:9px;cursor:pointer">↻</button>
+    </div>
+    <div id="trHot" style="display:none;margin-bottom:12px"></div>
+    <div id="trList"></div>
+  </div>
+</div>
+
+<script>
+/* ═══ TEAM REPORT (admin + super) — daily/weekly OTPs per team + copy ═══ */
+(function(){
+  function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
+  function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function sess(){ return localStorage.getItem('app_session'); }
+  var _trData=null;
+  window.openTeamReport  = function(){ var p=document.getElementById('teamReportPage'); if(p){ p.style.display='block'; window.scrollTo(0,0); loadTeamReport(false); } };
+  window.closeTeamReport = function(){ var p=document.getElementById('teamReportPage'); if(p) p.style.display='none'; };
+  window.loadTeamReport = function(force){
+    var box=document.getElementById('trList'); if(box) box.innerHTML='<div style="text-align:center;color:var(--muted);padding:18px"><div class="spinner" style="width:22px;height:22px;margin:0 auto 8px"></div>Crunching team OTPs…</div>';
+    fetch('/api/admin/team-report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:sess(),force:!!force})})
+      .then(function(r){return r.json();}).then(function(d){
+        if(!d||!d.ok){ if(box) box.innerHTML='<div style="color:var(--red);padding:14px;text-align:center">'+((d&&d.error)||'Failed')+'</div>'; return; }
+        _trData=d; renderReport(d);
+      }).catch(function(){ if(box) box.innerHTML='<div style="color:var(--red);padding:14px;text-align:center">Connection error</div>'; });
+  };
+  function renderReport(d){
+    var sub=document.getElementById('trSub'); if(sub) sub.textContent=(d.date||'')+' · '+(d.cached?'cached':'fresh');
+    var hot=document.getElementById('trHot');
+    if(hot){ if(d.hottest){ hot.style.display='block'; hot.innerHTML='<div style="background:linear-gradient(135deg,rgba(245,158,11,.14),rgba(239,68,68,.12));border:1px solid rgba(245,158,11,.3);border-radius:12px;padding:12px 14px;font-size:.82rem;font-weight:700;color:var(--text)">🔥 Hottest team today: <b>'+(escH(d.hottest.prefix)||'Unassigned')+'</b> · '+d.hottest.otpToday+' OTPs</div>'; } else hot.style.display='none'; }
+    var box=document.getElementById('trList'); if(!box) return;
+    var teams=d.teams||[]; if(!teams.length){ box.innerHTML='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;text-align:center;color:var(--muted)">No teams yet.</div>'; return; }
+    var max=Math.max(1, teams.reduce(function(m,t){ return Math.max(m, t.otpToday||0); }, 0));
+    var h='';
+    teams.forEach(function(t){
+      var pct=Math.round(((t.otpToday||0)/max)*100);
+      var title=t.prefix?(escH(t.prefix)+'*'):'<span style="color:var(--muted)">Unassigned</span>';
+      h+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:8px">'
+        +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="flex:1;min-width:0;font-size:.86rem;font-weight:800;color:var(--text)">'+title+(t.admin&&t.admin!=='—'?' <span style="color:var(--muted);font-weight:600;font-size:.66rem">'+escH(t.admin)+'</span>':'')+'</div>'
+        +'<div style="text-align:right"><div style="font-size:1.2rem;font-weight:900;color:var(--accent);line-height:1">'+(t.otpToday||0)+'</div><div style="font-size:.55rem;color:var(--muted)">today</div></div></div>'
+        +'<div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:8px"><div style="height:5px;width:'+pct+'%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:3px"></div></div>'
+        +'<div style="display:flex;gap:14px;font-size:.66rem;color:var(--muted);font-weight:700"><span>🗓️ week: <b style="color:var(--text)">'+(t.otpWeek||0)+'</b></span><span>👥 clients: <b style="color:var(--text)">'+(t.clients||0)+'</b></span></div>'
+        +'</div>';
+    });
+    box.innerHTML=h;
+  }
+  window.copyTeamReport = function(){
+    if(!_trData||!_trData.teams){ if(typeof showToast==='function') showToast('Load the report first','error'); return; }
+    var lines=['📈 Zamil SMS — Team OTP Report ('+(_trData.date||'')+')',''];
+    _trData.teams.forEach(function(t){ lines.push((t.prefix||'Unassigned')+' ('+t.admin+'):  today '+(t.otpToday||0)+' · week '+(t.otpWeek||0)+' · clients '+(t.clients||0)); });
+    if(_trData.hottest) lines.push('', '🔥 Hottest today: '+(_trData.hottest.prefix||'Unassigned')+' ('+_trData.hottest.otpToday+' OTPs)');
+    try{ navigator.clipboard&&navigator.clipboard.writeText(lines.join('\n')); if(typeof showToast==='function') showToast('Team report copied ✓','success'); }catch(e){}
+  };
+  function gate(){
+    try{ var s=sess(); if(!s)return;
+      fetch('/api/auth/role',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:s})})
+        .then(function(r){return r.json();}).then(function(d){ var b=document.getElementById('drawerReportBtn'); if(b) b.style.display=(d&&d.ok&&(d.role==='super'||d.role==='admin'))?'flex':'none'; }).catch(function(){});
+    }catch(e){}
+  }
+  ready(gate);
 })();
 </script>
     
