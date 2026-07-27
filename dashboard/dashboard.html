@@ -1099,7 +1099,7 @@ window.zconfirm=function(msg,onYes,opts){
   var _editId='';
 
   /* ── My Team page ── */
-  window.openTeamPage  = function(){ var p=document.getElementById('teamPage'); if(p){ p.style.display='block'; window.scrollTo(0,0); ensureCreateCard(); loadMyClients(false); } };
+  window.openTeamPage  = function(){ var p=document.getElementById('teamPage'); if(p){ p.style.display='block'; window.scrollTo(0,0); ensureCreateCard(); ensurePinCard(); loadMyClients(false); } };
   window.closeTeamPage = function(){ var p=document.getElementById('teamPage'); if(p) p.style.display='none'; };
   window.loadMyClients = function(force){
     var box=document.getElementById('teamList'); if(!box) return;
@@ -1116,15 +1116,18 @@ window.zconfirm=function(msg,onYes,opts){
     if(!teams.length){ box.innerHTML='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;text-align:center;color:var(--muted)">No team prefixes yet. A super admin must assign one first.</div>'; return; }
     var h='';
     teams.forEach(function(t,ti){
-      var head = t.prefix ? (escH(t.prefix)+'*  '+(t.label?'<span style="color:var(--muted);font-weight:600">'+escH(t.label)+'</span> · ':'')+'<span style="color:var(--muted);font-weight:600">'+escH(t.admin)+'</span>') : '<span style="color:var(--muted)">Unassigned</span>';
+      var head = t.prefix ? (escH(t.prefix)+'*  '+(t.label?'<span style="color:var(--muted);font-weight:600">'+escH(t.label)+'</span> · ':'')+'<span style="color:var(--muted);font-weight:600">'+escH(t.admin)+'</span>') : '<span style="color:var(--muted)">'+escH(t.label||'System Generated'))+'</span>';
       h+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:8px;overflow:hidden">';
       h+='<div onclick="toggleTeam('+ti+')" style="display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer"><div style="flex:1;min-width:0;font-size:.86rem;font-weight:800;color:var(--text)">'+head+'</div><span style="font-size:.72rem;font-weight:800;color:var(--accent)">'+t.count+'</span><span id="tchev'+ti+'" style="color:var(--muted);transition:transform .2s">▾</span></div>';
       h+='<div id="tbody'+ti+'" style="display:none;border-top:1px solid var(--border);padding:4px 12px 8px">';
       if(!t.clients.length){ h+='<div style="padding:10px 2px;color:var(--muted);font-size:.76rem">No clients in this team yet.</div>'; }
       else t.clients.forEach(function(c){
-        h+='<div style="display:flex;align-items:center;gap:8px;padding:8px 2px;border-bottom:1px solid var(--border)">'
-          +'<div style="flex:1;min-width:0"><div style="font-size:.82rem;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escH(c.username)+'</div>'
+        var pinned=!!c.pinned; var inSys=!t.prefix;
+        h+='<div style="display:flex;align-items:center;gap:7px;padding:8px 2px;border-bottom:1px solid var(--border)">'
+          +'<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:.82rem;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escH(c.username)+'</span>'+(pinned?'<span style="font-size:.55rem;font-weight:800;color:var(--accent);background:rgba(34,211,238,.12);border:1px solid rgba(34,211,238,.25);border-radius:20px;padding:1px 7px;white-space:nowrap">📌 pinned</span>':'')+'</div>'
           +'<div style="font-size:.62rem;color:var(--muted)">ID '+escH(c.id)+(c.name?(' · '+escH(c.name)):'')+'</div></div>'
+          +(pinned?'<button onclick="unpinClient(\''+escH(c.username)+'\')" title="Unpin from this team" style="flex-shrink:0;font-size:.64rem;font-weight:800;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 8px;cursor:pointer">📌✕</button>':'')
+          +(inSys?'<button onclick="prefillPin(\''+escH(c.username)+'\')" title="Pin to a team" style="flex-shrink:0;font-size:.64rem;font-weight:800;color:var(--accent);background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.25);border-radius:8px;padding:6px 8px;cursor:pointer">📌</button>':'')
           +'<button onclick="editClient(\''+escH(c.id)+'\',\''+escH(c.username)+'\')" title="Edit" style="flex-shrink:0;font-size:.72rem;font-weight:800;color:var(--accent);background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.25);border-radius:8px;padding:6px 9px;cursor:pointer">✏️</button>'
           +'<button onclick="delClient(\''+escH(c.id)+'\',\''+escH(c.username)+'\')" title="Delete" style="flex-shrink:0;font-size:.72rem;font-weight:800;color:#f87171;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.25);border-radius:8px;padding:6px 9px;cursor:pointer">🗑</button>'
           +'</div>';
@@ -1284,7 +1287,7 @@ window.zconfirm=function(msg,onYes,opts){
       .catch(function(){ pfMsg('Connection error', false); });
   };
   window.delPrefix = function(pf){
-    zconfirm('Remove prefix <b>'+escH(pf)+'</b>?<br><span style="font-size:.74rem;color:var(--muted);font-weight:600">Existing clients keep their names; they just become unassigned.</span>', function(){
+    zconfirm('Remove prefix <b>'+escH(pf)+'</b>?<br><span style="font-size:.74rem;color:var(--muted);font-weight:600">Existing clients keep their names; they just become System Generated.</span>', function(){
       fetch('/api/admin/del-prefix',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:sess(),prefix:pf})})
         .then(function(r){return r.json();}).then(function(d){ if(d&&d.ok){ pfMsg('Removed '+pf, true); loadPrefixes(); } else pfMsg((d&&d.error)||'Failed', false); })
         .catch(function(){ pfMsg('Connection error', false); });
@@ -1356,14 +1359,14 @@ window.zconfirm=function(msg,onYes,opts){
   function renderReport(d){
     var sub=document.getElementById('trSub'); if(sub) sub.textContent=(d.date||'')+' · '+(d.cached?'cached':'fresh');
     var hot=document.getElementById('trHot');
-    if(hot){ if(d.hottest){ hot.style.display='block'; hot.innerHTML='<div style="background:linear-gradient(135deg,rgba(245,158,11,.14),rgba(239,68,68,.12));border:1px solid rgba(245,158,11,.3);border-radius:12px;padding:12px 14px;font-size:.82rem;font-weight:700;color:var(--text)">🔥 Hottest team today: <b>'+(escH(d.hottest.prefix)||'Unassigned')+'</b> · '+d.hottest.otpToday+' OTPs</div>'; } else hot.style.display='none'; }
+    if(hot){ if(d.hottest){ hot.style.display='block'; hot.innerHTML='<div style="background:linear-gradient(135deg,rgba(245,158,11,.14),rgba(239,68,68,.12));border:1px solid rgba(245,158,11,.3);border-radius:12px;padding:12px 14px;font-size:.82rem;font-weight:700;color:var(--text)">🔥 Hottest team today: <b>'+(escH(d.hottest.prefix)||'System Generated')+'</b> · '+d.hottest.otpToday+' OTPs</div>'; } else hot.style.display='none'; }
     var box=document.getElementById('trList'); if(!box) return;
     var teams=d.teams||[]; if(!teams.length){ box.innerHTML='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;text-align:center;color:var(--muted)">No teams yet.</div>'; return; }
     var max=Math.max(1, teams.reduce(function(m,t){ return Math.max(m, t.otpToday||0); }, 0));
     var h='';
     teams.forEach(function(t){
       var pct=Math.round(((t.otpToday||0)/max)*100);
-      var title=t.prefix?(escH(t.prefix)+'*'):'<span style="color:var(--muted)">Unassigned</span>';
+      var title=t.prefix?(escH(t.prefix)+'*'):'<span style="color:var(--muted)">'+escH(t.label||'System Generated')+'</span>';
       h+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:8px">'
         +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="flex:1;min-width:0;font-size:.86rem;font-weight:800;color:var(--text)">'+title+(t.admin&&t.admin!=='—'?' <span style="color:var(--muted);font-weight:600;font-size:.66rem">'+escH(t.admin)+'</span>':'')+'</div>'
         +'<div style="text-align:right"><div style="font-size:1.2rem;font-weight:900;color:var(--accent);line-height:1">'+(t.otpToday||0)+'</div><div style="font-size:.55rem;color:var(--muted)">today</div></div></div>'
@@ -1373,11 +1376,11 @@ window.zconfirm=function(msg,onYes,opts){
     });
     box.innerHTML=h;
   }
-  window.copyTeamReport = function(){
+window.copyTeamReport = function(){
     if(!_trData||!_trData.teams){ if(typeof showToast==='function') showToast('Load the report first','error'); return; }
     var lines=['📈 Zamil SMS — Team OTP Report ('+(_trData.date||'')+')',''];
-    _trData.teams.forEach(function(t){ lines.push((t.prefix||'Unassigned')+' ('+t.admin+'):  today '+(t.otpToday||0)+' · week '+(t.otpWeek||0)+' · clients '+(t.clients||0)); });
-    if(_trData.hottest) lines.push('', '🔥 Hottest today: '+(_trData.hottest.prefix||'Unassigned')+' ('+_trData.hottest.otpToday+' OTPs)');
+    _trData.teams.forEach(function(t){ lines.push((t.prefix||t.label||'System Generated')+' ('+t.admin+'):  today '+(t.otpToday||0)+' · week '+(t.otpWeek||0)+' · clients '+(t.clients||0)); });
+    if(_trData.hottest) lines.push('', '🔥 Hottest today: '+(_trData.hottest.prefix||_trData.hottest.label||'System Generated')+' ('+_trData.hottest.otpToday+' OTPs)');
     try{ navigator.clipboard&&navigator.clipboard.writeText(lines.join('\n')); if(typeof showToast==='function') showToast('Team report copied ✓','success'); }catch(e){}
   };
   function gate(){
@@ -1465,6 +1468,49 @@ window.zconfirm=function(msg,onYes,opts){
       }).catch(function(){ slot.innerHTML=''; });
   };
 
+    /* ── PIN existing users into a team ── */
+  function ensurePinCard(){
+    if(document.getElementById('teamPinCard')) { loadPinOptions(); return; }
+    var list=document.getElementById('teamList'); if(!list) return;
+    var html='<div id="teamPinCard" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px">'
+      +'<div style="font-size:.8rem;font-weight:800;margin-bottom:4px">📌 Pin an existing user to a team</div>'
+      +'<div style="font-size:.62rem;color:var(--muted);margin-bottom:10px;line-height:1.4">For users whose name does NOT start with a team prefix (e.g. <b>Muzammil_Aziz</b>) — pin them into the right team so their numbers & OTPs count there.</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+      +'<select id="pinPrefix" style="flex:1;min-width:120px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:9px 11px;color:var(--text);font:inherit;font-size:.82rem;outline:none"><option value="">Loading teams…</option></select>'
+      +'<input id="pinUser" type="text" placeholder="Exact username e.g. Muzammil_Aziz" style="flex:1.4;min-width:150px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:9px 11px;color:var(--text);font:inherit;font-size:.82rem;outline:none">'
+      +'<button onclick="pinClient()" style="font-size:.78rem;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;border-radius:9px;padding:9px 16px;cursor:pointer;white-space:nowrap">📌 Pin</button></div>'
+      +'<div id="pinMsg" style="font-size:.72rem;font-weight:700;margin-top:8px;display:none"></div></div>';
+    list.insertAdjacentHTML('beforebegin', html);
+    loadPinOptions();
+  }
+  function loadPinOptions(){
+    var sel=document.getElementById('pinPrefix'); if(!sel) return;
+    fetch('/api/admin/team-prefixes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:sess()})})
+      .then(function(r){return r.json();}).then(function(d){
+        var list=(d&&d.prefixes)||[];
+        if(!list.length){ sel.innerHTML='<option value="">No teams — assign a prefix first</option>'; return; }
+        sel.innerHTML=list.map(function(p){ return '<option value="'+escH(p.prefix)+'">'+escH(p.prefix)+(p.label?' ('+escH(p.label)+')':'')+' · '+escH(p.admin_username)+'</option>'; }).join('');
+      }).catch(function(){ sel.innerHTML='<option value="">Failed to load</option>'; });
+  }
+  window.pinClient=function(){
+    var sel=document.getElementById('pinPrefix'); var inp=document.getElementById('pinUser'); var msg=document.getElementById('pinMsg');
+    function m(t,good){ if(msg){ msg.style.display='block'; msg.textContent=t; msg.style.color=good?'var(--green)':'var(--red)'; } }
+    var prefix=sel?sel.value:''; var username=inp?inp.value.trim():'';
+    if(!prefix){ m('Select a team', false); return; }
+    if(!username){ m('Enter the exact username', false); return; }
+    fetch('/api/admin/pin-client',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:sess(),username:username,prefix:prefix})})
+      .then(function(r){return r.json();}).then(function(d){ if(d&&d.ok){ m('✅ '+username+' pinned to '+prefix, true); if(inp) inp.value=''; if(typeof showToast==='function') showToast('📌 Pinned '+username,'success'); loadMyClients(true); } else m((d&&d.error)||'Failed', false); })
+      .catch(function(){ m('Connection error', false); });
+  };
+  window.unpinClient=function(username){
+    zconfirm('Unpin <b>'+escH(username)+'</b> from this team?<br><span style="font-size:.74rem;color:var(--muted);font-weight:600">They move back to System Generated (or their natural prefix team).</span>', function(){
+      fetch('/api/admin/unpin-client',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:sess(),username:username})})
+        .then(function(r){return r.json();}).then(function(d){ if(d&&d.ok){ if(typeof showToast==='function') showToast('Unpinned '+username,'success'); loadMyClients(true); } else if(typeof showToast==='function') showToast((d&&d.error)||'Unpin failed','error'); })
+        .catch(function(){ if(typeof showToast==='function') showToast('Connection error','error'); });
+    }, {icon:'📌', yesText:'Unpin'});
+  };
+  window.prefillPin=function(u){ var i=document.getElementById('pinUser'); if(i){ i.value=u; i.focus(); var c=document.getElementById('teamPinCard'); if(c) c.scrollIntoView({behavior:'smooth',block:'center'}); } };
+    
   ready(function(){
     if(typeof window.openAdminPage==='function' && !window.openAdminPage._bw){ var _oa=window.openAdminPage; window.openAdminPage=function(){ var r=_oa.apply(this,arguments); try{ renderTargetCard(); }catch(e){} return r; }; window.openAdminPage._bw=1; }
     if(typeof window.openTeamReport==='function' && !window.openTeamReport._bw){ var _otr=window.openTeamReport; window.openTeamReport=function(){ var r=_otr.apply(this,arguments); try{ loadTeamBonus(); }catch(e){} return r; }; window.openTeamReport._bw=1; }
