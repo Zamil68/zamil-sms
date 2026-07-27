@@ -439,8 +439,18 @@ async function getCachedClients(force) {
   let list = [];
   if (data && data.aaData) {
     list = data.aaData.map(c => {
-      const idMatch = (c[0] || '').match(/value=["'](\d+)["']/);
-      return { id: idMatch ? idMatch[1] : (c[1] || '0'), username: (c[1] || '').replace(/<[^>]*>/g, '').trim(), name: (c[2] || '').replace(/<[^>]*>/g, '').trim(), panelNum: 1 };
+      const rowHtml = (c || []).join(' ');
+      const idMatch   = String(c[0] || '').match(/value=["']?(\d+)["']?/);
+      const eidMatch  = rowHtml.match(/action=remove&(?:amp;)?eid=([^\s"'&<>]+)/);
+      const editMatch = rowHtml.match(/id=["']edit["'][^>]*?info=["']([^"']+)["']/) || rowHtml.match(/info=["']([^"']+)["'][^>]*?id=["']edit["']/);
+      return {
+        id: idMatch ? idMatch[1] : String(c[1] || '0'),
+        username: String(c[1] || '').replace(/<[^>]*>/g, '').trim(),
+        name: String(c[2] || '').replace(/<[^>]*>/g, '').trim(),
+        removeEid: eidMatch ? decodeURIComponent(eidMatch[1]) : '',
+        editInfo: editMatch ? editMatch[1] : '',
+        panelNum: 1
+      };
     }).filter(c => c.username);
   }
   _clientsCache = { ts: Date.now(), data: list };
@@ -937,36 +947,118 @@ if (url === '/stats' && req.method === 'POST') {
       if (!user) return error(res, 401, 'Unauthorized');
       const role = await getRole(user.username);
       if (!isAdminish(role)) return error(res, 403, 'Admins only');
-
       const clientId = String(req.body.clientId || '').trim();
       const targetUsername = String(req.body.username || '').trim();
       const before = await getCachedClients(true);
       let target = clientId ? before.find(c => String(c.id) === clientId) : null;
       if (!target && targetUsername) target = before.find(c => c.username.toLowerCase() === targetUsername.toLowerCase());
       if (!target) return error(res, 404, 'Client not found.');
-
       if (role !== 'super') {
         const myPrefixes = prefixesFor(role, user.username, await supaGetPrefixes());
-        if (!myPrefixes.some(p => p.prefix && target.username.indexOf(p.prefix) === 0)) {
-          return error(res, 403, 'You can only delete clients in your own team.');
-        }
+        if (!myPrefixes.some(p => p.prefix && target.username.indexOf(p.prefix) === 0)) return error(res, 403, 'You can only delete clients in your own team.');
       }
-
+      // eid = scraped server token if present, else base64(username) (the panel's encoding)
+      let eid = target.removeEid || '';
+      if (!eid) { try { eid = Buffer.from(target.username, 'utf8').toString('base64'); } catch (e) { eid = ''; } }
+      if (!eid) return error(res, 400, 'Could not build delete token for this client.');
       await ensureAgentSession();
-      const body = 'cbarr%5B%5D=' + encodeURIComponent(target.id);
+      const doReq = () => axios.get(AGENT_BASE_URL + 'Clients', { params: { action: 'remove', eid }, headers: browserHeaders('http://51.210.208.26/ints/agent/Clients'), maxRedirects: 5, validateStatus: () => true, timeout: 20000 });
       let serverStatus = null;
       try {
-        const postRes = await axios.post(AGENT_BASE_URL + 'res/removeallclients.php', body, {
-          headers: Object.assign({}, browserHeaders('http://51.210.208.26/ints/agent/Clients'), { 'Content-Type': 'application/x-www-form-urlencoded' }),
-          transformRequest: [(d) => d], maxRedirects: 5, validateStatus: () => true, timeout: 20000
-        });
-        serverStatus = postRes.status;
+        let r = await doReq();
+        if (looksLikeLogin(r.data)) { await ensureAgentSession(true); r = await doReq(); }
+        serverStatus = r.status;
       } catch (e) { return error(res, 500, 'Delete request failed: ' + (e.code || e.message)); }
-
       const after = await getCachedClients(true);
       const gone = !after.some(c => String(c.id) === String(target.id));
       if (gone) return ok(res, { message: 'Deleted ' + target.username, username: target.username });
       return error(res, 400, 'LaMix did not confirm deletion (HTTP ' + serverStatus + '). The client may still exist.');
+    }
+
+    if (url === '/admin/client-details' && req.method === 'POST') {
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      const role = await getRole(user.username);
+      if (!isAdminish(role)) return error(res, 403, 'Admins only');
+      const clientId = String(req.body.clientId || '').trim();
+      const before = await getCachedClients(false);
+      const target = before.find(c => String(c.id) === clientId);
+      if (!target) return error(res, 404, 'Client not found.');
+      if (role !== 'super') {
+        const myPrefixes = prefixesFor(role, user.username, await supaGetPrefixes());
+        if (!myPrefixes.some(p => p.prefix && target.username.indexOf(p.prefix) === 0)) return error(res, 403, 'You can only edit clients in your own team.');
+      }
+      await ensureAgentSession();
+      const param = target.editInfo || target.id;
+      const fetchForm = () => axios.post(AGENT_BASE_URL + 'res/editclient.php', 'id=' + encodeURIComponent(param), { headers: Object.assign({}, browserHeaders('http://51.210.208.26/ints/agent/Clients'), { 'Content-Type': 'application/x-www-form-urlencoded' }), transformRequest: [(d) => d], maxRedirects: 5, validateStatus: () => true, timeout: 15000 });
+      let html = '';
+      try { let r = await fetchForm(); if (looksLikeLogin(r.data)) { await ensureAgentSession(true); r = await fetchForm(); } html = String(typeof r.data === 'string' ? r.data : JSON.stringify(r.data || '')); } catch (e) { return error(res, 500, 'Could not load client details: ' + (e.code || e.message)); }
+      const $ = cheerio.load(html);
+      const val = (n) => { const v = $('input[name="' + n + '"]').val(); return v == null ? '' : String(v); };
+      const ta  = (n) => { const v = $('textarea[name="' + n + '"]').val(); return v == null ? '' : String(v); };
+      const username = val('username') || target.username;
+      if (!username) return error(res, 400, 'Could not read current details for this client.');
+      return ok(res, { clientId: target.id, username, email: val('email'), skype: val('skype'), contact: val('contact'), name: val('name'), cname: val('cname'), address: ta('address'), country: $('select[name="country"]').val() || 'Pakistan', active: $('input[name="active"]').is(':checked') });
+    }
+
+    if (url === '/admin/edit-client' && req.method === 'POST') {
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      const role = await getRole(user.username);
+      if (!isAdminish(role)) return error(res, 403, 'Admins only');
+      const clientId = String(req.body.clientId || '').trim();
+      const username = String(req.body.username || '').trim();
+      if (!clientId || !username) return error(res, 400, 'clientId and username required.');
+      const before = await getCachedClients(true);
+      const target = before.find(c => String(c.id) === clientId);
+      if (!target) return error(res, 404, 'Client not found.');
+      if (role !== 'super') {
+        const myPrefixes = prefixesFor(role, user.username, await supaGetPrefixes());
+        if (!myPrefixes.some(p => p.prefix && target.username.indexOf(p.prefix) === 0)) return error(res, 403, 'You can only edit clients in your own team.');
+      }
+      const fields = { action: 'update', id: clientId, username, password: String(req.body.password || ''), email: String(req.body.email || ''), skype: String(req.body.skype || ''), contact: String(req.body.contact || ''), name: String(req.body.name || ''), cname: String(req.body.cname || ''), address: String(req.body.address || ''), country: String(req.body.country || 'Pakistan') };
+      if (req.body.active) fields.active = '1';   // mimic the panel: unchecked => field omitted (keeps current state)
+      await ensureAgentSession();
+      const boundary = '----ZamilEditBoundary' + Date.now().toString(16) + Math.random().toString(16).slice(2);
+      let body = '';
+      for (const [k, v] of Object.entries(fields)) body += '--' + boundary + '\r\nContent-Disposition: form-data; name="' + k + '"\r\n\r\n' + v + '\r\n';
+      body += '--' + boundary + '--\r\n';
+      const doPost = () => axios.post(AGENT_BASE_URL + 'Clients', body, { headers: Object.assign({}, browserHeaders('http://51.210.208.26/ints/agent/Clients'), { 'Content-Type': 'multipart/form-data; boundary=' + boundary }), transformRequest: [(d) => d], maxRedirects: 5, validateStatus: () => true, timeout: 25000 });
+      let serverStatus = null, serverBody = '';
+      try {
+        let r = await doPost();
+        if (looksLikeLogin(r.data)) { await ensureAgentSession(true); r = await doPost(); }
+        serverStatus = r.status; serverBody = String(typeof r.data === 'string' ? r.data : JSON.stringify(r.data || ''));
+      } catch (e) { return error(res, 500, 'Edit request failed: ' + (e.code || e.message)); }
+      const saidOk = /client updated|updated successfully|well done/i.test(serverBody);
+      if ((serverStatus >= 200 && serverStatus < 400) || saidOk) { _clientsCache = { ts: 0, data: null }; return ok(res, { message: 'Updated ' + username, _server: 'HTTP ' + serverStatus }); }
+      const snippet = serverBody.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').slice(0, 200);
+      return error(res, 400, 'LaMix did not confirm update (HTTP ' + serverStatus + '). ' + (snippet || ''));
+    }
+
+    if (url === '/admin/team-report' && req.method === 'POST') {
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      const role = await getRole(user.username);
+      if (!isAdminish(role)) return error(res, 403, 'Admins only');
+      const force = !!req.body.force;
+      const bd = businessDayPKT(); const today = bd.label;
+      const dayBack = (n) => new Date(new Date(today + 'T00:00:00Z').getTime() - n * 86400000).toISOString().slice(0, 10);
+      const todayRows = await getCachedCDR(bd.from, bd.to, force ? 0 : CDR_TTL_WIDE);
+      const weekRows  = await getCachedCDR(dayBack(6) + ' 00:00:00', today + ' 23:59:59', force ? 0 : CDR_TTL_WIDE);
+      const allPrefixes = await supaGetPrefixes();
+      const myPrefixes = prefixesFor(role, user.username, allPrefixes);
+      const teamOfClient = (cli) => { const un = String(cli || '').toLowerCase(); const sorted = allPrefixes.slice().sort((a, b) => (b.prefix || '').length - (a.prefix || '').length); for (const p of sorted) { if (p.prefix && un.indexOf(p.prefix.toLowerCase()) === 0) return p.prefix; } return ''; };
+      const tally = (rows) => { const m = {}; rows.forEach(r => { const k = teamOfClient(r.client) || '__none__'; m[k] = (m[k] || 0) + 1; }); return m; };
+      const tToday = tally(todayRows), tWeek = tally(weekRows);
+      const clients = await getCachedClients(false);
+      const cCount = {}; clients.forEach(c => { const k = teamOfClient(c.username) || '__none__'; cCount[k] = (cCount[k] || 0) + 1; });
+      const build = (p) => ({ prefix: p.prefix, admin: p.admin_username, label: p.label || '', otpToday: tToday[p.prefix] || 0, otpWeek: tWeek[p.prefix] || 0, clients: cCount[p.prefix] || 0 });
+      let teams = myPrefixes.map(build);
+      if (role === 'super') teams.push({ prefix: '', admin: '—', label: 'Unassigned', otpToday: tToday['__none__'] || 0, otpWeek: tWeek['__none__'] || 0, clients: cCount['__none__'] || 0 });
+      teams.sort((a, b) => b.otpToday - a.otpToday);
+      const hottest = (teams[0] && teams[0].otpToday > 0) ? teams[0] : null;
+      return ok(res, { teams, hottest, date: today, cached: !force });
     }
     
     
