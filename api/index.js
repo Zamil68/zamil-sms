@@ -427,6 +427,44 @@ function countryFlag(name){
   return best ? isoToFlag(COUNTRY_ISO[best]) : '🏳️';
 }
 
+// ═══════════════════════════════════════════════════════════
+// 👥 TEAMS — prefixes (super assigns) + cached, scoped client list
+// A client's team is derived from its username prefix, so creation
+// auto-assigns the team later with no extra mapping table.
+// ═══════════════════════════════════════════════════════════
+let _clientsCache = { ts: 0, data: null };
+async function getCachedClients(force) {
+  if (!force && _clientsCache.data && (Date.now() - _clientsCache.ts) < 60000) return _clientsCache.data;
+  const data = await scrapeAgentData('res/data_clients.php', { sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 1000, sSearch: '' });
+  let list = [];
+  if (data && data.aaData) {
+    list = data.aaData.map(c => {
+      const idMatch = (c[0] || '').match(/value=["'](\d+)["']/);
+      return { id: idMatch ? idMatch[1] : (c[1] || '0'), username: (c[1] || '').replace(/<[^>]*>/g, '').trim(), name: (c[2] || '').replace(/<[^>]*>/g, '').trim(), panelNum: 1 };
+    }).filter(c => c.username);
+  }
+  _clientsCache = { ts: Date.now(), data: list };
+  return list;
+}
+async function supaGetPrefixes() {
+  if (!supaEnabled()) return [];
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/team_prefixes?select=prefix,admin_username,label&order=prefix.asc`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+    const rows = await r.json(); return Array.isArray(rows) ? rows : [];
+  } catch (e) { return []; }
+}
+function prefixesFor(role, username, all) {
+  if (role === 'super') return all;
+  const u = String(username).toLowerCase();
+  return all.filter(p => String(p.admin_username).toLowerCase() === u);
+}
+function teamOf(username, all) {
+  const un = String(username || '');
+  const sorted = all.slice().sort((a, b) => (b.prefix || '').length - (a.prefix || '').length); // longest prefix wins
+  for (const p of sorted) { if (p.prefix && un.indexOf(p.prefix) === 0) return p.prefix; }
+  return '';
+}
+
 module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).json({ ...corsHeaders });
   const url = req.url.replace(/^\/api/, '');
@@ -767,6 +805,68 @@ if (url === '/stats' && req.method === 'POST') {
         return ok(res, { message: target + ' removed' });
       } catch(e){ return error(res, 500, 'Failed to remove'); }
     }
+
+// 👥 list prefixes (super = all; admin = own)
+    if (url === '/admin/team-prefixes' && req.method === 'POST') {
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      const role = await getRole(user.username);
+      if (!isAdminish(role)) return error(res, 403, 'Admins only');
+      const all = await supaGetPrefixes();
+      return ok(res, { prefixes: prefixesFor(role, user.username, all) });
+    }
+    // 👥 super: assign a prefix to an admin
+    if (url === '/admin/set-prefix' && req.method === 'POST') {
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      if ((await getRole(user.username)) !== 'super') return error(res, 403, 'Super admin only');
+      const prefix = String(req.body.prefix || '').trim();
+      const adminU = String(req.body.admin || '').trim().toLowerCase();
+      if (!prefix || !adminU) return error(res, 400, 'prefix and admin username required');
+      if (!/^[A-Za-z0-9_]+$/.test(prefix)) return error(res, 400, 'prefix: letters/numbers/underscore only');
+      if (!supaEnabled()) return error(res, 400, 'Supabase not configured');
+      try {
+        await fetch(`${SUPABASE_URL}/rest/v1/team_prefixes`, { method: 'POST', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ prefix, admin_username: adminU, label: req.body.label || '' }) });
+        return ok(res, { message: prefix + ' assigned to ' + adminU });
+      } catch (e) { return error(res, 500, 'Failed to set prefix'); }
+    }
+    // 👥 super: remove a prefix
+    if (url === '/admin/del-prefix' && req.method === 'POST') {
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      if ((await getRole(user.username)) !== 'super') return error(res, 403, 'Super admin only');
+      const prefix = String(req.body.prefix || '').trim();
+      if (!prefix) return error(res, 400, 'prefix required');
+      if (!supaEnabled()) return error(res, 400, 'Supabase not configured');
+      try {
+        await fetch(`${SUPABASE_URL}/rest/v1/team_prefixes?prefix=eq.${encodeURIComponent(prefix)}`, { method: 'DELETE', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+        return ok(res, { message: prefix + ' removed' });
+      } catch (e) { return error(res, 500, 'Failed to remove prefix'); }
+    }
+    // 👥 cached client list, scoped to the caller's team(s); super = all grouped
+    if (url === '/admin/my-clients' && req.method === 'POST') {
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      const role = await getRole(user.username);
+      if (!isAdminish(role)) return error(res, 403, 'Admins only');
+      const force = !!req.body.force;
+      const allClients = await getCachedClients(force);
+      const allPrefixes = await supaGetPrefixes();
+      const myPrefixes = prefixesFor(role, user.username, allPrefixes);
+      const mySet = myPrefixes.map(p => p.prefix);
+      const scoped = (role === 'super') ? allClients : allClients.filter(c => mySet.some(pf => pf && c.username.indexOf(pf) === 0));
+      const groups = {};
+      myPrefixes.forEach(p => { groups[p.prefix] = { prefix: p.prefix, admin: p.admin_username, label: p.label || '', clients: [] }; });
+      if (role === 'super') groups[''] = { prefix: '', admin: '—', label: 'Unassigned', clients: [] };
+      scoped.forEach(c => {
+        const t = teamOf(c.username, allPrefixes);
+        const key = (role === 'super') ? (t || '') : t;
+        if (groups[key]) groups[key].clients.push(c);
+      });
+      const teams = Object.values(groups).map(g => ({ prefix: g.prefix, admin: g.admin, label: g.label, count: g.clients.length, clients: g.clients }));
+      return ok(res, { teams, total: scoped.length, cached: !force });
+    }
+    
     // 🆓 ADMIN: show a user's at-limit ranges/countries (only those that hit a cap)
     if (url === '/admin/limit-status' && req.method === 'POST') {
       const caller = getUserFromSession(req.body.session);
