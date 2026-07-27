@@ -938,18 +938,23 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
       }).catch(function(){ if(box) box.innerHTML='<div style="color:var(--red);padding:12px;text-align:center">Connection error</div>'; });
   };
 
-    function freeBtn(rowId){ return '<button class="lim-freebtn" onclick="freeTry('+JSON.stringify(rowId)+')">+1 try</button>'; }
+  function freeBtn(rowId){ return '<button class="lim-freebtn" onclick="freeTry('+JSON.stringify(rowId)+')">+1 try</button>'; }
   function renderLimit(d){
     var box=document.getElementById('limitResults'); if(!box) return;
     var ranges=d.ranges||[], countries=d.countries||[];
     if(!ranges.length && !countries.length){ box.innerHTML='<div class="lim-empty">✅ <b>'+escH(d.username)+'</b> has no range or country at its limit right now — nothing to free.</div>'; return; }
     var h='';
-    if(ranges.length){ h+='<div class="lim-sectitle">Ranges at limit · '+ranges.length+'</div>';
-      ranges.forEach(function(r){ h+='<div class="lim-row"><div class="lim-row-main"><div class="lim-row-title">'+escH(r.rangeTitle)+'</div><div class="lim-row-sub">'+escH(r.country)+' · <span class="lim-used">'+r.used+'/'+r.limit+'</span> used</div></div>'+freeBtn(r.ids[r.ids.length-1])+'</div>'; }); }
-    if(countries.length){ h+='<div class="lim-sectitle" style="margin-top:14px">Countries at limit · '+countries.length+'</div>';
-      countries.forEach(function(c){ h+='<div class="lim-row"><div class="lim-row-main"><div class="lim-row-title">'+escH(c.country)+'</div><div class="lim-row-sub"><span class="lim-used">'+c.used+'/'+c.limit+'</span> used today</div></div>'+freeBtn(c.ids[c.ids.length-1])+'</div>'; }); }
+    if(ranges.length){
+      h+='<div class="lim-sectitle">Ranges at limit · '+ranges.length+'</div>';
+      ranges.forEach(function(r){ h+='<div class="lim-row"><div class="lim-row-main"><div class="lim-row-title">'+escH(r.rangeTitle)+'</div><div class="lim-row-sub">'+escH(r.country)+' · <span class="lim-used">'+r.used+'/'+r.limit+'</span> used</div></div>'+freeBtn(r.ids[r.ids.length-1])+'</div>'; });
+    }
+    if(countries.length){
+      h+='<div class="lim-sectitle" style="margin-top:14px">Countries at limit · '+countries.length+'</div>';
+      countries.forEach(function(c){ h+='<div class="lim-row"><div class="lim-row-main"><div class="lim-row-title">'+escH(c.country)+'</div><div class="lim-row-sub"><span class="lim-used">'+c.used+'/'+c.limit+'</span> used today</div></div>'+freeBtn(c.ids[c.ids.length-1])+'</div>'; });
+    }
     box.innerHTML=h;
   }
+
   window.freeTry = function(rowId){
     zconfirm('Free <b>1 try</b> for '+escH(_limitUser)+'?<br><span style="font-size:.74rem;color:var(--muted);font-weight:600">Removes 1 attempt row → they get one more allocation.</span>', function(){
       fetch('/api/admin/free-try',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:localStorage.getItem('app_session'),username:_limitUser,rowId:rowId})})
@@ -959,28 +964,7 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
         }).catch(function(){ msg('Connection error', false); });
     }, {icon:'🆓', yesText:'Free try'});
   };
-    if(countries.length){
-      h+='<div style="font-size:.64rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin:12px 0 8px">Countries at limit ('+countries.length+')</div>';
-      countries.forEach(function(c){
-        h+='<div style="display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin-bottom:7px">'
-          +'<div style="flex:1;min-width:0"><div style="font-size:.84rem;font-weight:800;color:var(--text)">'+escH(c.country)+'</div>'
-          +'<div style="font-size:.62rem;color:var(--muted)"><b style="color:var(--red)">'+c.used+'/'+c.limit+'</b> used today</div></div>'
-          +freeBtn(c.ids[c.ids.length-1])+'</div>';
-      });
-    }
-    box.innerHTML=h;
-  }
 
-  window.freeTry = function(rowId){
-    if(!confirm('Free 1 try for '+_limitUser+'?\n\nThis removes 1 attempt row so they get one more allocation.')) return;
-    fetch('/api/admin/free-try',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:localStorage.getItem('app_session'),username:_limitUser,rowId:rowId})})
-      .then(function(r){return r.json();}).then(function(d){
-        if(d&&d.ok){ msg('✅ Freed 1 try for '+_limitUser, true); loadLimitStatus(); }
-        else msg((d&&d.error)||'Failed', false);
-      }).catch(function(){ msg('Connection error', false); });
-  };
-
-  // show the drawer item for admins + super
   function gate(){
     try{ var s=localStorage.getItem('app_session'); if(!s)return;
       fetch('/api/auth/role',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:s})})
