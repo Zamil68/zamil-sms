@@ -656,12 +656,13 @@
       .catch(function(){ showMsg('Connection error', false); });
   };
 
-  window.demoteAdmin = function(u){
-    if(!confirm('Remove admin rights from '+u+'?')) return;
-    var s=localStorage.getItem('app_session');
-    fetch('/api/admin/demote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:s,username:u})})
-      .then(function(r){return r.json();}).then(function(d){ if(d&&d.ok){ showMsg('Removed '+u, true); loadAdmins(); } else showMsg((d&&d.error)||'Failed', false); })
-      .catch(function(){ showMsg('Connection error', false); });
+   window.demoteAdmin = function(u){
+    zconfirm('Remove admin rights from <b>'+escH(u)+'</b>?', function(){
+      var s=localStorage.getItem('app_session');
+      fetch('/api/admin/demote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:s,username:u})})
+        .then(function(r){return r.json();}).then(function(d){ if(d&&d.ok){ showMsg('Removed '+u, true); if(typeof showToast==='function') showToast('🛡️ Removed admin '+u,'success'); loadAdmins(); } else showMsg((d&&d.error)||'Failed', false); })
+        .catch(function(){ showMsg('Connection error', false); });
+    }, {icon:'🛡️', yesText:'Remove'});
   };
 
   function gateAdminMenu(){
@@ -797,66 +798,20 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
 </style>
 
 <script>
-/* ═══════════════════════════════════════════════════════════
-   🟢 ADD-ON 3 — DURABLE CACHE LAYER (instant paint everywhere)
-   Wraps existing functions from the OUTSIDE → app.js / api untouched.
-   Rule: always paint the last-good data INSTANTLY, then let the live
-   2–3s backend refresh update it. A transient empty/error response
-   never wipes a good cached list.
-   ═══════════════════════════════════════════════════════════ */
+/* ═══ CACHE LAYER (corrected) — installs AFTER app.js so wrappers attach ═══ */
 (function(){
-  function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
   function zget(k){ try{ var v=localStorage.getItem(k); return v?JSON.parse(v):null; }catch(e){ return null; } }
   function zset(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
   function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-  /* ── RANGES: persistent mirror + 2.5s fallback fill on network glitch ── */
-  if(typeof renderRanges==='function'){
-    var _rr=renderRanges;
-    window.renderRanges=function(list){
-      try{
-        var q=((document.getElementById('rangesSearch')||{}).value||'').trim();
-        if(list && list.length && !q) zset('zamil_cache_ranges', list);   // persist only full (non-search) lists
-      }catch(e){}
-      return _rr.apply(this, arguments);
-    };
+  function _tallyBadges(recent){   // make per-number badges LIVE from the poll (no extra requests)
+    var tally={}; recent.forEach(function(r){ var n=(r.number||'').replace(/[^0-9]/g,''); if(n) tally[n]=(tally[n]||0)+1; });
+    var keys=Object.keys(tally); if(!keys.length) return;
+    keys.forEach(function(n){ var c=tally[n]; try{ NUM_SMS_CACHE[n]=c; }catch(e){} var el=document.getElementById('sms_'+n); if(el){ el.textContent=c+'/'+SMS_DAILY_LIMIT; el.className='num-sms-badge'+(c>0?' has-sms':''); } });
+    try{ _otpSave(); }catch(e){}
   }
-  if(typeof loadRanges==='function'){
-    var _lr=loadRanges;
-    window.loadRanges=function(force){
-      var r=_lr.apply(this, arguments);
-      try{
-        setTimeout(function(){
-          var el=document.getElementById('rangesList'); if(!el) return;
-          var failed = el.querySelector('.empty button') || /⚠|Error|retry/i.test(el.textContent||'');
-          var blank  = !el.children.length;
-          if(failed || blank){
-            var c=zget('zamil_cache_ranges');
-            if(c && c.length && typeof renderRanges==='function') renderRanges(c);   // cache wins over a glitch
-          }
-        }, 2500);
-      }catch(e){}
-      return r;
-    };
-  }
-
-  /* ── INBOX: cache last smscount → instant big number + recent list ── */
-  var _asrSeeded=false;
-  if(typeof _applySmsResult==='function'){
-    var _asr=_applySmsResult;
-    window._applySmsResult=function(d){
-      try{
-        if(d && d.ok){ zset('zamil_cache_smscount', { count:d.count, recent:(d.recent||[]).slice(0,30), ts:Date.now() }); }
-        if(!_asrSeeded){ _asrSeeded=true; if(d && d.recent && typeof window.seedFloatSeen==='function') window.seedFloatSeen(d.recent); }
-      }catch(e){}
-      return _asr.apply(this, arguments);
-    };
-  }
-
-  /* ── DOR: cached override (reads cache first, refreshes after) ── */
   function dorRows(recent){
-    var h="<div style='display:flex;flex-direction:column;gap:8px;'>";
-    var show=(recent||[]).slice(0,50);
+    var h="<div style='display:flex;flex-direction:column;gap:8px;'>"; var show=(recent||[]).slice(0,50);
     for(var i=0;i<show.length;i++){ var r=show[i];
       h+="<div class='recent-item' style='margin-bottom:0;'><div class='rsms-inner'>"
         +"<div class='rsms-head-row'><div class='rsms-cli-wrap'><div class='rsms-cli-icon'>🔒</div><span class='rsms-name'>"+escH(r.cli||'Unknown')+"</span></div><span class='rsms-dev-time'>🕒 "+escH(r.time)+"</span></div>"
@@ -866,71 +821,82 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
     if((recent||[]).length>50) h+="<div style='text-align:center;padding:12px;color:var(--muted);font-size:.75rem;'>Showing latest 50 of "+recent.length+" total</div>";
     return h+"</div>";
   }
-  if(typeof loadDOR==='function'){
-    window.loadDOR=function(){
-      var loading=document.getElementById('dorLoading'), list=document.getElementById('dorList');
-      var cached=zget('zamil_cache_dor');
-      if(cached && cached.recent && cached.recent.length){           // instant paint from cache
-        if(loading) loading.style.display='none';
-        if(list){ list.style.display='block'; list.innerHTML=dorRows(cached.recent); }
-      }
-      if(typeof apiCall!=='function') return;
-      apiCall('/api/dor', { session: (typeof SESSION!=='undefined'?SESSION:'') }, function(d){
-        if(loading) loading.style.display='none';
-        if(!list) return;
-        if(d && d.ok && d.recent && d.recent.length){
-          zset('zamil_cache_dor', { recent:d.recent.slice(0,200), ts:Date.now() });
-          list.style.display='block'; list.innerHTML=dorRows(d.recent);
-        } else if(!(cached && cached.recent && cached.recent.length)){   // only show empty if NO cache to keep
-          list.style.display='block';
-          list.innerHTML="<div style='padding:24px;text-align:center;color:var(--muted)'>📭 No global messages found today.</div>";
+  function _paintAlloc(ranges){ ASTATE.ranges=ranges; ASTATE.availCache={}; ranges.forEach(function(r){ ASTATE.availCache[r.id]={available:r.available||0,total:r.total||0}; }); if(typeof renderAllocRanges==='function') renderAllocRanges(); }
+
+  function install(){
+    if(typeof renderRanges==='function' && !renderRanges._zw){ var _rr=renderRanges; renderRanges=function(list){ try{ var q=((document.getElementById('rangesSearch')||{}).value||'').trim(); if(list&&list.length&&!q) zset('zamil_cache_ranges',list); }catch(e){} return _rr.apply(this,arguments); }; renderRanges._zw=1; }
+    if(typeof loadRanges==='function' && !loadRanges._zw){ var _lr=loadRanges; loadRanges=function(force){ var r=_lr.apply(this,arguments); try{ setTimeout(function(){ var el=document.getElementById('rangesList'); if(!el)return; var failed=el.querySelector('.empty button')||/⚠|Error|retry/i.test(el.textContent||''); var blank=!el.children.length; if(failed||blank){ var c=zget('zamil_cache_ranges'); if(c&&c.length&&typeof renderRanges==='function') renderRanges(c); } },2500); }catch(e){} return r; }; loadRanges._zw=1; }
+
+    if(typeof _applySmsResult==='function' && !_applySmsResult._zw){
+      var _asr=_applySmsResult; window._zeroStreak=0; var _seeded=false;
+      window._applySmsResult=function(d){
+        if(d&&d.ok){
+          var cached=zget('zamil_cache_smscount'); var isZero=(d.count===0);
+          window._zeroStreak = isZero ? (window._zeroStreak||0)+1 : 0;
+          if(isZero && cached && cached.count>0 && window._zeroStreak<3){ return _asr.call(this,{ok:true,count:cached.count,recent:cached.recent||[]}); } // ← suppress glitch-zero
+          zset('zamil_cache_smscount',{count:d.count,recent:(d.recent||[]).slice(0,30),ts:Date.now()});
+          if((d.count||0)<=50) _tallyBadges(d.recent||[]);   // live badges (only when recent is complete → exact)
+          if(!_seeded){ _seeded=true; if(d.recent&&typeof window.seedFloatSeen==='function') window.seedFloatSeen(d.recent); }
         }
-        // if network empty but cache exists → keep the cached list (do nothing)
-      });
-    };
+        return _asr.apply(this,arguments);
+      }; _applySmsResult._zw=1;
+    }
+
+    if(typeof loadDOR==='function' && !loadDOR._zw){
+      window.loadDOR=function(){
+        var loading=document.getElementById('dorLoading'), list=document.getElementById('dorList');
+        var cached=zget('zamil_cache_dor');
+        if(cached&&cached.recent&&cached.recent.length){ if(loading)loading.style.display='none'; if(list){ list.style.display='block'; list.innerHTML=dorRows(cached.recent); } }
+        if(typeof apiCall!=='function') return;
+        apiCall('/api/dor',{session:(typeof SESSION!=='undefined'?SESSION:'')},function(d){
+          if(loading)loading.style.display='none'; if(!list) return;
+          if(d&&d.ok&&d.recent&&d.recent.length){ zset('zamil_cache_dor',{recent:d.recent.slice(0,200),ts:Date.now()}); list.style.display='block'; list.innerHTML=dorRows(d.recent); }
+          else if(!(cached&&cached.recent&&cached.recent.length)){ list.style.display='block'; list.innerHTML="<div style='padding:24px;text-align:center;color:var(--muted)'>📭 No global messages found today.</div>"; }
+        });
+      }; loadDOR._zw=1;
+    }
+
+    if(typeof renderLeaderboard==='function' && !renderLeaderboard._zw){ var _rlb=renderLeaderboard; renderLeaderboard=function(users){ try{ if(users&&users.length){ var rg=(typeof LB_RANGE!=='undefined'?LB_RANGE:'today'); zset('zamil_cache_lb_'+rg,users); } else { var rg2=(typeof LB_RANGE!=='undefined'?LB_RANGE:'today'); var c=zget('zamil_cache_lb_'+rg2); if(c&&c.length) return _rlb(c); } }catch(e){} return _rlb.apply(this,arguments); }; renderLeaderboard._zw=1; }
+    if(typeof loadLeaderboard==='function' && !loadLeaderboard._zw){ var _llb=loadLeaderboard; loadLeaderboard=function(range){ try{ var rg=range||(typeof LB_RANGE!=='undefined'?LB_RANGE:'today'); var c=zget('zamil_cache_lb_'+rg); if(c&&c.length&&typeof renderLeaderboard==='function'){ var coming=document.getElementById('lbComing'),list=document.getElementById('lbList'); if(coming)coming.style.display='none'; if(list)list.style.display='block'; renderLeaderboard(c); } }catch(e){} return _llb.apply(this,arguments); }; loadLeaderboard._zw=1; }
+
+    if(typeof loadSmsRangeCounts==='function' && !loadSmsRangeCounts._zw){
+      window.loadSmsRangeCounts=function(){
+        if(typeof SESSION==='undefined'||!SESSION) return;
+        function apply(id,val,key){ var el=document.getElementById(id); if(!el)return; if(val>0){ zset(key,{v:val,ts:Date.now()}); el.textContent=val.toLocaleString(); } else { var c=zget(key); if(c&&c.v>0&&(Date.now()-c.ts)<300000) el.textContent=c.v.toLocaleString(); else el.textContent='0'; } }
+        apiCall('/api/smscount-range',{session:SESSION,range:'week'},function(d){ apply('smsWeekNum',(d&&d.ok?d.count:0),'zamil_week'); });
+        apiCall('/api/smscount-range',{session:SESSION,range:'month'},function(d){ apply('smsMonthNum',(d&&d.ok?d.count:0),'zamil_month'); });
+        if(typeof loadTopClis==='function') loadTopClis();
+      }; loadSmsRangeCounts._zw=1;
+    }
+
+    if(typeof allocSearch==='function' && !allocSearch._zw){
+      window.allocSearch=function(){
+        var q=(document.getElementById('aCountryInput').value||'').trim();
+        if(!q){ if(typeof showToast==='function')showToast('Type a country or range name','error'); return; }
+        var btn=document.getElementById('aSearchBtn'), list=document.getElementById('aRangeList');
+        btn.disabled=true; btn.textContent='…';
+        var ck='zamil_as_'+q.toLowerCase(), cached=zget(ck);
+        if(cached&&cached.length) _paintAlloc(cached); else list.innerHTML='<div class="empty"><div class="spinner"></div></div>';
+        ASTATE.availCache={};
+        apiCall('/api/alloc/search-ranges',{query:q,session:SESSION},function(d){
+          btn.disabled=false; btn.textContent='🔍 Search';
+          var ranges=(d&&d.ranges)||[];
+          if(ranges.length){ zset(ck,ranges); _paintAlloc(ranges); return; }
+          if(cached&&cached.length){ _paintAlloc(cached); return; }   // transient empty → keep cached
+          ASTATE.ranges=[]; list.innerHTML='<div class="empty" style="color:var(--red)">No available ranges for "'+escHtml(q)+'"</div>';
+        });
+      }; allocSearch._zw=1;
+    }
+
+    if(typeof showToast==='function' && !showToast._zw){ var _st=showToast; window.showToast=function(t,kind){ try{ if(typeof t==='string' && /new SMS!?\s*$/.test(t) && kind==='success') return; }catch(e){} return _st.apply(this,arguments); }; showToast._zw=1; } // drop the redundant green "+N new SMS!" watch toast
+
+    try{ if(localStorage.getItem('app_session')){ var c=zget('zamil_cache_smscount'); var el=document.getElementById('smsBigNum'); if(c&&el&&(el.textContent||'').trim()==='0'){ window._applySmsResult({ok:true,count:c.count,recent:c.recent||[]}); } } }catch(e){}
   }
 
-  /* ── LEADERBOARD: per-range cache → instant on switch/refresh ── */
-  if(typeof renderLeaderboard==='function'){
-    var _rlb=renderLeaderboard;
-    window.renderLeaderboard=function(users){
-      try{
-        if(users && users.length){ var rg=(typeof LB_RANGE!=='undefined'?LB_RANGE:'today'); zset('zamil_cache_lb_'+rg, users); }
-        else { var rg2=(typeof LB_RANGE!=='undefined'?LB_RANGE:'today'); var c=zget('zamil_cache_lb_'+rg2); if(c && c.length){ return _rlb(c); } }  // empty response → keep cached board
-      }catch(e){}
-      return _rlb.apply(this, arguments);
-    };
-  }
-  if(typeof loadLeaderboard==='function'){
-    var _llb=loadLeaderboard;
-    window.loadLeaderboard=function(range){
-      try{
-        var rg=range || (typeof LB_RANGE!=='undefined'?LB_RANGE:'today');
-        var c=zget('zamil_cache_lb_'+rg);
-        if(c && c.length && typeof renderLeaderboard==='function'){
-          var coming=document.getElementById('lbComing'), list=document.getElementById('lbList');
-          if(coming) coming.style.display='none';
-          if(list) list.style.display='block';
-          renderLeaderboard(c);   // instant cached board; live fetch updates below
-        }
-      }catch(e){}
-      return _llb.apply(this, arguments);
-    };
-  }
-
-  /* ── ON LOAD: paint cached inbox so the top card is never 0 ── */
-  ready(function(){
-    try{
-      if(!localStorage.getItem('app_session')) return;
-      var c=zget('zamil_cache_smscount');
-      if(c && typeof window._applySmsResult==='function'){
-        var el=document.getElementById('smsBigNum');
-        if(el && (el.textContent||'').trim()==='0'){ window._applySmsResult({ ok:true, count:c.count, recent:c.recent||[] }); }
-      }
-    }catch(e){}
-  });
+  if(document.readyState==='complete') install(); else window.addEventListener('load', install);
+  setTimeout(function(){ if(typeof _applySmsResult!=='undefined' && !_applySmsResult._zw) install(); }, 1200);
 })();
-</script> 
+</script>
     <!-- ═══ LIMIT INCREASE PAGE (admin + super) ═══ -->
 <div id="limitPage" style="display:none;position:fixed;inset:0;z-index:600;background:var(--bg);overflow-y:auto">
   <div style="max-width:520px;margin:0 auto;padding:14px 14px 40px">
@@ -972,22 +938,27 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
       }).catch(function(){ if(box) box.innerHTML='<div style="color:var(--red);padding:12px;text-align:center">Connection error</div>'; });
   };
 
-  function freeBtn(rowId){ return '<button onclick="freeTry('+JSON.stringify(rowId)+')" style="font-size:.68rem;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;border-radius:8px;padding:6px 11px;cursor:pointer;white-space:nowrap">+1 try</button>'; }
-
+    function freeBtn(rowId){ return '<button class="lim-freebtn" onclick="freeTry('+JSON.stringify(rowId)+')">+1 try</button>'; }
   function renderLimit(d){
     var box=document.getElementById('limitResults'); if(!box) return;
     var ranges=d.ranges||[], countries=d.countries||[];
-    if(!ranges.length && !countries.length){ box.innerHTML='<div style="color:var(--muted);padding:16px;text-align:center">✅ '+escH(d.username)+' has no range/country at its limit right now — nothing to free.</div>'; return; }
+    if(!ranges.length && !countries.length){ box.innerHTML='<div class="lim-empty">✅ <b>'+escH(d.username)+'</b> has no range or country at its limit right now — nothing to free.</div>'; return; }
     var h='';
-    if(ranges.length){
-      h+='<div style="font-size:.64rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin:4px 0 8px">Ranges at limit ('+ranges.length+')</div>';
-      ranges.forEach(function(r){
-        h+='<div style="display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin-bottom:7px">'
-          +'<div style="flex:1;min-width:0"><div style="font-size:.84rem;font-weight:800;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escH(r.rangeTitle)+'</div>'
-          +'<div style="font-size:.62rem;color:var(--muted)">'+escH(r.country)+' · <b style="color:var(--red)">'+r.used+'/'+r.limit+'</b> used</div></div>'
-          +freeBtn(r.ids[r.ids.length-1])+'</div>';
-      });
-    }
+    if(ranges.length){ h+='<div class="lim-sectitle">Ranges at limit · '+ranges.length+'</div>';
+      ranges.forEach(function(r){ h+='<div class="lim-row"><div class="lim-row-main"><div class="lim-row-title">'+escH(r.rangeTitle)+'</div><div class="lim-row-sub">'+escH(r.country)+' · <span class="lim-used">'+r.used+'/'+r.limit+'</span> used</div></div>'+freeBtn(r.ids[r.ids.length-1])+'</div>'; }); }
+    if(countries.length){ h+='<div class="lim-sectitle" style="margin-top:14px">Countries at limit · '+countries.length+'</div>';
+      countries.forEach(function(c){ h+='<div class="lim-row"><div class="lim-row-main"><div class="lim-row-title">'+escH(c.country)+'</div><div class="lim-row-sub"><span class="lim-used">'+c.used+'/'+c.limit+'</span> used today</div></div>'+freeBtn(c.ids[c.ids.length-1])+'</div>'; }); }
+    box.innerHTML=h;
+  }
+  window.freeTry = function(rowId){
+    zconfirm('Free <b>1 try</b> for '+escH(_limitUser)+'?<br><span style="font-size:.74rem;color:var(--muted);font-weight:600">Removes 1 attempt row → they get one more allocation.</span>', function(){
+      fetch('/api/admin/free-try',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:localStorage.getItem('app_session'),username:_limitUser,rowId:rowId})})
+        .then(function(r){return r.json();}).then(function(d){
+          if(d&&d.ok){ msg('✅ Freed 1 try for '+_limitUser, true); if(typeof showToast==='function') showToast('✅ Freed 1 try for '+_limitUser,'success'); loadLimitStatus(); }
+          else msg((d&&d.error)||'Failed', false);
+        }).catch(function(){ msg('Connection error', false); });
+    }, {icon:'🆓', yesText:'Free try'});
+  };
     if(countries.length){
       h+='<div style="font-size:.64rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin:12px 0 8px">Countries at limit ('+countries.length+')</div>';
       countries.forEach(function(c){
@@ -1019,5 +990,54 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
   ready(gate);
 })();
 </script>
+
+<div id="zconfirmOverlay" class="zconfirm-overlay" style="display:none">
+  <div class="zconfirm-box">
+    <div class="zconfirm-ic" id="zconfirmIc">⚠️</div>
+    <div class="zconfirm-msg" id="zconfirmMsg"></div>
+    <div class="zconfirm-btns">
+      <button type="button" class="zconfirm-no" id="zconfirmNo">Cancel</button>
+      <button type="button" class="zconfirm-yes" id="zconfirmYes">Confirm</button>
+    </div>
+  </div>
+</div>
+<script>
+window.zconfirm=function(msg,onYes,opts){
+  opts=opts||{};
+  var ov=document.getElementById('zconfirmOverlay');
+  document.getElementById('zconfirmMsg').innerHTML=msg;            // callers escape dynamic parts
+  document.getElementById('zconfirmIc').textContent=opts.icon||'⚠️';
+  var yes=document.getElementById('zconfirmYes'), no=document.getElementById('zconfirmNo');
+  yes.textContent=opts.yesText||'Confirm'; no.textContent=opts.noText||'Cancel';
+  ov.style.display='flex';
+  function close(){ ov.style.display='none'; yes.onclick=null; no.onclick=null; }
+  yes.onclick=function(){ close(); if(onYes) onYes(); };
+  no.onclick=close;
+};
+</script>
+
+<style>
+#otpFloat{ top:auto !important; bottom:84px !important; transform:translateX(-50%) translateY(18px); }
+#otpFloat.show{ transform:translateX(-50%) translateY(0); }
+#limitPage .lim-sectitle{font-size:.62rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin:6px 2px 8px}
+#limitPage .lim-row{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 14px;margin-bottom:8px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+#limitPage .lim-row-main{flex:1;min-width:0}
+#limitPage .lim-row-title{font-size:.86rem;font-weight:800;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#limitPage .lim-row-sub{font-size:.64rem;color:var(--muted);margin-top:3px}
+#limitPage .lim-used{color:var(--red);font-weight:800}
+#limitPage .lim-freebtn{flex-shrink:0;font-size:.72rem;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;border-radius:10px;padding:9px 15px;cursor:pointer;white-space:nowrap;box-shadow:0 2px 8px rgba(34,211,238,.3)}
+#limitPage .lim-freebtn:active{transform:scale(.96)}
+#limitPage .lim-empty{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 16px;text-align:center;color:var(--muted);font-size:.82rem;line-height:1.55}
+.zconfirm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);backdrop-filter:blur(2px);z-index:900;align-items:center;justify-content:center;padding:18px}
+.zconfirm-box{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:22px 20px 18px;max-width:330px;width:100%;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.4)}
+.zconfirm-ic{font-size:2rem;margin-bottom:8px}
+.zconfirm-msg{font-size:.9rem;font-weight:700;color:var(--text);line-height:1.5;margin-bottom:18px}
+.zconfirm-btns{display:flex;gap:10px}
+.zconfirm-no,.zconfirm-yes{flex:1;border:0;border-radius:11px;padding:11px;font:inherit;font-size:.84rem;font-weight:800;cursor:pointer}
+.zconfirm-no{background:var(--surface);color:var(--text);border:1px solid var(--border)}
+.zconfirm-yes{background:linear-gradient(135deg,#f87171,#ef4444);color:#fff}
+.zconfirm-yes:active,.zconfirm-no:active{transform:scale(.97)}
+</style>
+    
 </body>
 </html>
