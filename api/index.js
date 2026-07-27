@@ -475,6 +475,13 @@ function teamOf(username, all) {
   return '';
 }
 
+function weekKey(dateStr){
+  const d = new Date(dateStr + 'T00:00:00Z');
+  const day = d.getUTCDay();
+  const diff = (day === 0 ? -6 : 1 - day);
+  return new Date(d.getTime() + diff * 86400000).toISOString().slice(0, 10);
+}
+
 module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).json({ ...corsHeaders });
   const url = req.url.replace(/^\/api/, '');
@@ -1059,6 +1066,80 @@ if (url === '/stats' && req.method === 'POST') {
       teams.sort((a, b) => b.otpToday - a.otpToday);
       const hottest = (teams[0] && teams[0].otpToday > 0) ? teams[0] : null;
       return ok(res, { teams, hottest, date: today, cached: !force });
+    }
+
+    // 🎯 read the active bonus target (admin + super)
+    if (url === '/admin/target-get' && req.method === 'POST') {
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      if (!isAdminish(await getRole(user.username))) return error(res, 403, 'Admins only');
+      if (!supaEnabled()) return ok(res, { config: null });
+      try {
+        const cr = await fetch(`${SUPABASE_URL}/rest/v1/team_targets?order=updated_at.desc&limit=1&select=*`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+        const crows = await cr.json();
+        return ok(res, { config: (Array.isArray(crows) && crows[0]) || null });
+      } catch (e) { return ok(res, { config: null }); }
+    }
+
+    // 🎯 super sets/adjusts the bonus target
+    if (url === '/admin/target-set' && req.method === 'POST') {
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      if ((await getRole(user.username)) !== 'super') return error(res, 403, 'Super admin only');
+      if (!supaEnabled()) return error(res, 400, 'Supabase not configured');
+      const period = (req.body.period === 'weekly') ? 'weekly' : 'daily';
+      const target_otps = Math.max(1, parseInt(req.body.target_otps) || 1000);
+      const reward_usd = Math.max(0, parseFloat(req.body.reward_usd) || 0);
+      const top_n = Math.max(1, parseInt(req.body.top_n) || 5);
+      const note = String(req.body.note || '');
+      try {
+        await fetch(`${SUPABASE_URL}/rest/v1/team_targets`, { method: 'POST', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' }, body: JSON.stringify({ period, target_otps, reward_usd, top_n, note, updated_by: user.username }) });
+        return ok(res, { message: 'Target saved' });
+      } catch (e) { return error(res, 500, 'Failed to save target'); }
+    }
+
+    // 🎯 bonus status: target + qualifiers + caller's team progress/congrats
+    if (url === '/admin/team-bonus' && req.method === 'POST') {
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      const role = await getRole(user.username);
+      if (!isAdminish(role)) return error(res, 403, 'Admins only');
+      if (!supaEnabled()) return ok(res, { role, config: null, leaders: [], myTeams: [] });
+      let config = null;
+      try {
+        const cr = await fetch(`${SUPABASE_URL}/rest/v1/team_targets?order=updated_at.desc&limit=1&select=*`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+        const crows = await cr.json(); if (Array.isArray(crows) && crows[0]) config = crows[0];
+      } catch (e) {}
+      if (!config) return ok(res, { role, config: null, leaders: [], myTeams: [] });
+      const period = config.period || 'daily';
+      const bd = businessDayPKT(); const today = bd.label;
+      const dayBack = (n) => new Date(new Date(today + 'T00:00:00Z').getTime() - n * 86400000).toISOString().slice(0, 10);
+      const rows = (period === 'weekly') ? await getCachedCDR(dayBack(6) + ' 00:00:00', today + ' 23:59:59', CDR_TTL_WIDE) : await getCachedCDR(bd.from, bd.to, CDR_TTL_WIDE);
+      const allPrefixes = await supaGetPrefixes();
+      const teamOfClient = (cli) => { const un = String(cli || '').toLowerCase(); const sorted = allPrefixes.slice().sort((a, b) => (b.prefix || '').length - (a.prefix || '').length); for (const p of sorted) { if (p.prefix && un.indexOf(p.prefix.toLowerCase()) === 0) return p.prefix; } return ''; };
+      const otps = {}; rows.forEach(r => { const t = teamOfClient(r.client); if (t) otps[t] = (otps[t] || 0) + 1; });
+      const target = Number(config.target_otps) || 0, topN = Number(config.top_n) || 5, reward = Number(config.reward_usd) || 0;
+      const windowKey = (period === 'weekly') ? weekKey(today) : today;
+      let leaders = allPrefixes.map(p => ({ prefix: p.prefix, admin: p.admin_username, label: p.label || '', otps: otps[p.prefix] || 0 })).filter(t => t.otps > 0).sort((a, b) => b.otps - a.otps);
+      leaders.forEach((t, i) => { t.rank = i + 1; t.qualified = (target > 0 && t.otps >= target); });
+      const myPrefixes = prefixesFor(role, user.username, allPrefixes);
+      const myTeams = [];
+      for (const mp of myPrefixes) {
+        const o = otps[mp.prefix] || 0;
+        const qualified = (target > 0 && o >= target);
+        const rankObj = leaders.find(t => t.prefix === mp.prefix);
+        let congrats = false, alreadyAwarded = false;
+        if (qualified && role !== 'super') {
+          try {
+            const ar = await fetch(`${SUPABASE_URL}/rest/v1/bonus_awards?prefix=${encodeURIComponent('eq.' + mp.prefix)}&period=${encodeURIComponent('eq.' + period)}&window_key=${encodeURIComponent('eq.' + windowKey)}&select=id`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+            const arows = await ar.json();
+            if (Array.isArray(arows) && arows.length) alreadyAwarded = true;
+            else { await fetch(`${SUPABASE_URL}/rest/v1/bonus_awards`, { method: 'POST', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' }, body: JSON.stringify({ prefix: mp.prefix, period, window_key: windowKey, target_otps: target, reward_usd: reward }) }); congrats = true; }
+          } catch (e) {}
+        }
+        myTeams.push({ prefix: mp.prefix, admin: mp.admin_username, label: mp.label || '', otps: o, qualified, rank: rankObj ? rankObj.rank : null, congrats, alreadyAwarded, reward });
+      }
+      return ok(res, { role, config: { period, target_otps: target, reward_usd: reward, top_n: topN, note: config.note || '' }, windowKey, leaders: leaders.slice(0, Math.max(topN, 10)), myTeams });
     }
     
     
