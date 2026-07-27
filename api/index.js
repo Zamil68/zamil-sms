@@ -616,6 +616,13 @@ module.exports = async (req, res) => {
       return ok(res, { count: mine.length, byNumber, byRange });
     }
 
+        if (url === '/dor' && req.method === 'POST') {
+      const bd = businessDayPKT();
+      const rows = await getCachedCDR(bd.from, bd.to);
+      rows.sort((a, b) => b.datetime.localeCompare(a.datetime));
+      return ok(res, { date: bd.label, total: rows.length, recent: rows.slice(0, 200).map(r => ({ time: r.time, datetime: r.datetime, number: r.number, cli: r.cli, client: r.client, message: r.message, range: r.range })) });
+    }
+
     // 6. SEARCH RANGES (real ids + available counts)
        if (url === '/alloc/search-ranges' && req.method === 'POST') {
       const query = (req.body.query || '').toLowerCase().trim();
