@@ -5,6 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#06080F">
     <title>Zamil SMS — Dashboard</title>
+    <script>
+/* ═══════════════════════════════════════════════════════════
+   🔇 CONSOLE SILENCER — hides ALL console output.
+   • To debug: comment out this whole <script>…</script> block.
+   • Or, without editing, run this in the console to bring logs back:
+         __restoreConsole()
+   ═══════════════════════════════════════════════════════════ */
+(function(){
+  window.__origConsole = {
+    log:   console.log,
+    warn:  console.warn,
+    error: console.error,
+    info:  console.info,
+    debug: console.debug,
+    trace: console.trace
+  };
+  var noop = function(){};
+  ['log','warn','error','info','debug','trace'].forEach(function(m){ console[m] = noop; });
+  window.__restoreConsole = function(){
+    var o = window.__origConsole;
+    for (var k in o){ if (Object.prototype.hasOwnProperty.call(o, k)) console[k] = o[k]; }
+  };
+})();
+</script>
+    
     <link rel="icon" type="image/x-icon" href="/branding/favicon.ico">
     <link rel="stylesheet" href="common.css">
     <link rel="stylesheet" href="dashboard.css">
