@@ -744,7 +744,7 @@ module.exports = async (req, res) => {
             const r = rangesMap.get(key); r.total++;
             if (isAvailableClient(n.client)) r.available++;
           });
-          const rangeOpts = await getRangeOptions();
+          const rangeOpts = await getCachedRangeOptions();
           const optKeys = Array.from(rangeOpts.keys());
           rangesMap.forEach(r => {
             const cands = [norm(`${r.country} - ${r.title}`), norm(r.title), norm(`${r.country}${r.title}`), norm(`${r.title} - ${r.country}`)];
