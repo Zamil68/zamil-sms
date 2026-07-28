@@ -435,35 +435,25 @@ function fallbackCopy(n){
 
 // 🔥 UPDATED: Load ranges with proper user filtering
 function loadRanges(forceRefresh){
-  var listEl=document.getElementById("rangesList");
+  var listEl=document.getElementById('rangesList');
   var cached=cacheGet(CACHE_KEY_RANGES);
-  // Always render cached instantly if available — no spinner blocking
-  if(cached){
-    renderRanges(cached.data);
-    if(!forceRefresh && !cached.stale) return; // fresh cache; skip network
-  } else {
-    listEl.innerHTML="<div class=\"empty\"><div class=\"spinner\"></div><br/>Loading ranges…</div>";
-    showLoad("Fetching ranges…");
-  }
-  apiCall("/api/ranges",{session:SESSION,forceRefresh:!!forceRefresh},function(d){
+  if(cached && cached.data && cached.data.length){ renderRanges(cached.data); if(!forceRefresh && !cached.stale) return; }   // instant paint
+  else if(!cached){ listEl.innerHTML='<div class="empty"><div class="spinner"></div><br/>Loading ranges…</div>'; showLoad('Fetching ranges…'); }
+  apiCall('/api/ranges',{session:SESSION,forceRefresh:!!forceRefresh},function(d){
     hideLoad();
     if(!d || !d.ok){
-      if(!cached){
-        // No cache to fall back on — don't leave the spinner hanging
-        // forever, show a real error state with a retry button.
-        listEl.innerHTML="<div class=\"empty\"><div class=\"empty-icon\">⚠️</div>"+
-          escHtml((d&&d.error)||"Could not load ranges")+
-          "<br/><button type=\"button\" class=\"btn\" style=\"margin-top:12px\" onclick=\"loadRanges(true)\">↺ Retry</button></div>";
-      }
-      showToast("Error: "+((d&&d.error)||"?"),"error");
-      return; // keep showing cache silently if we have one
+      if(cached && cached.data && cached.data.length){ renderRanges(cached.data); showMini('Using cached ranges','info'); return; }
+      if(!cached) listEl.innerHTML='<div class="empty"><div class="empty-icon">⚠️</div>'+escHtml((d&&d.error)||'Could not load ranges')+'<br/><button type="button" class="btn" style="margin-top:12px" onclick="loadRanges(true)">↺ Retry</button></div>';
+      showToast('Error: '+((d&&d.error)||'?'),'error'); return;
     }
-    cacheSet(CACHE_KEY_RANGES,d.ranges||[]);
-    renderRanges(d.ranges||[]);
-    if(forceRefresh) showToast("✓ "+(d.ranges||[]).length+" ranges loaded","success");
+    var fresh=d.ranges||[];
+    if(!fresh.length){ if(cached && cached.data && cached.data.length){ renderRanges(cached.data); showMini('Live list empty · showing cached','info'); return; }   // ← never paint "No ranges" over good data
+      listEl.innerHTML='<div class="empty"><div class="empty-icon">📭</div>No ranges found. Allocate numbers from the Add button.</div>'; return; }
+    cacheSet(CACHE_KEY_RANGES, fresh);
+    renderRanges(fresh);
+    if(forceRefresh) showToast('✓ '+fresh.length+' ranges loaded','success');
   });
 }
-
 function showRanges(){
     document.getElementById("rangesPanel").style.display="block";
     document.getElementById("numbersPanel").style.display="none";
