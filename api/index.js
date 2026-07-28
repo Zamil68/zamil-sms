@@ -1139,8 +1139,9 @@ if (url === '/stats' && req.method === 'POST') {
       const todayRows = await getCachedCDR(bd.from, bd.to, force ? 0 : CDR_TTL_WIDE);
       const weekRows  = await getCachedCDR(dayBack(6) + ' 00:00:00', today + ' 23:59:59', force ? 0 : CDR_TTL_WIDE);
       const allPrefixes = await supaGetPrefixes();
+      const myPrefixes = prefixesFor(role, user.username, allPrefixes);   // ← ADD THIS LINE
       const pinsMap = await getPinsMap();
-      const teamOfClient = (cli) => resolveTeam(cli, allPrefixes, pinsMap);
+      const teamOfClient = (cli) => resolveTeam(cli, allPrefixes, pinsMap);;
       const tally = (rows) => { const m = {}; rows.forEach(r => { const k = teamOfClient(r.client) || '__none__'; m[k] = (m[k] || 0) + 1; }); return m; };
       const tToday = tally(todayRows), tWeek = tally(weekRows);
       const clients = await getCachedClients(false);
