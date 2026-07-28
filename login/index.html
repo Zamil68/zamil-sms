@@ -132,6 +132,21 @@
     </style>
 </head>
 <body>
+<script>
+/* If already signed in, go straight to the dashboard (validates first → no redirect loop) */
+(function(){
+  try{
+    var s = localStorage.getItem('app_session');
+    if(!s) return;
+    var ctrl = new AbortController(); var t = setTimeout(function(){ ctrl.abort(); }, 5000);
+    fetch('/api/ping', { method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'}, body: JSON.stringify({session:s}), cache:'no-store', signal: ctrl.signal })
+      .then(function(r){ clearTimeout(t); return r.json(); })
+      .then(function(d){ if(d && d.ok){ location.replace('/dashboard'); } else { localStorage.removeItem('app_session'); } })
+      .catch(function(){ clearTimeout(t); /* offline/timeout → stay on login, never loop */ });
+  }catch(e){}
+})();
+</script>
+    
     <div id="loginScreen">
        <div class="login-card">
             <div class="login-brand">
