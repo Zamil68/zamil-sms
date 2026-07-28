@@ -281,9 +281,12 @@ async function countDailyAllocByCountry(username, clientName){
 // ═══════════════════════════════════════════════════════════
 const RESET_HOUR_PKT = 5; // kept for the weekly/monthly snapshot roll (Phase 3); NOT used to hide messages
 function businessDayPKT(){
-  const pkt = new Date(Date.now() + 5*3600000);          // "now" expressed in PKT
-  const base = pkt.toISOString().slice(0,10);            // PKT calendar date = what the panel calls "today"
-  return { from: base + ' 00:00:00', to: base + ' 23:59:59', label: base };
+  const pkt = new Date(Date.now() + 5*3600000);          // now in PKT
+  const hh  = pkt.getUTCHours();
+  const base = new Date(pkt.getTime() - (hh < 5 ? 1 : 0) * 86400000);   // active business day (rolls 05:00)
+  const label = base.toISOString().slice(0,10);
+  const next  = new Date(base.getTime() + 86400000).toISOString().slice(0,10);
+  return { from: label + ' 05:00:00', to: next + ' 05:00:00', label };
 }
 
 async function scrapeCDR(dateFrom, dateTo, extra){
@@ -808,10 +811,12 @@ if (url === '/stats' && req.method === 'POST') {
       }
       const countries = Object.values(countryMap).map(c => ({ country: c.country, flag: c.flag, ranges: Object.values(c.ranges).sort((a,b)=> b.available - a.available) })).sort((a,b)=> a.country.localeCompare(b.country));
 
-      const todayRows = await getCachedCDR(bd.from, bd.to);
-      const otpToday = todayRows.length;
-      const otpWeek  = (await getCachedCDR(dayBack(6) + ' 00:00:00',  today + ' 23:59:59')).length;
-      const otpMonth = (await getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')).length;
+      const [todayRows, weekRows, monthRows] = await Promise.all([
+        getCachedCDR(bd.from, bd.to),
+        getCachedCDR(dayBack(6)  + ' 05:00:00', today + ' 23:59:59'),
+        getCachedCDR(dayBack(29) + ' 05:00:00', today + ' 23:59:59')
+      ]);
+      const otpToday = todayRows.length, otpWeek = weekRows.length, otpMonth = monthRows.length;
       const rangeCounts = {}; todayRows.forEach(r => { if (r.range) rangeCounts[r.range] = (rangeCounts[r.range]||0)+1; });
       let mostActiveRange = '—', mostActiveCount = 0;
       Object.entries(rangeCounts).forEach(([rg,c]) => { if (c > mostActiveCount){ mostActiveCount = c; mostActiveRange = rg; } });
@@ -1407,7 +1412,7 @@ if (url === '/stats' && req.method === 'POST') {
       });
     }
     // 9. LEADERBOARD
-    if (url === '/leaderboard' && req.method === 'POST') {
+   if (url === '/leaderboard' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
       const range = (req.body.range || 'today');
@@ -1417,13 +1422,17 @@ if (url === '/stats' && req.method === 'POST') {
         const pkt = new Date(Date.now() + 5*3600000);
         const end = pkt.toISOString().slice(0,10);
         const start = new Date(pkt.getTime() - (days-1)*86400000).toISOString().slice(0,10);
-        from = start + ' 00:00:00'; to = end + ' 23:59:59';
+        from = start + ' 05:00:00'; to = end + ' 05:00:00';
       }
-     const rows = await getCachedCDR(from, to, range === 'today' ? CDR_TTL : CDR_TTL_WIDE);
+      const rows = await getCachedCDR(from, to, range === 'today' ? CDR_TTL : CDR_TTL_WIDE);
       const counts = {};
-      rows.forEach(r => { const c = r.client || 'Unknown'; if (c) counts[c] = (counts[c]||0) + 1; });
-      const users = Object.entries(counts).sort((a,b) => b[1]-a[1]).slice(0,10).map(([username,count]) => ({ username, count }));
-      return ok(res, { users, range });
+      rows.forEach(r => { const c = lbName(r.client); counts[c] = (counts[c]||0) + 1; });
+      const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+      const users = sorted.slice(0, 50).map(([username,count]) => ({ username, count }));
+      const meKeys = [user.clientName, user.username].map(s=>String(s||'').toLowerCase().trim()).filter(Boolean);
+      let me = null;
+      for (let i=0;i<sorted.length;i++){ const k=sorted[i][0].toLowerCase(); if (meKeys.some(m=> k===m || k.includes(m) || m.includes(k))){ me = { rank:i+1, username:sorted[i][0], count:sorted[i][1] }; break; } }
+      return ok(res, { users, range, me, total: sorted.length });
     }
 
     // 10. CLIENTS LIST
