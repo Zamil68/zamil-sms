@@ -1598,21 +1598,20 @@ var numSmsModal=document.getElementById("numSmsModal");
     startSmsAutoRefresh();
   }
 
-  if (SESSION) {
-    setTimeout(_startLoad, 100);
-  } else {
-    // No SESSION in memory — try silent reauth with stored client creds.
-    // tryReauth() will redirect to /agent if stored creds are admin creds.
-    if (typeof tryReauth === "function") {
-      tryReauth().then(function(ok) {
-        if (ok) { setTimeout(_startLoad, 100); }
-        else    { location.replace("/"); }
-      }).catch(function() { location.replace("/"); });
-    } else {
-      location.replace("/");
-    }
-    return;
-  }
+  function _bounceToLogin(){ try{ localStorage.removeItem('app_session'); }catch(e){} location.replace('/login/index.html'); }
+if (SESSION) {
+  // Validate the stored session (fast ping). apiCall silently re-auths from stored
+  // creds if it's dead; if that also fails → clean bounce to login (no loop).
+  apiCall('/api/ping', { session: SESSION }, function(d){
+    if (d && d.ok) { setTimeout(_startLoad, 50); }
+    else { _bounceToLogin(); }
+  });
+} else {
+  if (typeof tryReauth === 'function') {
+    tryReauth().then(function(ok){ if (ok) setTimeout(_startLoad, 100); else _bounceToLogin(); }).catch(_bounceToLogin);
+  } else { _bounceToLogin(); }
+  return;
+}
   // Request browser notification permission on first user interaction
   var _askedNotif=false;
   function _askNotifOnce(){
