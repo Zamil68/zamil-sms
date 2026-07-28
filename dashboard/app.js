@@ -967,21 +967,11 @@ function _rsmsNextColor(){ var c=_RSMS_AV_COLORS[_rsmsAvIdx%_RSMS_AV_COLORS.leng
 function _rsmsLocalTime(rawTime){
   if(!rawTime||rawTime.length<4){ rawTime = new Date().toISOString().slice(11,16); }
   var parts=rawTime.split(':'); var hh=parseInt(parts[0],10)||0; var mm=parseInt(parts[1],10)||0;
-  var pk=(hh+5)%24;                                   // server is UTC → PKT = +5
+  var pk=(hh+5)%24;                                   // server UTC → Pakistan = +5
   var ampm = pk>=12?'PM':'AM'; var h12 = pk%12||12;
   return h12+':'+(mm<10?'0':'')+mm+' '+ampm;          // Islamabad / Karachi time
 }
-  var parts=rawTime.split(":");
-  var hh=parseInt(parts[0],10)||0;
-  var mm=parseInt(parts[1],10)||0;
-  // raw is UTC HH:MM; user local offset in minutes (east of UTC = positive)
-  var offMin=-new Date().getTimezoneOffset();
-  var total=hh*60+mm+offMin;
-  total=((total%1440)+1440)%1440;
-  var h=Math.floor(total/60),m=total%60;
-  var ampm=h>=12?"PM":"AM";
-  return (h%12||12)+":"+(m<10?"0":"")+m+" "+ampm;
-}
+
 function _rsmsItemHtml(r,isFirst,isNew){
   var cli=r.cli||"Unknown";
   var timeStr=_rsmsLocalTime(r.time);
@@ -1188,8 +1178,7 @@ function stopNumSmsWatch(){ if(_numSmsInterval){clearInterval(_numSmsInterval);_
 // (requestNotifPermission defined above)
 
 // ── LEADERBOARD ──
-function renderLeaderboard(users){
- var _lbAllUsers=null, _lbMe=null, _lbTotal=0;
+var _lbAllUsers=null, _lbMe=null, _lbTotal=0, _LB_EXPANDED=false;
 function _lbAvatar(name, cls){ return '<div class="lb-avatar '+(cls||'')+'">'+escHtml(String(name||'?').substring(0,2).toUpperCase())+'</div>'; }
 function renderLeaderboard(users, me, total){
   var lbList=document.getElementById('lbList'), lbComing=document.getElementById('lbComing');
@@ -1216,13 +1205,17 @@ function renderLeaderboard(users, me, total){
   var moreBtn = rest.length>7 ? '<button type="button" class="lb-viewmore" onclick="toggleLbMore()">'+(_LB_EXPANDED?'Show less':'View more ('+rest.length+')')+'</button>' : '';
   if(lbList) lbList.innerHTML = ph + lh + moreBtn;
 }
-var _LB_EXPANDED=false;
 window.toggleLbMore=function(){ _LB_EXPANDED=!_LB_EXPANDED; renderLeaderboard(_lbAllUsers,_lbMe,_lbTotal); };
 function loadLeaderboard(range){
   if(!SESSION) return;
   if(range) LB_RANGE=range;
-  var lbComing=document.getElementById('lbComing'), lbSpin0=document.getElementById('lbSpin');
-  if(lbSpin0){ lbSpin0.style.display='inline-flex'; lbSpin0.onclick=function(){ LB_CACHE[LB_RANGE]=null; loadLeaderboard(); }; }   // persistent, working refresh
+  var lbComing=document.getElementById('lbComing'), lbList0=document.getElementById('lbList'), lbSpin0=document.getElementById('lbSpin');
+  if(isFeatureLocked("leaderboard")){
+    if(lbSpin0) lbSpin0.style.display="none"; if(lbList0) lbList0.style.display="none";
+    if(lbComing){ lbComing.style.display="block"; lbComing.innerHTML='<div class="lb-coming-icon">🔒</div><div class="lb-coming-title">Not available yet</div><div class="lb-coming-sub">Leaderboard is not available yet for this provider.</div>'; }
+    return;
+  }
+  if(lbSpin0){ lbSpin0.style.display='inline-flex'; lbSpin0.onclick=function(){ LB_CACHE[LB_RANGE]=null; loadLeaderboard(); }; }
   document.querySelectorAll('.lb-range-btn').forEach(function(b){ b.classList.toggle('selected', b.dataset.range===LB_RANGE); });
   var cached=LB_CACHE[LB_RANGE];
   if(cached && cached.users) renderLeaderboard(cached.users, cached.me, cached.total);   // instant from cache
@@ -1249,67 +1242,6 @@ function loadDOR(){
         + "<div class='rsms-msg-box'><div class='rsms-shield'>📩</div><div class='rsms-body'>"+escHtml(r.message||'')+"</div></div><div class='rsms-num-line'>📱 "+escHtml(r.number)+"</div></div></div>"; }
     if(d.recent.length>200) h += "<div style='text-align:center;padding:12px;color:var(--muted);font-size:.75rem;'>Showing latest 200 of "+d.recent.length+" total</div>";
     list.innerHTML = h + "</div>";
-  });
-}
-function loadLeaderboard(range){
-  if(!SESSION) return;
-  if(range) LB_RANGE=range;
-  var lbComing=document.getElementById("lbComing");
-  var lbList0=document.getElementById("lbList");
-  var lbSpin0=document.getElementById("lbSpin");
-  if(isFeatureLocked("leaderboard")){
-    if(lbSpin0) lbSpin0.style.display="none";
-    if(lbList0) lbList0.style.display="none";
-    if(lbComing){
-      lbComing.style.display="block";
-      lbComing.innerHTML =
-        '<div class="lb-coming-icon"></div>'+
-        '<div class="lb-coming-title">Not available yet</div>'+
-        '<div class="lb-coming-sub">Leaderboard is not available yet for Purple users.</div>';
-    }
-    return;
-  }
-  var lbSpin=document.getElementById("lbSpin");
-  document.querySelectorAll(".lb-range-btn").forEach(function(b){ b.classList.toggle("selected",b.dataset.range===LB_RANGE); });
-  var cached=LB_CACHE[LB_RANGE];
-  if(cached && cached.users && Date.now()-cached.ts<60000){
-    renderLeaderboard(cached.users);
-    return;
-  }
-  if(cached && cached.users){ renderLeaderboard(cached.users); }
-  if(lbSpin) lbSpin.style.display="inline-block";
-  var lbPanel = parseInt(localStorage.getItem("app_panel_num")||"1",10) || 1;
-  apiCall("/api/leaderboard",{session:SESSION,range:LB_RANGE,panelNum:lbPanel},function(d){
-    if(lbSpin) lbSpin.style.display="none";
-    if(!d||!d.ok||!d.users||!d.users.length){ renderLeaderboard([]); return; }
-    LB_CACHE[LB_RANGE]={ts:Date.now(),users:d.users||[]};
-    renderLeaderboard(d.users||[]);
-  });
-}
-function loadDOR(){
-  if(!SESSION) return;
-  var loading = document.getElementById("dorLoading");
-  var list = document.getElementById("dorList");
-  if(loading) loading.style.display = "block";
-  if(list) list.style.display = "none";
-  apiCall("/api/dor", {session: SESSION}, function(d){
-    if(loading) loading.style.display = "none";
-    if(!d || !d.ok || !list) return;
-    list.style.display = "block";
-    if(!d.recent || !d.recent.length){ list.innerHTML = "<div style='padding:24px;text-align:center;color:var(--muted)'>📭 No global messages found today.</div>"; return; }
-    var showList = d.recent.slice(0, 200);
-    var h = "<div style='display:flex;flex-direction:column;gap:8px;'>";
-    for(var i=0;i<showList.length;i++){
-      var r = showList[i];
-      h += "<div class='recent-item' style='margin-bottom:0;'><div class='rsms-inner'>"
-        + "<div class='rsms-head-row'><div class='rsms-cli-wrap'><div class='rsms-cli-icon'>🔒</div><span class='rsms-name'>"+escHtml(r.cli||'Unknown')+"</span></div><span class='rsms-dev-time'>🕒 "+escHtml(_rsmsLocalTime(r.time))+"</span></div>"
-        + (r.client ? "<div class='rsms-range'>👤 "+escHtml(r.client)+"</div>" : "")
-        + "<div class='rsms-msg-box'><div class='rsms-shield'>📩</div><div class='rsms-body'>"+escHtml(r.message||'')+"</div></div>"
-        + "<div class='rsms-num-line'>📱 "+escHtml(r.number)+"</div></div></div>";
-    }
-    if(d.recent.length>200) h += "<div style='text-align:center;padding:12px;color:var(--muted);font-size:.75rem;'>Showing latest 200 of "+d.recent.length+" total</div>";
-    h += "</div>";
-    list.innerHTML = h;
   });
 }
 // ─ ALLOC MODAL ──
