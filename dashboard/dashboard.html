@@ -622,19 +622,24 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
 
     if(typeof _applySmsResult==='function' && !_applySmsResult._zw){
       var _asr=_applySmsResult; window._zeroStreak=0; var _seeded=false;
+      window._lastNonZeroSms = window._lastNonZeroSms || { count:0, ts:0 };
+      var _lastDorKick = 0;
       window._applySmsResult=function(d){
         if(d&&d.ok){
-          var cached=zget('zamil_cache_smscount'); var isZero=(d.count===0);
-          window._zeroStreak = isZero ? (window._zeroStreak||0)+1 : 0;
-          if(isZero && cached && cached.count>0 && window._zeroStreak<3){ return _asr.call(this,{ok:true,count:cached.count,recent:cached.recent||[]}); } // ← suppress glitch-zero
-          zset('zamil_cache_smscount',{count:d.count,recent:(d.recent||[]).slice(0,30),ts:Date.now()});
-          if((d.count||0)<=50) _tallyBadges(d.recent||[]);   // live badges (only when recent is complete → exact)
+          var cached=zget('zamil_cache_smscount');
+          var isZero=(d.count===0);
+          if(!isZero){ window._lastNonZeroSms={ count:d.count, ts:Date.now() }; window._zeroStreak=0; }
+          else { window._zeroStreak=(window._zeroStreak||0)+1; }
+          var grace = window._lastNonZeroSms.count>0 && (Date.now()-window._lastNonZeroSms.ts) < 180000;   // 3-min grace
+          if(isZero && grace){ var keep=(cached&&cached.count>0)?cached.count:window._lastNonZeroSms.count; return _asr.call(this,{ok:true,count:keep,recent:(cached&&cached.recent)||d.recent||[]}); }  // ← never flicker to 0
+          if(!isZero) zset('zamil_cache_smscount',{count:d.count,recent:(d.recent||[]).slice(0,30),ts:Date.now()});   // ← never cache a 0
+          if((d.count||0)<=50 && !isZero) _tallyBadges(d.recent||[]);
           if(!_seeded){ _seeded=true; if(d.recent&&typeof window.seedFloatSeen==='function') window.seedFloatSeen(d.recent); }
+          try{ if(!isZero && (Date.now()-_lastDorKick)>4000){ var dp=document.getElementById('dorPage'); if(dp && dp.style.display==='block' && typeof loadDOR==='function'){ _lastDorKick=Date.now(); setTimeout(loadDOR,1200); } } }catch(e){}  // keep DOR live
         }
         return _asr.apply(this,arguments);
       }; _applySmsResult._zw=1;
     }
-
     if(typeof loadDOR==='function' && !loadDOR._zw){
       window.loadDOR=function(){
         var loading=document.getElementById('dorLoading'), list=document.getElementById('dorList');
