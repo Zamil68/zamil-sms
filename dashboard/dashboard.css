@@ -1100,3 +1100,32 @@ button,input{font-family:inherit}
   padding:9px 22px;border-radius:22px;cursor:pointer;transition:background .15s,border-color .15s,transform .1s}
 .rsms-more-btn:hover{background:rgba(34,211,238,.08);border-color:rgba(34,211,238,.4)}
 .rsms-more-btn:active{transform:scale(.97)}
+
+/* ── Leaderboard v2 (podium 2-1-3 + ranked list + "you" row) ── */
+.lb-podium-avatar{width:46px;height:46px;border-radius:50%;background:var(--surface);border:2px solid var(--border);
+  display:flex;align-items:center;justify-content:center;overflow:hidden;margin:0 auto}
+.lb-podium-col.p1 .lb-podium-avatar{width:56px;height:56px;border-color:var(--accent)}
+.lp-init{font-family:ui-monospace,"SF Mono",monospace;font-size:.95rem;font-weight:800;color:var(--text)}
+.lb-podium-name{font-size:.72rem;font-weight:700;color:var(--text);text-align:center;margin-top:6px;
+  max-width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lb-podium-score{font-family:ui-monospace,"SF Mono",monospace;font-size:1.15rem;font-weight:900;color:var(--accent);line-height:1;margin-top:3px}
+.lb-podium-col.p1 .lb-podium-score{font-size:1.4rem}
+.lb-table{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-top:12px}
+.lb-row{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--border)}
+.lb-row:last-child{border-bottom:none}
+.lb-rank{font-family:ui-monospace,"SF Mono",monospace;font-size:.78rem;font-weight:800;color:var(--muted);width:34px;flex-shrink:0}
+.lb-user-cell{flex:1;min-width:0;display:flex;align-items:center;gap:10px}
+.lb-avatar{width:32px;height:32px;border-radius:50%;background:var(--surface);border:1.5px solid var(--border);
+  display:flex;align-items:center;justify-content:center;font-family:ui-monospace,"SF Mono",monospace;font-size:.7rem;font-weight:800;color:var(--text);flex-shrink:0}
+.lb-name{font-size:.82rem;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lb-vol-num{font-family:ui-monospace,"SF Mono",monospace;font-size:.92rem;font-weight:900;color:var(--accent);flex-shrink:0}
+.lb-row-sep{text-align:center;color:var(--muted);font-weight:800;letter-spacing:.2em;padding:4px 0;border-bottom:1px solid var(--border)}
+.lb-row-me{background:linear-gradient(135deg,rgba(34,211,238,.10),rgba(34,211,238,.03))}
+.lb-rank-me{background:var(--accent);color:#06080F;border-radius:20px;padding:3px 9px;width:auto;font-size:.7rem}
+.lb-avatar-me{border-color:var(--accent)}
+.lb-you-tag{font-size:.55rem;font-weight:800;color:#06080F;background:var(--accent);border-radius:20px;padding:1px 7px;margin-left:6px;vertical-align:middle}
+.lb-viewmore{display:block;width:calc(100% - 28px);margin:12px auto 2px;background:var(--surface);border:1px solid var(--border);
+  color:var(--text);font:inherit;font-size:.78rem;font-weight:800;padding:11px;border-radius:11px;cursor:pointer;transition:background .15s,border-color .15s}
+.lb-viewmore:hover{background:rgba(34,211,238,.08);border-color:rgba(34,211,238,.4)}
+.lb-refresh{display:inline-flex !important;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px}
+[data-theme="light"] .lb-podium-wrap{background:#fff}
