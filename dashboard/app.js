@@ -729,20 +729,30 @@ function dismissNotifBanner(){
 })();
 /* fireBrowserNotif defined below as window.fireBrowserNotif */
 function _playSmsBeep(){
-  try {
-    var Ctx=window.AudioContext||window.webkitAudioContext;
-    if(!Ctx) return;
-    var ctx=new Ctx();
-    var o=ctx.createOscillator(), g=ctx.createGain();
-    o.connect(g); g.connect(ctx.destination);
-    o.type="sine"; o.frequency.setValueAtTime(880, ctx.currentTime);
-    o.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime+0.18);
-    g.gain.setValueAtTime(0.0001, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime+0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+0.45);
-    o.start(); o.stop(ctx.currentTime+0.5);
-    setTimeout(function(){ try{ctx.close();}catch(e){} }, 700);
-  } catch(e){}
+  try{
+    var Ctx = window.AudioContext || window.webkitAudioContext; if(!Ctx) return;
+    var ctx = new Ctx(); if(ctx.state === 'suspended') ctx.resume();
+    var t = ctx.currentTime;
+    var master = ctx.createGain(); master.gain.value = 1.0; master.connect(ctx.destination); // louder overall
+    // tiny percussive tick (the "span" click)
+    var k = ctx.createOscillator(), kg = ctx.createGain();
+    k.type = 'square'; k.frequency.setValueAtTime(3200, t);
+    kg.gain.setValueAtTime(0.0001, t); kg.gain.exponentialRampToValueAtTime(0.18, t+0.004); kg.gain.exponentialRampToValueAtTime(0.0001, t+0.05);
+    k.connect(kg); kg.connect(master); k.start(t); k.stop(t+0.06);
+    // two bright notes (D6 → G6) with a metallic 2nd harmonic
+    [[1174.66, 0.02], [1567.98, 0.17]].forEach(function(p){
+      var st = t + p[1];
+      var o = ctx.createOscillator(), g = ctx.createGain();      // body (triangle = bell-ish)
+      o.type = 'triangle'; o.frequency.setValueAtTime(p[0], st);
+      g.gain.setValueAtTime(0.0001, st); g.gain.exponentialRampToValueAtTime(0.5, st+0.012); g.gain.exponentialRampToValueAtTime(0.0001, st+0.34);
+      o.connect(g); g.connect(master); o.start(st); o.stop(st+0.36);
+      var h = ctx.createOscillator(), hg = ctx.createGain();     // shimmer (2nd harmonic = the "span" edge)
+      h.type = 'sine'; h.frequency.setValueAtTime(p[0]*2.0, st);
+      hg.gain.setValueAtTime(0.0001, st); hg.gain.exponentialRampToValueAtTime(0.22, st+0.012); hg.gain.exponentialRampToValueAtTime(0.0001, st+0.22);
+      h.connect(hg); hg.connect(master); h.start(st); h.stop(st+0.24);
+    });
+    setTimeout(function(){ try{ ctx.close(); }catch(e){} }, 800);
+  }catch(e){}
 }
 function showSmsAlert(text, recent){
   var t=document.getElementById("smsAlertToast");
