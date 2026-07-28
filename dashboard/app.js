@@ -733,7 +733,7 @@ function _playSmsBeep(){
     var Ctx = window.AudioContext || window.webkitAudioContext; if(!Ctx) return;
     var ctx = new Ctx(); if(ctx.state === 'suspended') ctx.resume();
     var t = ctx.currentTime;
-    var master = ctx.createGain(); master.gain.value = 1.0; master.connect(ctx.destination); // louder overall
+    var master = ctx.createGain(); master.gain.value = 1.4; master.connect(ctx.destination); // louder overall
     // tiny percussive tick (the "span" click)
     var k = ctx.createOscillator(), kg = ctx.createGain();
     k.type = 'square'; k.frequency.setValueAtTime(3200, t);
