@@ -721,42 +721,62 @@ module.exports = async (req, res) => {
     }
 
     // 6. SEARCH RANGES (real ids + available counts)
-       if (url === '/alloc/search-ranges' && req.method === 'POST') {
-      const query = (req.body.query || '').toLowerCase().trim();
+      if (url === '/alloc/search-ranges' && req.method === 'POST') {
+      const rawQ = String(req.body.query || '');
+      const query = rawQ.toLowerCase().replace(/[\s ​-‍﻿]+/g, ' ').trim();   // strip normal + non-breaking + zero-width spaces
+      const qns = query.replace(/\s+/g, '');                                  // whitespace-free form for tolerant matching
       const ch = _asCache.get(query);
       if (ch && (Date.now() - ch.ts) < 8000) return ok(res, { ranges: ch.ranges, _debug: Object.assign({}, ch._debug, { cached: true }) });
 
-      let data = await scrapeAgentData('res/data_smsnumbers.php', { frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
-      if (!data || !data.aaData) { await ensureAgentSession(true); data = await scrapeAgentData('res/data_smsnumbers.php', { frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 }); }
-      if (!data || !data.aaData) { if (ch) return ok(res, { ranges: ch.ranges, _debug: Object.assign({}, ch._debug, { cached: true }) }); return ok(res, { ranges: [], _debug: 'No data from LaMix' }); }
+      const now = Date.now();
+      let mapped = null, _src = 'live';
+      // 30s cache of the FULL mapped list → every search is instant AND a flaky scrape can't blank the results
+      if (_allocFullCache.mapped && (now - _allocFullCache.ts) < 30000) { mapped = _allocFullCache.mapped; _src = 'mapcache'; }
+      else {
+        let data = await scrapeAgentData('res/data_smsnumbers.php', { frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
+        if (!data || !data.aaData) { await ensureAgentSession(true); data = await scrapeAgentData('res/data_smsnumbers.php', { frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 }); }
+        if (data && data.aaData) {
+          const allNumbers = parseNumbersData(data);
+          const rangesMap = new Map();
+          allNumbers.forEach(n => {
+            const key = `${n.country} -- ${n.range}`;
+            if (!rangesMap.has(key)) rangesMap.set(key, { id: null, title: n.range, country: n.country, total: 0, available: 0 });
+            const r = rangesMap.get(key); r.total++;
+            if (isAvailableClient(n.client)) r.available++;
+          });
+          const rangeOpts = await getRangeOptions();
+          const optKeys = Array.from(rangeOpts.keys());
+          rangesMap.forEach(r => {
+            const cands = [norm(`${r.country} - ${r.title}`), norm(r.title), norm(`${r.country}${r.title}`), norm(`${r.title} - ${r.country}`)];
+            let id = null;
+            for (const c of cands) { if (c && rangeOpts.has(c)) { id = rangeOpts.get(c); break; } }
+            if (!id) { const nt = norm(r.title); for (const k of optKeys) { if (k && nt && (k.includes(nt) || nt.includes(k))) { id = rangeOpts.get(k); break; } } }
+            if (!id) { const nc = norm(r.country); const nt = norm(r.title); if (nc.length >= 4) for (const k of optKeys) { if (k && k.includes(nc) && nt && k.includes(nt.slice(0, 6))) { id = rangeOpts.get(k); break; } } }
+            if (id) r.id = id;
+          });
+          let i = 0; rangesMap.forEach(r => { if (!r.id) r.id = 'alloc_' + (i++); });
+          mapped = Array.from(rangesMap.values());
+          _allocFullCache = { ts: now, mapped };
+        } else if (_allocFullCache.mapped) { mapped = _allocFullCache.mapped; _src = 'mapcache-fallback'; }   // flaky scrape → use last good list
+      }
+      if (!mapped) { if (ch) return ok(res, { ranges: ch.ranges, _debug: Object.assign({}, ch._debug, { cached: true }) }); return ok(res, { ranges: [], _debug: 'No data from LaMix' }); }
 
-      const allNumbers = parseNumbersData(data);
-      const rangesMap = new Map();
-      allNumbers.forEach(n => {
-        const key = `${n.country} -- ${n.range}`;
-        if (!rangesMap.has(key)) rangesMap.set(key, { id: null, title: n.range, country: n.country, total: 0, available: 0 });
-        const r = rangesMap.get(key); r.total++;
-        if (isAvailableClient(n.client)) r.available++;
+      // tolerant filter: compare whitespace-stripped strings so "Tanzania", "Tanzania ", "Tanzania "(nbsp) and "Tanz" ALL match
+      const filtered = mapped.filter(r => {
+        if (!query) return true;
+        const hay = (r.country + ' ' + r.title).toLowerCase();
+        const hayNs = hay.replace(/\s+/g, '');
+        if (hay.includes(query) || hayNs.includes(qns)) return true;
+        const toks = query.split(/\s+/).filter(Boolean);
+        if (toks.length > 1 && toks.every(t => hay.includes(t))) return true;   // "sri lanka" etc.
+        return false;
       });
-      const rangeOpts = await getRangeOptions();
-      const optKeys = Array.from(rangeOpts.keys());
-      let mapped = 0; const unmatched = [];
-      rangesMap.forEach(r => {
-        const cands = [norm(`${r.country} - ${r.title}`), norm(r.title), norm(`${r.country}${r.title}`), norm(`${r.title} - ${r.country}`)];
-        let id = null;
-        for (const c of cands) { if (c && rangeOpts.has(c)) { id = rangeOpts.get(c); break; } }
-        if (!id) { const nt = norm(r.title); for (const k of optKeys) { if (k && nt && (k.includes(nt) || nt.includes(k))) { id = rangeOpts.get(k); break; } } }
-        if (!id) { const nc = norm(r.country); const nt = norm(r.title); if (nc.length >= 4) for (const k of optKeys) { if (k && k.includes(nc) && nt && k.includes(nt.slice(0, 6))) { id = rangeOpts.get(k); break; } } }
-        if (id) { r.id = id; mapped++; } else { unmatched.push(`${r.country} - ${r.title}`); }
-      });
-      let i = 0; rangesMap.forEach(r => { if (!r.id) r.id = 'alloc_' + (i++); });
-      const filtered = Array.from(rangesMap.values()).filter(r => `${r.country} ${r.title}`.toLowerCase().includes(query));
       const withAvail = filtered.filter(r => r.available > 0);
-      const _debug = { query, totalScraped: allNumbers.length, rangesFound: filtered.length, withAvailable: withAvail.length, realIdsMapped: mapped, rangeOptsCount: optKeys.length, unmatchedSample: unmatched.slice(0, 8) };
-      if (withAvail.length) _asCache.set(query, { ts: Date.now(), ranges: withAvail, _debug });   // only cache NON-empty → a transient empty never hides real ranges
-      return ok(res, { ranges: withAvail, _debug });
+      const result = withAvail.length ? withAvail : filtered;   // always show the country (free first; else the "not available" rows so the user sees it exists)
+      const _debug = { query, qns, src: _src, totalMapped: mapped.length, rangesFound: filtered.length, withAvailable: withAvail.length, returned: result.length };
+      if (result.length) _asCache.set(query, { ts: now, ranges: result, _debug });
+      return ok(res, { ranges: result, _debug });
     }
-
     // 7. CHECK AVAILABILITY
     if (url === '/alloc/check-availability' && req.method === 'POST') {
       const { rangeId } = req.body;
