@@ -1,121 +1,284 @@
 <!-- feature.html — admin features (injected by feature.js into #featureRoot) -->
 <style>
-#limitPage .lim-sectitle{font-size:.62rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin:6px 2px 8px}
-#limitPage .lim-row{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 14px;margin-bottom:8px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
-#limitPage .lim-row-main{flex:1;min-width:0}
-#limitPage .lim-row-title{font-size:.86rem;font-weight:800;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#limitPage .lim-row-sub{font-size:.64rem;color:var(--muted);margin-top:3px}
-#limitPage .lim-used{color:var(--red);font-weight:800}
-#limitPage .lim-freebtn{flex-shrink:0;font-size:.72rem;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;border-radius:10px;padding:9px 15px;cursor:pointer;white-space:nowrap;box-shadow:0 2px 8px rgba(34,211,238,.3)}
-#limitPage .lim-freebtn:active{transform:scale(.96)}
-#limitPage .lim-empty{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 16px;text-align:center;color:var(--muted);font-size:.82rem;line-height:1.55}
-.zconfirm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);backdrop-filter:blur(2px);z-index:900;align-items:center;justify-content:center;padding:18px}
-.zconfirm-box{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:22px 20px 18px;max-width:330px;width:100%;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.4)}
-.zconfirm-ic{font-size:2rem;margin-bottom:8px}
-.zconfirm-msg{font-size:.9rem;font-weight:700;color:var(--text);line-height:1.5;margin-bottom:18px}
-.zconfirm-btns{display:flex;gap:10px}
-.zconfirm-no,.zconfirm-yes{flex:1;border:0;border-radius:11px;padding:11px;font:inherit;font-size:.84rem;font-weight:800;cursor:pointer}
-.zconfirm-no{background:var(--surface);color:var(--text);border:1px solid var(--border)}
-.zconfirm-yes{background:linear-gradient(135deg,#f87171,#ef4444);color:#fff}
-.zconfirm-yes:active,.zconfirm-no:active{transform:scale(.97)}
-#motivNudge{position:fixed;left:50%;bottom:80px;transform:translateX(-50%) translateY(20px);z-index:640;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-size:.8rem;font-weight:800;padding:10px 18px;border-radius:24px;box-shadow:0 8px 24px rgba(0,0,0,.3);opacity:0;pointer-events:none;transition:opacity .3s ease,transform .3s ease;max-width:88vw;text-align:center}
-#motivNudge.show{opacity:1;transform:translateX(-50%) translateY(0)}
+/* ============================================================
+   Shared component system for injected admin pages.
+   Every #id / onclick / class used by feature.js is unchanged —
+   only presentation is upgraded. Each page gets its own accent
+   gradient via --pg1/--pg2 so sections feel distinct but consistent.
+   ============================================================ */
+
+#statsPage, #adminPage, #limitPage, #teamPage, #teamReportPage{
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+#statsPage{ --pg1:#6366f1; --pg2:#22d3ee; }
+#adminPage{ --pg1:#a855f7; --pg2:#ec4899; }
+#limitPage{ --pg1:#f59e0b; --pg2:#ef4444; }
+#teamPage{ --pg1:#10b981; --pg2:#06b6d4; }
+#teamReportPage{ --pg1:#6366f1; --pg2:#8b5cf6; }
+
+/* --- shared background wash so pages don't feel flat/bare --- */
+#statsPage, #adminPage, #limitPage, #teamPage, #teamReportPage{
+  background:
+    radial-gradient(600px 300px at 100% 0%, color-mix(in srgb, var(--pg2) 10%, transparent), transparent 70%),
+    radial-gradient(500px 260px at 0% 0%, color-mix(in srgb, var(--pg1) 10%, transparent), transparent 70%),
+    var(--bg);
+  animation: ffFadeIn .22s ease both;
+}
+@keyframes ffFadeIn{ from{ opacity:0; transform:translateY(6px);} to{ opacity:1; transform:translateY(0);} }
+
+/* --- page header bar (icon badge + title + subtitle + actions) --- */
+.ff-head{ display:flex; align-items:center; gap:10px; padding:14px 2px 16px; }
+.ff-head-back{
+  width:38px;height:38px;flex-shrink:0;border-radius:12px;border:1px solid var(--border);
+  background:var(--surface);color:var(--text);cursor:pointer;font-size:1.05rem;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 1px 3px rgba(0,0,0,.06); transition:transform .15s ease, background .15s ease;
+}
+.ff-head-back:active{ transform:scale(.92); }
+.ff-head-badge{
+  width:38px;height:38px;flex-shrink:0;border-radius:12px;display:flex;align-items:center;justify-content:center;
+  font-size:1.05rem; color:#fff;
+  background:linear-gradient(135deg,var(--pg1),var(--pg2));
+  box-shadow:0 4px 14px -2px color-mix(in srgb, var(--pg1) 55%, transparent);
+}
+.ff-head-text{ flex:1; min-width:0; }
+.ff-head-title{ font-size:1.02rem; font-weight:700; color:var(--text); letter-spacing:-.01em; line-height:1.2; }
+.ff-head-sub{ font-size:.68rem; font-weight:500; color:var(--muted); margin-top:2px; }
+.ff-head-actions{ display:flex; align-items:center; gap:6px; flex-shrink:0; }
+
+.ff-iconbtn{
+  font-size:.78rem;font-weight:700;color:var(--text);background:var(--surface);
+  border:1px solid var(--border);padding:9px 12px;border-radius:11px;cursor:pointer;
+  white-space:nowrap; display:flex; align-items:center; gap:5px;
+  transition:transform .15s ease, background .15s ease;
+}
+.ff-iconbtn:active{ transform:scale(.94); }
+.ff-btn-grad{
+  font-size:.8rem;font-weight:700;color:#fff;border:0;border-radius:11px;padding:10px 15px;
+  cursor:pointer; white-space:nowrap; letter-spacing:-.01em;
+  background:linear-gradient(135deg,var(--pg1),var(--pg2));
+  box-shadow:0 6px 16px -4px color-mix(in srgb, var(--pg1) 60%, transparent);
+  transition:transform .15s ease, box-shadow .15s ease;
+}
+.ff-btn-grad:active{ transform:scale(.96); box-shadow:0 3px 10px -3px color-mix(in srgb, var(--pg1) 60%, transparent); }
+
+/* --- generic card / section used across pages --- */
+.ff-card{
+  background:var(--card); border:1px solid var(--border); border-radius:16px;
+  padding:15px; margin-bottom:12px; box-shadow:0 1px 3px rgba(0,0,0,.05);
+}
+.ff-card-title{ font-size:.85rem; font-weight:700; color:var(--text); margin-bottom:10px; letter-spacing:-.01em; }
+.ff-label{
+  font-size:.62rem; font-weight:700; color:var(--muted); text-transform:uppercase;
+  letter-spacing:.08em; margin:2px 2px 8px;
+}
+
+.ff-input{
+  flex:1; min-width:0; background:var(--surface); border:1.5px solid var(--border);
+  border-radius:11px; padding:11px 13px; color:var(--text); font:inherit; font-size:.84rem;
+  outline:none; font-weight:500; transition:border-color .15s ease, box-shadow .15s ease;
+}
+.ff-input:focus{
+  border-color:var(--pg1);
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--pg1) 18%, transparent);
+}
+.ff-row-flex{ display:flex; gap:8px; flex-wrap:wrap; }
+
+.ff-msg{ font-size:.74rem; font-weight:600; margin-top:9px; display:none; border-radius:9px; padding:8px 10px; }
+.ff-msg.ok{ background:color-mix(in srgb, #10b981 14%, transparent); color:#0d9668; }
+.ff-msg.err{ background:color-mix(in srgb, #ef4444 14%, transparent); color:#dc2626; }
+
+.ff-empty{
+  background:var(--card); border:1px dashed var(--border); border-radius:16px;
+  padding:26px 18px; text-align:center; color:var(--muted); font-size:.82rem; line-height:1.6; font-weight:500;
+}
+
+/* ---------------- STATISTICS ---------------- */
+#statsCards{ display:grid; grid-template-columns:repeat(2,1fr); gap:9px; margin-bottom:12px; }
+
+/* ---------------- LIMIT INCREASE ---------------- */
+#limitPage .lim-sectitle{ font-size:.62rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:8px 2px 8px }
+#limitPage .lim-row{
+  display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--border);
+  border-radius:15px;padding:13px 14px;margin-bottom:8px;box-shadow:0 1px 3px rgba(0,0,0,.05);
+  transition:transform .15s ease;
+}
+#limitPage .lim-row-main{ flex:1;min-width:0 }
+#limitPage .lim-row-title{ font-size:.86rem;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
+#limitPage .lim-row-sub{ font-size:.66rem;color:var(--muted);margin-top:3px;font-weight:500 }
+#limitPage .lim-used{ color:#ef4444;font-weight:700 }
+#limitPage .lim-freebtn{
+  flex-shrink:0;font-size:.74rem;font-weight:700;color:#fff;
+  background:linear-gradient(135deg,var(--pg1),var(--pg2));
+  border:0;border-radius:11px;padding:10px 16px;cursor:pointer;white-space:nowrap;
+  box-shadow:0 5px 14px -3px color-mix(in srgb, var(--pg1) 55%, transparent);
+  transition:transform .15s ease;
+}
+#limitPage .lim-freebtn:active{ transform:scale(.95) }
+
+/* ---------------- CONFIRM DIALOG ---------------- */
+.zconfirm-overlay{
+  position:fixed;inset:0;background:rgba(15,15,20,.55);backdrop-filter:blur(3px);
+  z-index:900;align-items:center;justify-content:center;padding:20px;
+}
+.zconfirm-box{
+  background:var(--card);border:1px solid var(--border);border-radius:20px;
+  padding:26px 22px 20px;max-width:330px;width:100%;text-align:center;
+  box-shadow:0 24px 60px rgba(0,0,0,.35); animation:zpop .18s cubic-bezier(.2,1.2,.4,1) both;
+}
+@keyframes zpop{ from{ opacity:0; transform:scale(.92); } to{ opacity:1; transform:scale(1); } }
+.zconfirm-ic{ font-size:2.1rem;margin-bottom:10px }
+.zconfirm-msg{ font-size:.92rem;font-weight:700;color:var(--text);line-height:1.5;margin-bottom:20px }
+.zconfirm-btns{ display:flex;gap:10px }
+.zconfirm-no,.zconfirm-yes{ flex:1;border:0;border-radius:12px;padding:12px;font:inherit;font-size:.84rem;font-weight:700;cursor:pointer;transition:transform .15s ease }
+.zconfirm-no{ background:var(--surface);color:var(--text);border:1px solid var(--border) }
+.zconfirm-yes{ background:linear-gradient(135deg,#f87171,#ef4444);color:#fff;box-shadow:0 6px 16px -4px rgba(239,68,68,.45) }
+.zconfirm-yes:active,.zconfirm-no:active{ transform:scale(.96) }
+
+/* ---------------- MOTIVATION NUDGE TOAST ---------------- */
+#motivNudge{
+  position:fixed;left:50%;bottom:80px;transform:translateX(-50%) translateY(20px);z-index:640;
+  background:linear-gradient(135deg,#6366f1,#22d3ee);color:#fff;font-size:.8rem;font-weight:700;
+  padding:11px 20px;border-radius:24px;box-shadow:0 10px 26px rgba(0,0,0,.28);
+  opacity:0;pointer-events:none;transition:opacity .3s ease,transform .3s ease;max-width:88vw;text-align:center;
+}
+#motivNudge.show{ opacity:1;transform:translateX(-50%) translateY(0) }
+
+/* ---------------- ADMIN LIST / TEAM PREFIX PILLS ---------------- */
+#adminList .ff-admin-pill, #pfList .ff-pf-pill{
+  display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border);
+  border-radius:13px;padding:10px 12px;margin-bottom:7px;font-size:.8rem;font-weight:600;color:var(--text);
+}
 </style>
 
 <!-- STATISTICS -->
-<div id="statsPage" style="display:none;position:fixed;inset:0;z-index:600;background:var(--bg);overflow-y:auto">
-  <div style="max-width:560px;margin:0 auto;padding:14px 14px 40px">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-      <button onclick="closeStatsPage()" style="width:34px;height:34px;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:1rem">←</button>
-      <div style="flex:1;min-width:0"><div style="font-size:1.05rem;font-weight:800">📊 Statistics</div><div style="font-size:.66rem;color:var(--muted)" id="statsUpdated">Admin overview</div></div>
-      <button onclick="copyAvailList()" style="font-size:.72rem;font-weight:800;color:var(--text);background:var(--surface);border:1px solid var(--border);padding:9px 11px;border-radius:9px;cursor:pointer;white-space:nowrap">📋 Copy list</button>
-      <button onclick="loadStats()" style="font-size:.74rem;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;padding:9px 12px;border-radius:9px;cursor:pointer">↻</button>
+<div id="statsPage" style="display:none;position:fixed;inset:0;z-index:600;overflow-y:auto">
+  <div style="max-width:560px;margin:0 auto;padding:12px 14px 40px">
+    <div class="ff-head">
+      <button class="ff-head-back" onclick="closeStatsPage()">←</button>
+      <div class="ff-head-badge">📊</div>
+      <div class="ff-head-text">
+        <div class="ff-head-title">Statistics</div>
+        <div class="ff-head-sub" id="statsUpdated">Admin overview</div>
+      </div>
+      <div class="ff-head-actions">
+        <button class="ff-iconbtn" onclick="copyAvailList()">📋 Copy</button>
+        <button class="ff-iconbtn" onclick="loadStats()">↻</button>
+      </div>
     </div>
-    <div id="statsCards" style="display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-bottom:12px"></div>
-    <div id="statsMostActive" style="font-size:.76rem;color:var(--text);background:var(--card);border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin-bottom:12px"></div>
-    <input id="statsSearch" type="text" placeholder="🔍 Filter country or range…" oninput="filterStats()" style="width:100%;box-sizing:border-box;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font:inherit;font-size:.82rem;outline:none;margin-bottom:10px">
+    <div id="statsCards"></div>
+    <div id="statsMostActive" class="ff-card" style="font-size:.8rem;font-weight:600;padding:12px 14px;margin-bottom:12px"></div>
+    <input id="statsSearch" type="text" placeholder="🔍 Filter country or range…" oninput="filterStats()" class="ff-input" style="width:100%;box-sizing:border-box;margin-bottom:10px">
     <div id="statsCountries"></div>
   </div>
 </div>
 
 <!-- ADMIN CONTROL -->
-<div id="adminPage" style="display:none;position:fixed;inset:0;z-index:600;background:var(--bg);overflow-y:auto">
-  <div style="max-width:520px;margin:0 auto;padding:14px 14px 40px">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
-      <button onclick="closeAdminPage()" style="width:34px;height:34px;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:1rem">←</button>
-      <div style="flex:1"><div style="font-size:1.05rem;font-weight:800">🛡️ Admin Control</div><div style="font-size:.66rem;color:var(--muted)">Appoint & manage admins</div></div>
-    </div>
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
-      <div style="font-size:.8rem;font-weight:800;margin-bottom:9px">Promote a user to Admin</div>
-      <div style="display:flex;gap:8px">
-        <input id="adminUserInput" type="text" placeholder="LaMix username" style="flex:1;min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:10px 12px;color:var(--text);font:inherit;font-size:.84rem;outline:none">
-        <button onclick="promoteAdmin()" style="font-size:.8rem;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;border-radius:9px;padding:10px 16px;cursor:pointer;white-space:nowrap">Promote</button>
+<div id="adminPage" style="display:none;position:fixed;inset:0;z-index:600;overflow-y:auto">
+  <div style="max-width:520px;margin:0 auto;padding:12px 14px 40px">
+    <div class="ff-head">
+      <button class="ff-head-back" onclick="closeAdminPage()">←</button>
+      <div class="ff-head-badge">🛡️</div>
+      <div class="ff-head-text">
+        <div class="ff-head-title">Admin Control</div>
+        <div class="ff-head-sub">Appoint &amp; manage admins</div>
       </div>
-      <div id="adminMsg" style="font-size:.74rem;font-weight:700;margin-top:9px;display:none"></div>
     </div>
-    <div style="font-size:.66rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">Current Admins</div>
+
+    <div class="ff-card">
+      <div class="ff-card-title">Promote a user to Admin</div>
+      <div class="ff-row-flex">
+        <input id="adminUserInput" type="text" placeholder="LaMix username" class="ff-input">
+        <button onclick="promoteAdmin()" class="ff-btn-grad">Promote</button>
+      </div>
+      <div id="adminMsg" class="ff-msg"></div>
+    </div>
+
+    <div class="ff-label">Current Admins</div>
     <div id="adminList"></div>
-    <div style="margin-top:18px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px">
-      <div style="font-size:.8rem;font-weight:800;margin-bottom:4px">🏷️ Team Prefixes</div>
-      <div style="font-size:.62rem;color:var(--muted);margin-bottom:10px;line-height:1.4">Assign a prefix (e.g. <b>ZML_</b>) + display name to an admin.</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <input id="pfPrefix" type="text" placeholder="Prefix e.g. ZML_" style="flex:1;min-width:110px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:9px 11px;color:var(--text);font:inherit;font-size:.82rem;outline:none">
-        <input id="pfAdmin" type="text" placeholder="admin username" style="flex:1;min-width:110px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:9px 11px;color:var(--text);font:inherit;font-size:.82rem;outline:none">
-        <input id="pfLabel" type="text" placeholder="Display name e.g. Zml" style="flex:1;min-width:130px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:9px 11px;color:var(--text);font:inherit;font-size:.82rem;outline:none">
-        <button onclick="setPrefix()" style="font-size:.78rem;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;border-radius:9px;padding:9px 14px;cursor:pointer;white-space:nowrap">Assign</button>
+
+    <div class="ff-card" style="margin-top:14px">
+      <div class="ff-card-title" style="margin-bottom:4px">🏷️ Team Prefixes</div>
+      <div style="font-size:.68rem;color:var(--muted);margin-bottom:10px;line-height:1.45;font-weight:500">
+        Assign a prefix (e.g. <b>ZML_</b>) + display name to an admin.
       </div>
-      <div id="pfMsg" style="font-size:.72rem;font-weight:700;margin-top:8px;display:none"></div>
+      <div class="ff-row-flex">
+        <input id="pfPrefix" type="text" placeholder="Prefix e.g. ZML_" class="ff-input" style="min-width:110px">
+        <input id="pfAdmin" type="text" placeholder="admin username" class="ff-input" style="min-width:110px">
+        <input id="pfLabel" type="text" placeholder="Display name e.g. Zml" class="ff-input" style="min-width:130px">
+        <button onclick="setPrefix()" class="ff-btn-grad">Assign</button>
+      </div>
+      <div id="pfMsg" class="ff-msg"></div>
       <div id="pfList" style="margin-top:10px"></div>
     </div>
   </div>
 </div>
 
 <!-- LIMIT INCREASE -->
-<div id="limitPage" style="display:none;position:fixed;inset:0;z-index:600;background:var(--bg);overflow-y:auto">
-  <div style="max-width:520px;margin:0 auto;padding:14px 14px 40px">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
-      <button onclick="closeLimitPage()" style="width:34px;height:34px;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:1rem">←</button>
-      <div style="flex:1"><div style="font-size:1.05rem;font-weight:800">🆓 Limit Increase</div><div style="font-size:.66rem;color:var(--muted)">Free a try = remove 1 attempt row · max +3/user/day</div></div>
-    </div>
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px">
-      <div style="font-size:.8rem;font-weight:800;margin-bottom:9px">Search a user</div>
-      <div style="display:flex;gap:8px">
-        <input id="limitUserInput" type="text" placeholder="LaMix username" style="flex:1;min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:10px 12px;color:var(--text);font:inherit;font-size:.84rem;outline:none">
-        <button onclick="loadLimitStatus()" style="font-size:.8rem;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;border-radius:9px;padding:10px 16px;cursor:pointer;white-space:nowrap">Search</button>
+<div id="limitPage" style="display:none;position:fixed;inset:0;z-index:600;overflow-y:auto">
+  <div style="max-width:520px;margin:0 auto;padding:12px 14px 40px">
+    <div class="ff-head">
+      <button class="ff-head-back" onclick="closeLimitPage()">←</button>
+      <div class="ff-head-badge">🆓</div>
+      <div class="ff-head-text">
+        <div class="ff-head-title">Limit Increase</div>
+        <div class="ff-head-sub">Free a try = remove 1 attempt row · max +3/user/day</div>
       </div>
-      <div id="limitMsg" style="font-size:.74rem;font-weight:700;margin-top:9px;display:none"></div>
     </div>
+
+    <div class="ff-card">
+      <div class="ff-card-title">Search a user</div>
+      <div class="ff-row-flex">
+        <input id="limitUserInput" type="text" placeholder="LaMix username" class="ff-input">
+        <button onclick="loadLimitStatus()" class="ff-btn-grad">Search</button>
+      </div>
+      <div id="limitMsg" class="ff-msg"></div>
+    </div>
+
     <div id="limitResults"></div>
   </div>
 </div>
 
 <!-- MY TEAM -->
-<div id="teamPage" style="display:none;position:fixed;inset:0;z-index:600;background:var(--bg);overflow-y:auto">
-  <div style="max-width:560px;margin:0 auto;padding:14px 14px 40px">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-      <button onclick="closeTeamPage()" style="width:34px;height:34px;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:1rem">←</button>
-      <div style="flex:1;min-width:0"><div style="font-size:1.05rem;font-weight:800">👥 My Team</div><div style="font-size:.66rem;color:var(--muted)" id="teamSub">Clients grouped by team · cached 60s</div></div>
-      <button onclick="loadMyClients(true)" style="font-size:.74rem;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;padding:9px 12px;border-radius:9px;cursor:pointer">↻</button>
+<div id="teamPage" style="display:none;position:fixed;inset:0;z-index:600;overflow-y:auto">
+  <div style="max-width:560px;margin:0 auto;padding:12px 14px 40px">
+    <div class="ff-head">
+      <button class="ff-head-back" onclick="closeTeamPage()">←</button>
+      <div class="ff-head-badge">👥</div>
+      <div class="ff-head-text">
+        <div class="ff-head-title">My Team</div>
+        <div class="ff-head-sub" id="teamSub">Clients grouped by team · cached 60s</div>
+      </div>
+      <div class="ff-head-actions">
+        <button class="ff-iconbtn" onclick="loadMyClients(true)">↻</button>
+      </div>
     </div>
     <div id="teamList"></div>
   </div>
 </div>
 
 <!-- TEAM REPORT -->
-<div id="teamReportPage" style="display:none;position:fixed;inset:0;z-index:600;background:var(--bg);overflow-y:auto">
-  <div style="max-width:560px;margin:0 auto;padding:14px 14px 40px">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-      <button onclick="closeTeamReport()" style="width:34px;height:34px;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:1rem">←</button>
-      <div style="flex:1;min-width:0"><div style="font-size:1.05rem;font-weight:800">📈 Team OTP Report</div><div style="font-size:.66rem;color:var(--muted)" id="trSub">Daily & weekly OTPs per team</div></div>
-      <button onclick="copyTeamReport()" style="font-size:.72rem;font-weight:800;color:var(--text);background:var(--surface);border:1px solid var(--border);padding:9px 11px;border-radius:9px;cursor:pointer;white-space:nowrap">📋 Copy</button>
-      <button onclick="loadTeamReport(true)" style="font-size:.74rem;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;padding:9px 12px;border-radius:9px;cursor:pointer">↻</button>
+<div id="teamReportPage" style="display:none;position:fixed;inset:0;z-index:600;overflow-y:auto">
+  <div style="max-width:560px;margin:0 auto;padding:12px 14px 40px">
+    <div class="ff-head">
+      <button class="ff-head-back" onclick="closeTeamReport()">←</button>
+      <div class="ff-head-badge">📈</div>
+      <div class="ff-head-text">
+        <div class="ff-head-title">Team OTP Report</div>
+        <div class="ff-head-sub" id="trSub">Daily &amp; weekly OTPs per team</div>
+      </div>
+      <div class="ff-head-actions">
+        <button class="ff-iconbtn" onclick="copyTeamReport()">📋 Copy</button>
+        <button class="ff-iconbtn" onclick="loadTeamReport(true)">↻</button>
+      </div>
     </div>
     <div id="trHot" style="display:none;margin-bottom:12px"></div>
     <div id="trList"></div>
   </div>
 </div>
 
-<!-- EDIT CLIENT MODAL -->
+<!-- EDIT CLIENT MODAL (kept as-is: styled by shared shr-*/alloc-*/btn system elsewhere in the app) -->
 <div id="editClientModal" class="shr-overlay" onclick="if(event.target===this)closeEditClient()">
   <div class="shr-box" style="max-width:420px">
     <div class="shr-header"><div class="shr-title">✏️ Edit Client</div><button class="shr-close" onclick="closeEditClient()">✕</button></div>
