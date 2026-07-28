@@ -1189,95 +1189,67 @@ function stopNumSmsWatch(){ if(_numSmsInterval){clearInterval(_numSmsInterval);_
 
 // ── LEADERBOARD ──
 function renderLeaderboard(users){
-  var lbList=document.getElementById("lbList");
-  var lbComing=document.getElementById("lbComing");
-  if(!users||!users.length){
-    var msg="Hold on a moment — fetching the latest rankings…";
-    if(lbComing){
-      lbComing.style.display="block";
-      var ttl=lbComing.querySelector(".lb-coming-title"); if(ttl) ttl.textContent="Hold on a moment…";
-      var s=lbComing.querySelector(".lb-coming-sub"); if(s) s.textContent=msg;
-    }
-    if(lbList) lbList.style.display="none";
-    return;
+ var _lbAllUsers=null, _lbMe=null, _lbTotal=0;
+function _lbAvatar(name, cls){ return '<div class="lb-avatar '+(cls||'')+'">'+escHtml(String(name||'?').substring(0,2).toUpperCase())+'</div>'; }
+function renderLeaderboard(users, me, total){
+  var lbList=document.getElementById('lbList'), lbComing=document.getElementById('lbComing');
+  var lbSub=document.querySelector('.lb-sub');
+  if(lbSub){ var t=new Date(); lbSub.textContent='Top SMS Senders · updated '+((t.getHours()%12||12)+':'+(t.getMinutes()<10?'0':'')+t.getMinutes()+' '+(t.getHours()>=12?'PM':'AM')); }
+  if(!users||!users.length){ if(lbComing){ lbComing.style.display='block'; var s=lbComing.querySelector('.lb-coming-sub'); if(s) s.textContent='No SMS yet for this period.'; } if(lbList){ lbList.style.display='none'; lbList.innerHTML=''; } return; }
+  if(lbComing) lbComing.style.display='none'; if(lbList) lbList.style.display='block';
+  _lbAllUsers=users; _lbMe=me||null; _lbTotal=total||users.length;
+  var top3=users.slice(0,3), order=[1,0,2];
+  var ph='<div class="lb-podium-wrap"><div class="lb-podium">';
+  for(var pi=0;pi<order.length;pi++){ var idx=order[pi], u=top3[idx]; if(!u){ ph+='<div class="lb-podium-col"></div>'; continue; } var rank=idx+1;
+    ph+='<div class="lb-podium-col p'+rank+'">'+(rank===1?'<div class="lb-crown">👑</div>':'')+'<div class="lb-hex">'+rank+'</div>'
+      +'<div class="lb-podium-top"><div class="lb-podium-avatar"><span class="lp-init">'+escHtml(String(u.username||'?').substring(0,2).toUpperCase())+'</span></div>'
+      +'<div class="lb-podium-name" title="'+escHtml(u.username)+'">'+escHtml(u.username)+'</div>'
+      +'<div class="lb-podium-score">'+(u.count||0).toLocaleString()+'</div></div><div class="lb-podium-block"></div></div>';
   }
-  if(lbComing) lbComing.style.display="none";
-  if(lbList) lbList.style.display="block";
-  var top3=users.slice(0,3);
-  var rest=users.slice(3);
-  var badges=["ELITE CHAMPION","FAST SENDER","ON FIRE","SHARP ROUTER","STRATEGIST","DOMINATOR","SPEED KING","VOLUME KING","RISING STAR","RAPID FIRE"];
-  var badgeIcons=["👑","","🔥","🎯","","💀","🚀","","🌟","⚡"];
-  var badgeCls=["b-elite","b-fast","b-fire","b-sharp","b-strat","b-dom","b-speed","b-strat","b-fire","b-fast"];
-  var streakLabels=[14,7,5,3,2,3,5,4,3,2];
-  var podiumOrder=[1,0,2];
-  var podiumHtml='<div class="lb-podium-wrap"><div class="lb-podium">';
-  for(var pi=0; pi<podiumOrder.length; pi++){
-    var idx=podiumOrder[pi]; var u=top3[idx]; if(!u) continue;
-    var rank=idx+1;
-    var name=u.username||u.client||u.name||"—";
-    var init=name.substring(0,2).toUpperCase();
-    var score=(u.count||u.sms||u.score||0).toLocaleString();
-    var posCls=rank===1?"p1":(rank===2?"p2":"p3");
-    var crown=rank===1?'<div class="lb-crown">👑</div>':'';
-    var bcls=badgeCls[idx]||"b-fast";
-    var bIcon=badgeIcons[idx]||"⚡";
-    var badge=badges[idx]||"TOP SENDER";
-    podiumHtml+='<div class="lb-podium-col '+posCls+'">';
-    if(rank===1) podiumHtml+='<div class="lb-frame">';
-    podiumHtml+='<div class="lb-hex">'+rank+'</div>';
-    podiumHtml+='<div class="lb-podium-top">'+crown+
-      '<div class="lb-av-shell">'+
-        '<div class="lb-podium-avatar"><span class="lp-init">'+escHtml(init)+'</span></div>'+
-        '<div class="lb-verified">✓</div>'+
-      '</div>'+
-      '<div class="lb-podium-name" title="'+escHtml(name)+'">'+escHtml(name)+'</div>'+
-      '<div class="lb-badge '+bcls+'">'+bIcon+' '+badge+'</div>'+
-      '<div class="lb-podium-score">'+score+'</div>'+
-      '<div class="lb-podium-score-lbl">SMS</div>'+
-      '</div>';
-    podiumHtml+='<div class="lb-podium-block"></div>';
-    if(rank===1) podiumHtml+='</div>';
-    podiumHtml+='</div>';
-  }
-  podiumHtml+='</div></div>';
-  var restHtml="";
-  if(rest.length){
-    restHtml='<div class="lb-table">'+
-      '<div class="lb-thead">'+
-        '<div class="lb-th lb-th-rank">RANK</div>'+
-        '<div class="lb-th lb-th-user">USER</div>'+
-        '<div class="lb-th lb-th-vol">SMS VOLUME</div>'+
-        '<div class="lb-th lb-th-streak">STREAK</div>'+
-        '<div class="lb-th lb-th-live"></div>'+
-      '</div>';
-    for(var i=0;i<rest.length;i++){
-      var ru=rest[i]; var rname=ru.username||ru.client||ru.name||"—";
-      var rinit=rname.substring(0,2).toUpperCase();
-      var rscore=(ru.count||ru.sms||ru.score||0);
-      var rscoreStr=rscore.toLocaleString();
-      var rIdx=3+i;
-      var rbadge=badges[rIdx]||"SENDER";
-      var rbcls=badgeCls[rIdx]||"b-fast";
-      var rbIcon=badgeIcons[rIdx]||"⚡";
-      var streak=streakLabels[rIdx]||1;
-      var rankNum=i+4;
-      restHtml+='<div class="lb-row">'+
-        '<div class="lb-rank">'+rankNum+'</div>'+
-        '<div class="lb-user-cell">'+
-          '<div class="lb-avatar '+rbcls+'-ring">'+escHtml(rinit)+'</div>'+
-          '<div class="lb-user-text">'+
-            '<div class="lb-name" title="'+escHtml(rname)+'">'+escHtml(rname)+'</div>'+
-            '<div class="lb-badge lb-badge-sm '+rbcls+'">'+rbIcon+' '+rbadge+'</div>'+
-          '</div>'+
-        '</div>'+
-        '<div class="lb-vol"><span class="lb-vol-num">'+rscoreStr+'</span><span class="lb-vol-lbl">SMS</span></div>'+
-        '<div class="lb-streak-cell">🔥 <span>'+streak+'</span></div>'+
-        '<div class="lb-live-cell"><span class="lb-live-dot-sm"></span>LIVE</div>'+
-      '</div>';
-    }
-    restHtml+='</div>';
-  }
-  if(lbList) lbList.innerHTML=podiumHtml+restHtml;
+  ph+='</div></div>';
+  var rest=users.slice(3), shown=_LB_EXPANDED?rest:rest.slice(0,7);
+  var lh='<div class="lb-table">';
+  for(var i=0;i<shown.length;i++){ var ru=shown[i]; lh+='<div class="lb-row"><div class="lb-rank">#'+(i+4)+'</div><div class="lb-user-cell">'+_lbAvatar(ru.username)+'<div class="lb-name" title="'+escHtml(ru.username)+'">'+escHtml(ru.username)+'</div></div><div class="lb-vol-num">'+(ru.count||0).toLocaleString()+'</div></div>'; }
+  if(_lbMe){ var inTop=users.slice(0,(_LB_EXPANDED?users.length:10)).some(function(x){return x.username===_lbMe.username;});
+    if(!inTop){ lh+='<div class="lb-row-sep">…</div><div class="lb-row lb-row-me"><div class="lb-rank lb-rank-me">#'+_lbMe.rank+'</div><div class="lb-user-cell">'+_lbAvatar(_lbMe.username,'lb-avatar-me')+'<div class="lb-name">'+escHtml(_lbMe.username)+' <span class="lb-you-tag">you</span></div></div><div class="lb-vol-num">'+(_lbMe.count||0).toLocaleString()+'</div></div>'; } }
+  lh+='</div>';
+  var moreBtn = rest.length>7 ? '<button type="button" class="lb-viewmore" onclick="toggleLbMore()">'+(_LB_EXPANDED?'Show less':'View more ('+rest.length+')')+'</button>' : '';
+  if(lbList) lbList.innerHTML = ph + lh + moreBtn;
+}
+var _LB_EXPANDED=false;
+window.toggleLbMore=function(){ _LB_EXPANDED=!_LB_EXPANDED; renderLeaderboard(_lbAllUsers,_lbMe,_lbTotal); };
+function loadLeaderboard(range){
+  if(!SESSION) return;
+  if(range) LB_RANGE=range;
+  var lbComing=document.getElementById('lbComing'), lbSpin0=document.getElementById('lbSpin');
+  if(lbSpin0){ lbSpin0.style.display='inline-flex'; lbSpin0.onclick=function(){ LB_CACHE[LB_RANGE]=null; loadLeaderboard(); }; }   // persistent, working refresh
+  document.querySelectorAll('.lb-range-btn').forEach(function(b){ b.classList.toggle('selected', b.dataset.range===LB_RANGE); });
+  var cached=LB_CACHE[LB_RANGE];
+  if(cached && cached.users) renderLeaderboard(cached.users, cached.me, cached.total);   // instant from cache
+  var lbPanel = parseInt(localStorage.getItem('app_panel_num')||'1',10)||1;
+  apiCall('/api/leaderboard',{session:SESSION,range:LB_RANGE,panelNum:lbPanel},function(d){
+    if(lbSpin0) lbSpin0.style.display='inline-flex';
+    if(!d||!d.ok||!d.users||!d.users.length){ if(!cached) renderLeaderboard([]); return; }
+    LB_CACHE[LB_RANGE]={ts:Date.now(),users:d.users||[],me:d.me||null,total:d.total||0};
+    renderLeaderboard(d.users||[], d.me||null, d.total||0);
+  });
+}
+function loadDOR(){
+  if(!SESSION) return;
+  var loading = document.getElementById("dorLoading"), list = document.getElementById("dorList");
+  if(loading) loading.style.display = "block"; if(list) list.style.display = "none";
+  apiCall("/api/dor", {session: SESSION}, function(d){
+    if(loading) loading.style.display = "none"; if(!d || !d.ok || !list) return;
+    list.style.display = "block";
+    if(!d.recent || !d.recent.length){ list.innerHTML = "<div style='padding:24px;text-align:center;color:var(--muted)'>📭 No global messages found today.</div>"; return; }
+    var showList = d.recent.slice(0, 200), h = "<div style='display:flex;flex-direction:column;gap:8px;'>";
+    for(var i=0;i<showList.length;i++){ var r = showList[i];
+      h += "<div class='recent-item' style='margin-bottom:0;'><div class='rsms-inner'><div class='rsms-head-row'><div class='rsms-cli-wrap'><div class='rsms-cli-icon'>🔒</div><span class='rsms-name'>"+escHtml(r.cli||'Unknown')+"</span></div><span class='rsms-dev-time'>🕒 "+escHtml(_rsmsLocalTime(r.time))+"</span></div>"
+        + (r.client ? "<div class='rsms-range'>👤 "+escHtml(r.client)+"</div>" : "")
+        + "<div class='rsms-msg-box'><div class='rsms-shield'>📩</div><div class='rsms-body'>"+escHtml(r.message||'')+"</div></div><div class='rsms-num-line'>📱 "+escHtml(r.number)+"</div></div></div>"; }
+    if(d.recent.length>200) h += "<div style='text-align:center;padding:12px;color:var(--muted);font-size:.75rem;'>Showing latest 200 of "+d.recent.length+" total</div>";
+    list.innerHTML = h + "</div>";
+  });
 }
 function loadLeaderboard(range){
   if(!SESSION) return;
