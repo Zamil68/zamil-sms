@@ -1315,45 +1315,31 @@ function loadLeaderboard(range){
   });
 }
 function loadDOR(){
-    if(!SESSION) return;
-    var loading = document.getElementById("dorLoading");
-    var list = document.getElementById("dorList");
-    if(loading) loading.style.display = "block";
-    if(list) list.style.display = "none";
-    
-    apiCall("/api/dor", {session: SESSION}, function(d){
-        if(loading) loading.style.display = "none";
-        if(!d || !d.ok || !list) return;
-        
-        list.style.display = "block";
-        if(!d.recent || !d.recent.length){
-            list.innerHTML = "<div style='padding:24px;text-align:center;color:var(--muted)'>📭 No global messages found today.</div>";
-            return;
-        }
-        
-        var h = "<div style='display:flex;flex-direction:column;gap:8px;'>";
-        // Show max 50 to prevent UI lag on large datasets
-        var showList = d.recent.slice(0, 50);
-        for(var i=0; i<showList.length; i++){
-            var r = showList[i];
-            h += "<div class='recent-item' style='margin-bottom:0;'>";
-            h += "<div class='rsms-inner'>";
-            h += "<div class='rsms-head-row'>";
-            h += "<div class='rsms-cli-wrap'><div class='rsms-cli-icon'>🔒</div><span class='rsms-name'>"+escHtml(r.cli||"Unknown")+"</span></div>";
-            h += "<span class='rsms-dev-time'>🕒 "+escHtml(r.time)+"</span>";
-            h += "</div>";
-            h += "<div class='rsms-msg-box'><div class='rsms-shield'>📩</div><div class='rsms-body'>"+escHtml(r.message||"")+"</div></div>";
-            h += "<div class='rsms-num-line'>📱 "+escHtml(r.number)+"</div>";
-            h += "</div></div>";
-        }
-        if(d.recent.length > 50){
-            h += "<div style='text-align:center;padding:12px;color:var(--muted);font-size:.75rem;'>Showing latest 50 of "+d.recent.length+" total</div>";
-        }
-        h += "</div>";
-        list.innerHTML = h;
-    });
+  if(!SESSION) return;
+  var loading = document.getElementById("dorLoading");
+  var list = document.getElementById("dorList");
+  if(loading) loading.style.display = "block";
+  if(list) list.style.display = "none";
+  apiCall("/api/dor", {session: SESSION}, function(d){
+    if(loading) loading.style.display = "none";
+    if(!d || !d.ok || !list) return;
+    list.style.display = "block";
+    if(!d.recent || !d.recent.length){ list.innerHTML = "<div style='padding:24px;text-align:center;color:var(--muted)'>📭 No global messages found today.</div>"; return; }
+    var showList = d.recent.slice(0, 200);
+    var h = "<div style='display:flex;flex-direction:column;gap:8px;'>";
+    for(var i=0;i<showList.length;i++){
+      var r = showList[i];
+      h += "<div class='recent-item' style='margin-bottom:0;'><div class='rsms-inner'>"
+        + "<div class='rsms-head-row'><div class='rsms-cli-wrap'><div class='rsms-cli-icon'>🔒</div><span class='rsms-name'>"+escHtml(r.cli||'Unknown')+"</span></div><span class='rsms-dev-time'>🕒 "+escHtml(_rsmsLocalTime(r.time))+"</span></div>"
+        + (r.client ? "<div class='rsms-range'>👤 "+escHtml(r.client)+"</div>" : "")
+        + "<div class='rsms-msg-box'><div class='rsms-shield'>📩</div><div class='rsms-body'>"+escHtml(r.message||'')+"</div></div>"
+        + "<div class='rsms-num-line'>📱 "+escHtml(r.number)+"</div></div></div>";
+    }
+    if(d.recent.length>200) h += "<div style='text-align:center;padding:12px;color:var(--muted);font-size:.75rem;'>Showing latest 200 of "+d.recent.length+" total</div>";
+    h += "</div>";
+    list.innerHTML = h;
+  });
 }
-
 // ─ ALLOC MODAL ──
 var ASTATE={clientId:null,clientName:null,panelNum:1,selectedRangeId:null,selectedRangeTitle:null,payterm:null,payout:null,ranges:[],availCache:{}};
 var PAYTERM_OPTS={"1":"Daily","2":"Weekly","3":"Weekly7","4":"BiWeekly","5":"BiWeekly30","6":"Monthly15","7":"Monthly30","8":"Monthly45","9":"Monthly60"};
