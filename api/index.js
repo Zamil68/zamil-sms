@@ -210,6 +210,13 @@ function extractRangeItems(d) {
   return { items: [], more: false };
 }
 
+// ── Range-options cache ─────────────────────────────────────────────
+// The paginated LaMix range-id lookup is SLOW (up to 30 requests) and
+// was making Add-search time out on cold loads (the "Ta/Tu/An → nothing"
+// bug). Range IDs barely change, so cache the whole map for 10 minutes.
+let _rangeOptsCache = { ts: 0, map: null };
+const RANGE_OPTS_TTL = 10 * 60 * 1000; // 10 minutes
+
 async function getRangeOptions() {
   await ensureAgentSession();
   const map = new Map(); const sample = []; let raw = '';
@@ -234,6 +241,15 @@ async function getRangeOptions() {
   return map;
 }
 
+// ✅ Use THIS everywhere instead of getRangeOptions()
+async function getCachedRangeOptions(force) {
+  if (!force && _rangeOptsCache.map && (Date.now() - _rangeOptsCache.ts) < RANGE_OPTS_TTL) {
+    return _rangeOptsCache.map;                       // instant cache hit
+  }
+  const map = await getRangeOptions();
+  if (map && map.size) _rangeOptsCache = { ts: Date.now(), map };  // only cache a good result
+  return _rangeOptsCache.map || map || new Map();     // fall back to last good map if scrape is empty
+}
 function resolveUrl(action) {
   if (!action) return `${AGENT_BASE_URL}SMSBulkAllocations`;
   if (/^https?:\/\//i.test(action)) return action;
