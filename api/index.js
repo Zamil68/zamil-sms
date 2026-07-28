@@ -482,8 +482,7 @@ function weekKey(dateStr){
   return new Date(d.getTime() + diff * 86400000).toISOString().slice(0, 10);
 }
 
-// ═══ TEAM PINS — manual override of the prefix rule ═══
-// ═══ TEAM PINS + helpers (top-level, above module.exports) ═══
+// ═══ TEAM HELPERS (must be top-level, above module.exports) ═══
 let _pinsCache = { ts: 0, map: null };
 async function getPinsMap() {
   if (_pinsCache.map && (Date.now() - _pinsCache.ts) < 30000) return _pinsCache.map;
