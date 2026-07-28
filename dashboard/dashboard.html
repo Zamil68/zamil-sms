@@ -603,15 +603,16 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
     keys.forEach(function(n){ var c=tally[n]; try{ NUM_SMS_CACHE[n]=c; }catch(e){} var el=document.getElementById('sms_'+n); if(el){ el.textContent=c+'/'+SMS_DAILY_LIMIT; el.className='num-sms-badge'+(c>0?' has-sms':''); } });
     try{ _otpSave(); }catch(e){}
   }
-  function dorRows(recent){
-    var h="<div style='display:flex;flex-direction:column;gap:8px;'>"; var show=(recent||[]).slice(0,50);
+ function dorRows(recent){
+    var h="<div style='display:flex;flex-direction:column;gap:8px;'>"; var show=(recent||[]).slice(0,200);
     for(var i=0;i<show.length;i++){ var r=show[i];
       h+="<div class='recent-item' style='margin-bottom:0;'><div class='rsms-inner'>"
-        +"<div class='rsms-head-row'><div class='rsms-cli-wrap'><div class='rsms-cli-icon'>🔒</div><span class='rsms-name'>"+escH(r.cli||'Unknown')+"</span></div><span class='rsms-dev-time'>🕒 "+escH(r.time)+"</span></div>"
+        +"<div class='rsms-head-row'><div class='rsms-cli-wrap'><div class='rsms-cli-icon'>🔒</div><span class='rsms-name'>"+escH(r.cli||'Unknown')+"</span></div><span class='rsms-dev-time'>🕒 "+escH((typeof _rsmsLocalTime==='function'?_rsmsLocalTime(r.time):r.time))+"</span></div>"
+        +(r.client?"<div class='rsms-range'>👤 "+escH(r.client)+"</div>":"")
         +"<div class='rsms-msg-box'><div class='rsms-shield'>📩</div><div class='rsms-body'>"+escH(r.message||'')+"</div></div>"
         +"<div class='rsms-num-line'>📱 "+escH(r.number)+"</div></div></div>";
     }
-    if((recent||[]).length>50) h+="<div style='text-align:center;padding:12px;color:var(--muted);font-size:.75rem;'>Showing latest 50 of "+recent.length+" total</div>";
+    if((recent||[]).length>200) h+="<div style='text-align:center;padding:12px;color:var(--muted);font-size:.75rem;'>Showing latest 200 of "+recent.length+" total</div>";
     return h+"</div>";
   }
   function _paintAlloc(ranges){ ASTATE.ranges=ranges; ASTATE.availCache={}; ranges.forEach(function(r){ ASTATE.availCache[r.id]={available:r.available||0,total:r.total||0}; }); if(typeof renderAllocRanges==='function') renderAllocRanges(); }
