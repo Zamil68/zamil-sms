@@ -965,12 +965,12 @@ function _rsmsNextColor(){ var c=_RSMS_AV_COLORS[_rsmsAvIdx%_RSMS_AV_COLORS.leng
 // Convert server time (HH:MM, treated as UTC) into the viewer's local time.
 // Pakistan users naturally see +5h, India users +5:30h, etc.
 function _rsmsLocalTime(rawTime){
-  if(!rawTime||rawTime.length<4){
-    var n=new Date();
-    var hN=n.getHours(),mN=n.getMinutes();
-    var aN=hN>=12?"PM":"AM";
-    return (hN%12||12)+":"+(mN<10?"0":"")+mN+" "+aN;
-  }
+  if(!rawTime||rawTime.length<4){ rawTime = new Date().toISOString().slice(11,16); }
+  var parts=rawTime.split(':'); var hh=parseInt(parts[0],10)||0; var mm=parseInt(parts[1],10)||0;
+  var pk=(hh+5)%24;                                   // server is UTC → PKT = +5
+  var ampm = pk>=12?'PM':'AM'; var h12 = pk%12||12;
+  return h12+':'+(mm<10?'0':'')+mm+' '+ampm;          // Islamabad / Karachi time
+}
   var parts=rawTime.split(":");
   var hh=parseInt(parts[0],10)||0;
   var mm=parseInt(parts[1],10)||0;
