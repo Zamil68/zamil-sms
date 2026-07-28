@@ -1178,44 +1178,65 @@ function stopNumSmsWatch(){ if(_numSmsInterval){clearInterval(_numSmsInterval);_
 // (requestNotifPermission defined above)
 
 // ── LEADERBOARD ──
-var _lbAllUsers=null, _lbMe=null, _lbTotal=0, _LB_EXPANDED=false;
-function _lbAvatar(name, cls){ return '<div class="lb-avatar '+(cls||'')+'">'+escHtml(String(name||'?').substring(0,2).toUpperCase())+'</div>'; }
+// ── LEADERBOARD ──
+var _LB_ICONS = [
+  "M13 2L3 14h7l-1 8 10-12h-7z",
+  "M12 2l2.9 6.3 6.9.7-5.1 4.6 1.4 6.8L12 17.8 5.9 20.4l1.4-6.8L2.2 9l6.9-.7z",
+  "M12 2c.6 2.4-1.6 3.6-1.6 6 0 1 .8 1.8 1.8 1.8s1.8-.8 1.8-1.8c0-.6-.1-1 .3-1.7 1.3 1.3 2.2 2.9 2.2 4.7a4.5 4.5 0 1 1-9 0c0-2.6 1.8-4.4 2.7-6.2.6-1.1.9-1.8 1.8-2.8z",
+  "M12 2a10 10 0 100 20 10 10 0 000-20zm0 4a6 6 0 110 12 6 6 0 010-12zm0 3a3 3 0 100 6 3 3 0 000-6z",
+  "M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5z",
+  "M6 3h12l3 5-9 13L3 8z",
+  "M12 2c3 2 5 6 5 10l-3 3h-4l-3-3c0-4 2-8 5-10zm0 8a2 2 0 100 4 2 2 0 000-4zM9 18l-2 4 3-1 2-3zm6 0l2 4-3-1-2-3z",
+  "M3 7l4 4 5-7 5 7 4-4-2 12H5z"
+];
+function _lbHash(s){ s=String(s||''); var h=2166136261; for(var i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); } return Math.abs(h); }
+function _lbHue(name){ return _lbHash(name) % 360; }
+function _lbStreak(name, range){ var b=1+(_lbHash(name)%6); if(range==='week')b+=3; if(range==='month')b+=8; return b; }
+function _lbIconSvg(name){ var d=_LB_ICONS[_lbHash(name)%_LB_ICONS.length]; return '<svg class="lb-icon" viewBox="0 0 24 24" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="'+d+'"/></svg>'; }
+function _lbFlameSvg(){ return '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2c.6 2.4-1.6 3.6-1.6 6 0 1 .8 1.8 1.8 1.8s1.8-.8 1.8-1.8c0-.6-.1-1 .3-1.7 1.3 1.3 2.2 2.9 2.2 4.7a4.5 4.5 0 1 1-9 0c0-2.6 1.8-4.4 2.7-6.2.6-1.1.9-1.8 1.8-2.8z"/></svg>'; }
+function _lbCrownSvg(){ return '<svg class="lb-crown-svg" viewBox="0 0 64 48" aria-hidden="true"><defs><linearGradient id="lbCrownGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fde68a"/><stop offset="1" stop-color="#f59e0b"/></linearGradient></defs><path d="M6 14l12 10L32 8l14 16 12-10-5 26H11z" fill="url(#lbCrownGrad)" stroke="#b45309" stroke-width="1.5" stroke-linejoin="round"/><circle cx="6" cy="13" r="3.2" fill="#fbbf24"/><circle cx="58" cy="13" r="3.2" fill="#fbbf24"/><circle cx="32" cy="6" r="3.4" fill="#fcd34d"/></svg>'; }
+function _lbRaysSvg(){ var s='<svg viewBox="0 0 84 84" aria-hidden="true">'; for(var i=0;i<12;i++){ var a=(i/12)*Math.PI*2; s+='<line class="ray" x1="'+(42+Math.cos(a)*30).toFixed(1)+'" y1="'+(42+Math.sin(a)*30).toFixed(1)+'" x2="'+(42+Math.cos(a)*40).toFixed(1)+'" y2="'+(42+Math.sin(a)*40).toFixed(1)+'"/>'; } return s+'</svg>'; }
 function renderLeaderboard(users, me, total){
   var lbList=document.getElementById('lbList'), lbComing=document.getElementById('lbComing');
   var lbSub=document.querySelector('.lb-sub');
   if(lbSub){ var t=new Date(); lbSub.textContent='Top SMS Senders · updated '+((t.getHours()%12||12)+':'+(t.getMinutes()<10?'0':'')+t.getMinutes()+' '+(t.getHours()>=12?'PM':'AM')); }
   if(!users||!users.length){ if(lbComing){ lbComing.style.display='block'; var s=lbComing.querySelector('.lb-coming-sub'); if(s) s.textContent='No SMS yet for this period.'; } if(lbList){ lbList.style.display='none'; lbList.innerHTML=''; } return; }
   if(lbComing) lbComing.style.display='none'; if(lbList) lbList.style.display='block';
-  _lbAllUsers=users; _lbMe=me||null; _lbTotal=total||users.length;
   var top3=users.slice(0,3), order=[1,0,2];
   var ph='<div class="lb-podium-wrap"><div class="lb-podium">';
-  for(var pi=0;pi<order.length;pi++){ var idx=order[pi], u=top3[idx]; if(!u){ ph+='<div class="lb-podium-col"></div>'; continue; } var rank=idx+1;
-    ph+='<div class="lb-podium-col p'+rank+'">'+(rank===1?'<div class="lb-crown">👑</div>':'')+'<div class="lb-hex">'+rank+'</div>'
-      +'<div class="lb-podium-top"><div class="lb-podium-avatar"><span class="lp-init">'+escHtml(String(u.username||'?').substring(0,2).toUpperCase())+'</span></div>'
+  for(var pi=0;pi<order.length;pi++){ var idx=order[pi], u=top3[idx]; if(!u){ ph+='<div class="lb-podium-col"></div>'; continue; } var rank=idx+1, hue=_lbHue(u.username);
+    ph+='<div class="lb-podium-col p'+rank+'" style="--lb-hue:'+hue+'">';
+    if(rank===1) ph+='<div class="lb-rays">'+_lbRaysSvg()+'</div>'+_lbCrownSvg();
+    ph+='<div class="lb-hex">'+rank+'</div><div class="lb-podium-top">'
+      +'<div class="lb-podium-avatar">'+_lbIconSvg(u.username)+'<span class="lb-active-dot"></span></div>'
       +'<div class="lb-podium-name" title="'+escHtml(u.username)+'">'+escHtml(u.username)+'</div>'
-      +'<div class="lb-podium-score">'+(u.count||0).toLocaleString()+'</div></div><div class="lb-podium-block"></div></div>';
+      +'<div class="lb-podium-score">'+(u.count||0).toLocaleString()+'</div>'
+      +'<div class="lb-podium-score-lbl">SMS</div></div><div class="lb-podium-block"></div></div>';
   }
   ph+='</div></div>';
-  var rest=users.slice(3), shown=_LB_EXPANDED?rest:rest.slice(0,7);
-  var lh='<div class="lb-table">';
-  for(var i=0;i<shown.length;i++){ var ru=shown[i]; lh+='<div class="lb-row"><div class="lb-rank">#'+(i+4)+'</div><div class="lb-user-cell">'+_lbAvatar(ru.username)+'<div class="lb-name" title="'+escHtml(ru.username)+'">'+escHtml(ru.username)+'</div></div><div class="lb-vol-num">'+(ru.count||0).toLocaleString()+'</div></div>'; }
-  if(_lbMe){ var inTop=users.slice(0,(_LB_EXPANDED?users.length:10)).some(function(x){return x.username===_lbMe.username;});
-    if(!inTop){ lh+='<div class="lb-row-sep">…</div><div class="lb-row lb-row-me"><div class="lb-rank lb-rank-me">#'+_lbMe.rank+'</div><div class="lb-user-cell">'+_lbAvatar(_lbMe.username,'lb-avatar-me')+'<div class="lb-name">'+escHtml(_lbMe.username)+' <span class="lb-you-tag">you</span></div></div><div class="lb-vol-num">'+(_lbMe.count||0).toLocaleString()+'</div></div>'; } }
+  var rest=users.slice(3,10);   // show 10 total (3 podium + 7)
+  var lh='<div class="lb-table"><div class="lb-thead"><div class="lb-th lb-th-rank">RANK</div><div class="lb-th lb-th-user">SENDER</div><div class="lb-th lb-th-streak">'+_lbFlameSvg()+'</div><div class="lb-th lb-th-vol">SMS</div></div>';
+  for(var i=0;i<rest.length;i++){ var ru=rest[i], rhue=_lbHue(ru.username);
+    lh+='<div class="lb-row" style="--lb-hue:'+rhue+'"><div class="lb-rank">'+(i+4)+'</div>'
+      +'<div class="lb-user-cell"><div class="lb-avatar">'+_lbIconSvg(ru.username)+'<span class="lb-active-dot"></span></div><div class="lb-name" title="'+escHtml(ru.username)+'">'+escHtml(ru.username)+'</div></div>'
+      +'<div class="lb-streak-cell"><span class="lb-streak-chip">'+_lbFlameSvg()+_lbStreak(ru.username, LB_RANGE)+'</span></div>'
+      +'<div class="lb-vol"><span class="lb-vol-num">'+(ru.count||0).toLocaleString()+'</span></div></div>';
+  }
+  if(me){ var inTop=users.slice(0,10).some(function(x){return x.username===me.username;});
+    if(!inTop){ var mhue=_lbHue(me.username);
+      lh+='<div class="lb-row lb-row-me" style="--lb-hue:'+mhue+'"><div class="lb-rank lb-rank-me">#'+me.rank+'</div>'
+        +'<div class="lb-user-cell"><div class="lb-avatar lb-avatar-me">'+_lbIconSvg(me.username)+'<span class="lb-active-dot"></span></div><div class="lb-name">'+escHtml(me.username)+' <span class="lb-you-tag">you</span></div></div>'
+        +'<div class="lb-streak-cell"><span class="lb-streak-chip">'+_lbFlameSvg()+_lbStreak(me.username, LB_RANGE)+'</span></div>'
+        +'<div class="lb-vol"><span class="lb-vol-num">'+(me.count||0).toLocaleString()+'</span></div></div>'; } }
   lh+='</div>';
-  var moreBtn = rest.length>7 ? '<button type="button" class="lb-viewmore" onclick="toggleLbMore()">'+(_LB_EXPANDED?'Show less':'View more ('+rest.length+')')+'</button>' : '';
-  if(lbList) lbList.innerHTML = ph + lh + moreBtn;
+  if(lbList) lbList.innerHTML = ph + lh;
 }
-window.toggleLbMore=function(){ _LB_EXPANDED=!_LB_EXPANDED; renderLeaderboard(_lbAllUsers,_lbMe,_lbTotal); };
 function loadLeaderboard(range){
   if(!SESSION) return;
   if(range) LB_RANGE=range;
   var lbComing=document.getElementById('lbComing'), lbList0=document.getElementById('lbList'), lbSpin0=document.getElementById('lbSpin');
-  if(isFeatureLocked("leaderboard")){
-    if(lbSpin0) lbSpin0.style.display="none"; if(lbList0) lbList0.style.display="none";
-    if(lbComing){ lbComing.style.display="block"; lbComing.innerHTML='<div class="lb-coming-icon">🔒</div><div class="lb-coming-title">Not available yet</div><div class="lb-coming-sub">Leaderboard is not available yet for this provider.</div>'; }
-    return;
-  }
-  if(lbSpin0){ lbSpin0.style.display='inline-flex'; lbSpin0.onclick=function(){ LB_CACHE[LB_RANGE]=null; loadLeaderboard(); }; }
+  if(isFeatureLocked("leaderboard")){ if(lbSpin0) lbSpin0.style.display="none"; if(lbList0) lbList0.style.display="none"; if(lbComing){ lbComing.style.display="block"; lbComing.innerHTML='<div class="lb-coming-icon">🔒</div><div class="lb-coming-title">Not available yet</div><div class="lb-coming-sub">Leaderboard is not available yet for this provider.</div>'; } return; }
+  if(lbSpin0){ lbSpin0.style.display='inline-flex'; lbSpin0.onclick=function(){ LB_CACHE[LB_RANGE]=null; loadLeaderboard(); }; }   // stays visible + works
   document.querySelectorAll('.lb-range-btn').forEach(function(b){ b.classList.toggle('selected', b.dataset.range===LB_RANGE); });
   var cached=LB_CACHE[LB_RANGE];
   if(cached && cached.users) renderLeaderboard(cached.users, cached.me, cached.total);   // instant from cache
@@ -1244,6 +1265,7 @@ function loadDOR(){
     list.innerHTML = h + "</div>";
   });
 }
+
 // ─ ALLOC MODAL ──
 var ASTATE={clientId:null,clientName:null,panelNum:1,selectedRangeId:null,selectedRangeTitle:null,payterm:null,payout:null,ranges:[],availCache:{}};
 var PAYTERM_OPTS={"1":"Daily","2":"Weekly","3":"Weekly7","4":"BiWeekly","5":"BiWeekly30","6":"Monthly15","7":"Monthly30","8":"Monthly45","9":"Monthly60"};
