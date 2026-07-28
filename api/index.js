@@ -337,6 +337,7 @@ function isMine(client, user){
   const t1 = (user.clientName||'').toLowerCase().trim(), t2 = (user.username||'').toLowerCase().trim();
   return c && (c===t1 || c===t2 || c.includes(t1) || c.includes(t2));
 }
+function lbName(x){ const c=String(x||'').trim(); if(!c||c==='null'||c==='none'||c==='-'||c==='--'||c==='n/a') return 'System Generated'; return c; }
 
 // ═══════════════════════════════════════════════════════════
 // 🔐 PASSWORDS — scrypt hashing (no dependency) + Supabase user_creds
@@ -418,6 +419,7 @@ async function getRole(username){
 }
 function isAdminish(role){ return role === 'super' || role === 'admin'; }
 let _statsCache = { ts: 0, data: null };
+const _rangesCache = new Map();   // username -> { ts, ranges }  (20s server cache)
 const _asCache = new Map();   // per-query search cache (8s)
 const STATS_TTL = 60000; // 60s
 
