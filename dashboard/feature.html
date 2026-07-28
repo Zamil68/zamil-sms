@@ -1,0 +1,146 @@
+<!-- feature.html — admin features (injected by feature.js into #featureRoot) -->
+<style>
+#limitPage .lim-sectitle{font-size:.62rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin:6px 2px 8px}
+#limitPage .lim-row{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 14px;margin-bottom:8px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+#limitPage .lim-row-main{flex:1;min-width:0}
+#limitPage .lim-row-title{font-size:.86rem;font-weight:800;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#limitPage .lim-row-sub{font-size:.64rem;color:var(--muted);margin-top:3px}
+#limitPage .lim-used{color:var(--red);font-weight:800}
+#limitPage .lim-freebtn{flex-shrink:0;font-size:.72rem;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;border-radius:10px;padding:9px 15px;cursor:pointer;white-space:nowrap;box-shadow:0 2px 8px rgba(34,211,238,.3)}
+#limitPage .lim-freebtn:active{transform:scale(.96)}
+#limitPage .lim-empty{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 16px;text-align:center;color:var(--muted);font-size:.82rem;line-height:1.55}
+.zconfirm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);backdrop-filter:blur(2px);z-index:900;align-items:center;justify-content:center;padding:18px}
+.zconfirm-box{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:22px 20px 18px;max-width:330px;width:100%;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.4)}
+.zconfirm-ic{font-size:2rem;margin-bottom:8px}
+.zconfirm-msg{font-size:.9rem;font-weight:700;color:var(--text);line-height:1.5;margin-bottom:18px}
+.zconfirm-btns{display:flex;gap:10px}
+.zconfirm-no,.zconfirm-yes{flex:1;border:0;border-radius:11px;padding:11px;font:inherit;font-size:.84rem;font-weight:800;cursor:pointer}
+.zconfirm-no{background:var(--surface);color:var(--text);border:1px solid var(--border)}
+.zconfirm-yes{background:linear-gradient(135deg,#f87171,#ef4444);color:#fff}
+.zconfirm-yes:active,.zconfirm-no:active{transform:scale(.97)}
+#motivNudge{position:fixed;left:50%;bottom:80px;transform:translateX(-50%) translateY(20px);z-index:640;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-size:.8rem;font-weight:800;padding:10px 18px;border-radius:24px;box-shadow:0 8px 24px rgba(0,0,0,.3);opacity:0;pointer-events:none;transition:opacity .3s ease,transform .3s ease;max-width:88vw;text-align:center}
+#motivNudge.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+
+<!-- STATISTICS -->
+<div id="statsPage" style="display:none;position:fixed;inset:0;z-index:600;background:var(--bg);overflow-y:auto">
+  <div style="max-width:560px;margin:0 auto;padding:14px 14px 40px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <button onclick="closeStatsPage()" style="width:34px;height:34px;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:1rem">←</button>
+      <div style="flex:1;min-width:0"><div style="font-size:1.05rem;font-weight:800">📊 Statistics</div><div style="font-size:.66rem;color:var(--muted)" id="statsUpdated">Admin overview</div></div>
+      <button onclick="copyAvailList()" style="font-size:.72rem;font-weight:800;color:var(--text);background:var(--surface);border:1px solid var(--border);padding:9px 11px;border-radius:9px;cursor:pointer;white-space:nowrap">📋 Copy list</button>
+      <button onclick="loadStats()" style="font-size:.74rem;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;padding:9px 12px;border-radius:9px;cursor:pointer">↻</button>
+    </div>
+    <div id="statsCards" style="display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-bottom:12px"></div>
+    <div id="statsMostActive" style="font-size:.76rem;color:var(--text);background:var(--card);border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin-bottom:12px"></div>
+    <input id="statsSearch" type="text" placeholder="🔍 Filter country or range…" oninput="filterStats()" style="width:100%;box-sizing:border-box;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font:inherit;font-size:.82rem;outline:none;margin-bottom:10px">
+    <div id="statsCountries"></div>
+  </div>
+</div>
+
+<!-- ADMIN CONTROL -->
+<div id="adminPage" style="display:none;position:fixed;inset:0;z-index:600;background:var(--bg);overflow-y:auto">
+  <div style="max-width:520px;margin:0 auto;padding:14px 14px 40px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+      <button onclick="closeAdminPage()" style="width:34px;height:34px;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:1rem">←</button>
+      <div style="flex:1"><div style="font-size:1.05rem;font-weight:800">🛡️ Admin Control</div><div style="font-size:.66rem;color:var(--muted)">Appoint & manage admins</div></div>
+    </div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
+      <div style="font-size:.8rem;font-weight:800;margin-bottom:9px">Promote a user to Admin</div>
+      <div style="display:flex;gap:8px">
+        <input id="adminUserInput" type="text" placeholder="LaMix username" style="flex:1;min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:10px 12px;color:var(--text);font:inherit;font-size:.84rem;outline:none">
+        <button onclick="promoteAdmin()" style="font-size:.8rem;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;border-radius:9px;padding:10px 16px;cursor:pointer;white-space:nowrap">Promote</button>
+      </div>
+      <div id="adminMsg" style="font-size:.74rem;font-weight:700;margin-top:9px;display:none"></div>
+    </div>
+    <div style="font-size:.66rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">Current Admins</div>
+    <div id="adminList"></div>
+    <div style="margin-top:18px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px">
+      <div style="font-size:.8rem;font-weight:800;margin-bottom:4px">🏷️ Team Prefixes</div>
+      <div style="font-size:.62rem;color:var(--muted);margin-bottom:10px;line-height:1.4">Assign a prefix (e.g. <b>ZML_</b>) + display name to an admin.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <input id="pfPrefix" type="text" placeholder="Prefix e.g. ZML_" style="flex:1;min-width:110px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:9px 11px;color:var(--text);font:inherit;font-size:.82rem;outline:none">
+        <input id="pfAdmin" type="text" placeholder="admin username" style="flex:1;min-width:110px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:9px 11px;color:var(--text);font:inherit;font-size:.82rem;outline:none">
+        <input id="pfLabel" type="text" placeholder="Display name e.g. Zml" style="flex:1;min-width:130px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:9px 11px;color:var(--text);font:inherit;font-size:.82rem;outline:none">
+        <button onclick="setPrefix()" style="font-size:.78rem;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;border-radius:9px;padding:9px 14px;cursor:pointer;white-space:nowrap">Assign</button>
+      </div>
+      <div id="pfMsg" style="font-size:.72rem;font-weight:700;margin-top:8px;display:none"></div>
+      <div id="pfList" style="margin-top:10px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- LIMIT INCREASE -->
+<div id="limitPage" style="display:none;position:fixed;inset:0;z-index:600;background:var(--bg);overflow-y:auto">
+  <div style="max-width:520px;margin:0 auto;padding:14px 14px 40px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+      <button onclick="closeLimitPage()" style="width:34px;height:34px;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:1rem">←</button>
+      <div style="flex:1"><div style="font-size:1.05rem;font-weight:800">🆓 Limit Increase</div><div style="font-size:.66rem;color:var(--muted)">Free a try = remove 1 attempt row · max +3/user/day</div></div>
+    </div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px">
+      <div style="font-size:.8rem;font-weight:800;margin-bottom:9px">Search a user</div>
+      <div style="display:flex;gap:8px">
+        <input id="limitUserInput" type="text" placeholder="LaMix username" style="flex:1;min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:10px 12px;color:var(--text);font:inherit;font-size:.84rem;outline:none">
+        <button onclick="loadLimitStatus()" style="font-size:.8rem;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;border-radius:9px;padding:10px 16px;cursor:pointer;white-space:nowrap">Search</button>
+      </div>
+      <div id="limitMsg" style="font-size:.74rem;font-weight:700;margin-top:9px;display:none"></div>
+    </div>
+    <div id="limitResults"></div>
+  </div>
+</div>
+
+<!-- MY TEAM -->
+<div id="teamPage" style="display:none;position:fixed;inset:0;z-index:600;background:var(--bg);overflow-y:auto">
+  <div style="max-width:560px;margin:0 auto;padding:14px 14px 40px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <button onclick="closeTeamPage()" style="width:34px;height:34px;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:1rem">←</button>
+      <div style="flex:1;min-width:0"><div style="font-size:1.05rem;font-weight:800">👥 My Team</div><div style="font-size:.66rem;color:var(--muted)" id="teamSub">Clients grouped by team · cached 60s</div></div>
+      <button onclick="loadMyClients(true)" style="font-size:.74rem;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;padding:9px 12px;border-radius:9px;cursor:pointer">↻</button>
+    </div>
+    <div id="teamList"></div>
+  </div>
+</div>
+
+<!-- TEAM REPORT -->
+<div id="teamReportPage" style="display:none;position:fixed;inset:0;z-index:600;background:var(--bg);overflow-y:auto">
+  <div style="max-width:560px;margin:0 auto;padding:14px 14px 40px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <button onclick="closeTeamReport()" style="width:34px;height:34px;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:1rem">←</button>
+      <div style="flex:1;min-width:0"><div style="font-size:1.05rem;font-weight:800">📈 Team OTP Report</div><div style="font-size:.66rem;color:var(--muted)" id="trSub">Daily & weekly OTPs per team</div></div>
+      <button onclick="copyTeamReport()" style="font-size:.72rem;font-weight:800;color:var(--text);background:var(--surface);border:1px solid var(--border);padding:9px 11px;border-radius:9px;cursor:pointer;white-space:nowrap">📋 Copy</button>
+      <button onclick="loadTeamReport(true)" style="font-size:.74rem;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;padding:9px 12px;border-radius:9px;cursor:pointer">↻</button>
+    </div>
+    <div id="trHot" style="display:none;margin-bottom:12px"></div>
+    <div id="trList"></div>
+  </div>
+</div>
+
+<!-- EDIT CLIENT MODAL -->
+<div id="editClientModal" class="shr-overlay" onclick="if(event.target===this)closeEditClient()">
+  <div class="shr-box" style="max-width:420px">
+    <div class="shr-header"><div class="shr-title">✏️ Edit Client</div><button class="shr-close" onclick="closeEditClient()">✕</button></div>
+    <div class="shr-body">
+      <div class="alloc-field"><label>Username (locked)</label><input id="ecUser" class="alloc-input" disabled></div>
+      <div class="alloc-field"><label>New Password (blank = no change)</label><input id="ecPass" type="text" class="alloc-input" placeholder="Only fill to change password"></div>
+      <div class="alloc-field"><label>Display Name</label><input id="ecName" class="alloc-input"></div>
+      <div class="alloc-field"><label>Contact No.</label><input id="ecContact" class="alloc-input"></div>
+      <div class="alloc-field"><label>Email</label><input id="ecEmail" class="alloc-input"></div>
+      <div class="alloc-field"><label>Country</label><input id="ecCountry" class="alloc-input" value="Pakistan"></div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:.8rem;font-weight:700;color:var(--text);margin:6px 0 10px"><input id="ecActive" type="checkbox" checked> Active</label>
+      <div id="ecMsg" style="display:none;font-size:.74rem;font-weight:700;margin-bottom:10px"></div>
+      <button id="ecBtn" class="btn btn-primary" onclick="submitEditClient()" style="width:100%">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM DIALOG -->
+<div id="zconfirmOverlay" class="zconfirm-overlay" style="display:none">
+  <div class="zconfirm-box">
+    <div class="zconfirm-ic" id="zconfirmIc">⚠️</div>
+    <div class="zconfirm-msg" id="zconfirmMsg"></div>
+    <div class="zconfirm-btns">
+      <button type="button" class="zconfirm-no" id="zconfirmNo">Cancel</button>
+      <button type="button" class="zconfirm-yes" id="zconfirmYes">Confirm</button>
+    </div>
+  </div>
+</div>
