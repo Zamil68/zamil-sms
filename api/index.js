@@ -621,31 +621,33 @@ module.exports = async (req, res) => {
     }
 
     // 3. RANGES
-    if (url === '/ranges' && req.method === 'POST') {
+   if (url === '/ranges' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
-      const data = await scrapeAgentData('res/data_smsnumbers.php', { frange: '', fclient: '', totnum: 100000, sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1 });
-      if (!data || !data.aaData) return ok(res, { ranges: [] });
-      const allNumbers = parseNumbersData(data);
-      const target1 = (user.clientName || '').toLowerCase().trim();
-      const target2 = (user.username || '').toLowerCase().trim();
-      const userNumbers = allNumbers.filter(n => {
-        const c = (n.client || '').toLowerCase().trim();
-        if (!c) return false;
-        return c === target1 || c === target2 || c.includes(target1) || c.includes(target2);
-      });
-      const rangesMap = new Map();
-      userNumbers.forEach(n => {
-        const key = `${n.country} -- ${n.range}`;
-        if (!rangesMap.has(key)) rangesMap.set(key, { id: `range_${rangesMap.size}`, title: n.range, country: n.country, numbers: [], count: 0 });
-        const range = rangesMap.get(key); range.numbers.push(n.number); range.count++;
-      });
-      return ok(res, {
-        ranges: Array.from(rangesMap.values()).map(r => ({ ...r, minsAgo: Math.floor(Math.random() * 60) })),
-        _debug: { totalScraped: allNumbers.length, matchedForUser: userNumbers.length, lookingFor: `"${target1}" or "${target2}"`, sampleClients: allNumbers.slice(0, 10).map(n => `"${n.client}"`) }
-      });
-    }
+      const force = !!req.body.forceRefresh;
+      const ck = 'u:' + String(user.username).toLowerCase();
+      const hit = _rangesCache.get(ck);
+      if (!force && hit && hit.ranges.length && (Date.now() - hit.ts) < 20000) return ok(res, { ranges: hit.ranges, cached: true });
 
+      const data = await scrapeAgentData('res/data_smsnumbers.php', { frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
+      let ranges = [];
+      if (data && data.aaData) {
+        const allNumbers = parseNumbersData(data);
+        const t1 = (user.clientName||'').toLowerCase().trim(), t2 = (user.username||'').toLowerCase().trim();
+        const userNumbers = allNumbers.filter(n => { const c=(n.client||'').toLowerCase().trim(); return c && (c===t1||c===t2||c.includes(t1)||c.includes(t2)); });
+        const m = new Map();
+        userNumbers.forEach(n => {
+          const key = `${n.country} -- ${n.range}`;
+          if (!m.has(key)) m.set(key, { id: 'r_' + norm(n.country + '|' + n.range), title: n.range, country: n.country, count: 0 }); // ← STABLE id
+          m.get(key).count++;
+        });
+        ranges = Array.from(m.values()).map(r => ({ ...r, minsAgo: Math.floor(Math.random()*60) }));
+      }
+      if (ranges.length) _rangesCache.set(ck, { ts: Date.now(), ranges });
+      else if (hit && hit.ranges.length) return ok(res, { ranges: hit.ranges, cached: true, _note: 'live scrape empty — using cache' });
+      return ok(res, { ranges });
+    }
+    
     // 4. NUMBERS
     if (url === '/numbers' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
