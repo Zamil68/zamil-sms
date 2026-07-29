@@ -548,12 +548,12 @@ async function loadRateMap(force) {
   const map = new Map(); let count = 0;
   if (supaEnabled()) {
     try {
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/range_rates?select=range,rate&limit=5000`,
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/range_rates?select=range_norm,rate&limit=5000`,
         { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
       const rows = await r.json();
       if (Array.isArray(rows)) rows.forEach(x => {
         const rt = parseFloat(x.rate);
-        if (isFinite(rt) && rt > 0) { map.set(norm(x.range), rt); count++; }
+        if (isFinite(rt)) { map.set(x.range_norm, rt); count++; }
       });
     } catch (e) { console.error('loadRateMap:', e.message); }
   }
@@ -1567,27 +1567,28 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
         if ((await getRole(user.username)) !== 'super') return error(res, 403, 'Super admin only');
         if (!supaEnabled()) return error(res, 400, 'Supabase required.');
         const rows = Array.isArray(req.body.rows) ? req.body.rows : [];
+        // Full replace: clear old rates, insert everything from the file as-is
+        try { await fetch(`${SUPABASE_URL}/rest/v1/range_rates`, { method: 'DELETE', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }); } catch (e) {}
         let saved = 0; const errors = [];
         for (let i = 0; i < rows.length; i += 100) {
           const chunk = rows.slice(i, i + 100)
-            .map(r => ({ range: norm(r.range), raw: String(r.range || '').trim(), rate: parseFloat(r.rate) || 0, currency: 'USD' }))
-            .filter(r => r.range && r.rate > 0);
+            .map(r => ({ range_raw: String(r.range || '').trim(), range_norm: norm(r.range), rate: parseFloat(r.rate) || 0 }))
+            .filter(r => r.range_norm);
           if (!chunk.length) continue;
           try {
             const cr = await fetch(`${SUPABASE_URL}/rest/v1/range_rates`, {
               method: 'POST',
-              headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+              headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
               body: JSON.stringify(chunk)
             });
             if (cr.ok) saved += chunk.length;
-            else { const t = await cr.text(); errors.push('chunk ' + (i / 100 + 1) + ': HTTP ' + cr.status + ' ' + t.slice(0, 120)); }
+            else errors.push('chunk ' + (i / 100 + 1) + ': HTTP ' + cr.status);
           } catch (e) { errors.push('chunk ' + (i / 100 + 1) + ': ' + e.message); }
         }
         _ratesCache = { ts: 0, map: null, count: 0 };
         return ok(res, { saved, received: rows.length, errors: errors.length ? errors : undefined });
       } catch (e) { return error(res, 500, 'earn/import-rates: ' + e.message); }
     }
-
     if (url === '/earn/settings' && req.method === 'POST') {
       try {
         const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
@@ -1643,7 +1644,7 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
         const t1 = (user.clientName || '').toLowerCase().trim(), t2 = (user.username || '').toLowerCase().trim();
         (rows || []).forEach(r => {
           const rt = rc.map.get(norm(r.range)); if (!rt) return;
-          const uRate = rt * USER_SHARE;
+          const uRate = Math.round(rt * USER_SHARE * 1e6) / 1e6;   // ← fix floating point
           grossTotal += rt; userNetTotal += uRate;
           const cli = (r.client || '').trim();
           if (cli) { if (!board[cli]) board[cli] = { username: cli, userNet: 0, gross: 0 }; board[cli].userNet += uRate; board[cli].gross += rt; }
@@ -1652,17 +1653,22 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
           if (isMe) {
             me.userNet += uRate; me.gross += rt;
             const k = r.range || 'Unknown';
-            if (!me.perRange[k]) me.perRange[k] = { range: k, count: 0, rate: rt, userRate: uRate, userNet: 0, gross: 0 };
+            if (!me.perRange[k]) me.perRange[k] = { range: k, count: 0, userNet: 0, gross: 0 };
             const pr = me.perRange[k]; pr.count++; pr.userNet += uRate; pr.gross += rt;
           }
         });
+        // Round final totals to cents
+        me.userNet = Math.round(me.userNet * 100) / 100;
+        me.gross = Math.round(me.gross * 100) / 100;
+        Object.values(me.perRange).forEach(pr => { pr.userNet = Math.round(pr.userNet * 100) / 100; pr.gross = Math.round(pr.gross * 100) / 100; });
+        Object.values(board).forEach(b => { b.userNet = Math.round(b.userNet * 100) / 100; b.gross = Math.round(b.gross * 100) / 100; });
         const perRange = Object.values(me.perRange).sort((a, b) => b.userNet - a.userNet);
         const leaderboard = Object.values(board).sort((a, b) => b.userNet - a.userNet);
         return ok(res, {
           window: win, mode: cfg.mode, goal: Number(cfg.goal_usd) || 50, ratesLoaded: rc.count,
           me: { userNet: me.userNet, gross: me.gross, perRange },
           leaderboard,
-          pool: (role === 'super') ? { grossTotal, userNetTotal } : null
+          pool: (role === 'super') ? { grossTotal: Math.round(grossTotal * 100) / 100, userNetTotal: Math.round(userNetTotal * 100) / 100 } : null
         });
       } catch (e) { return error(res, 500, 'earn/compute: ' + e.message); }
     }
