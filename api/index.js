@@ -297,12 +297,13 @@ async function countDailyAllocByCountry(username, clientName){
 // ═══════════════════════════════════════════════════════════
 const RESET_HOUR_PKT = 5; // kept for the weekly/monthly snapshot roll (Phase 3); NOT used to hide messages
 function businessDayPKT(){
-  const pkt = new Date(Date.now() + 5*3600000);          // now in PKT
-  const hh  = pkt.getUTCHours();
-  const base = new Date(pkt.getTime() - (hh < 5 ? 1 : 0) * 86400000);   // active business day (rolls 05:00)
-  const label = base.toISOString().slice(0,10);
-  const next  = new Date(base.getTime() + 86400000).toISOString().slice(0,10);
-  return { from: label + ' 05:00:00', to: next + ' 05:00:00', label };
+  const pkt = new Date(Date.now() + 5*3600000);          // PKT now
+  const hh  = pkt.getUTCHours();                          // PKT hour
+  const base = new Date(pkt.getTime() - (hh < 5 ? 1 : 0) * 86400000);  // roll back before 5 AM
+  const label = base.toISOString().slice(0,10);           // business date (PKT)
+  // Panel filters in UTC. 05:00 PKT = 00:00 UTC, so the 5 AM‑anchored
+  // business day in UTC strings = label 00:00:00 → label 23:59:59.
+  return { from: label + ' 00:00:00', to: label + ' 23:59:59', label };
 }
 
 async function scrapeCDR(dateFrom, dateTo, extra){
@@ -865,8 +866,8 @@ if (url === '/stats' && req.method === 'POST') {
 
       const [todayRows, weekRows, monthRows] = await Promise.all([
         getCachedCDR(bd.from, bd.to),
-        getCachedCDR(dayBack(6)  + ' 05:00:00', today + ' 23:59:59'),
-        getCachedCDR(dayBack(29) + ' 05:00:00', today + ' 23:59:59')
+getCachedCDR(dayBack(6)  + ' 00:00:00', today + ' 23:59:59'),
+getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
       ]);
       const otpToday = todayRows.length, otpWeek = weekRows.length, otpMonth = monthRows.length;
       const rangeCounts = {}; todayRows.forEach(r => { if (r.range) rangeCounts[r.range] = (rangeCounts[r.range]||0)+1; });
@@ -1474,7 +1475,7 @@ if (url === '/stats' && req.method === 'POST') {
         const pkt = new Date(Date.now() + 5*3600000);
         const end = pkt.toISOString().slice(0,10);
         const start = new Date(pkt.getTime() - (days-1)*86400000).toISOString().slice(0,10);
-        from = start + ' 05:00:00'; to = end + ' 05:00:00';
+        from = start + ' 00:00:00'; to = end + ' 23:59:59';
       }
       const rows = await getCachedCDR(from, to, range === 'today' ? CDR_TTL : CDR_TTL_WIDE);
       const counts = {};
