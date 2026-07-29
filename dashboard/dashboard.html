@@ -623,20 +623,24 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
 
     if(typeof _applySmsResult==='function' && !_applySmsResult._zw){
       var _asr=_applySmsResult; window._zeroStreak=0; var _seeded=false;
-      window._lastNonZeroSms = window._lastNonZeroSms || { count:0, ts:0 };
+      window._lastNonZeroSms = window._lastNonZeroSms || { count:0, ts:0, day:'' };
       var _lastDorKick = 0;
+      function _bizDay(){ return new Date().toISOString().slice(0,10); }  // UTC date = PKT business day (flips at 05:00 PKT)
       window._applySmsResult=function(d){
         if(d&&d.ok){
           var cached=zget('zamil_cache_smscount');
           var isZero=(d.count===0);
-          if(!isZero){ window._lastNonZeroSms={ count:d.count, ts:Date.now() }; window._zeroStreak=0; }
+          var today=_bizDay();
+          if(!isZero){ window._lastNonZeroSms={ count:d.count, ts:Date.now(), day:today }; window._zeroStreak=0; }
           else { window._zeroStreak=(window._zeroStreak||0)+1; }
-          var grace = window._lastNonZeroSms.count>0 && (Date.now()-window._lastNonZeroSms.ts) < 180000;   // 3-min grace
-          if(isZero && grace){ var keep=(cached&&cached.count>0)?cached.count:window._lastNonZeroSms.count; return _asr.call(this,{ok:true,count:keep,recent:(cached&&cached.recent)||d.recent||[]}); }  // ← never flicker to 0
-          if(!isZero) zset('zamil_cache_smscount',{count:d.count,recent:(d.recent||[]).slice(0,30),ts:Date.now()});   // ← never cache a 0
+          // Grace only within the SAME business day — at the 05:00 PKT rollover, reset immediately
+          var sameDay = window._lastNonZeroSms.day === today;
+          var grace = sameDay && window._lastNonZeroSms.count>0 && (Date.now()-window._lastNonZeroSms.ts) < 180000;
+          if(isZero && grace){ var keep=(cached&&cached.count>0&&cached.day===today)?cached.count:window._lastNonZeroSms.count; return _asr.call(this,{ok:true,count:keep,recent:(cached&&cached.recent)||d.recent||[]}); }
+          if(!isZero) zset('zamil_cache_smscount',{count:d.count,recent:(d.recent||[]).slice(0,30),ts:Date.now(),day:today});
           if((d.count||0)<=50 && !isZero) _tallyBadges(d.recent||[]);
           if(!_seeded){ _seeded=true; if(d.recent&&typeof window.seedFloatSeen==='function') window.seedFloatSeen(d.recent); }
-          try{ if(!isZero && (Date.now()-_lastDorKick)>4000){ var dp=document.getElementById('dorPage'); if(dp && dp.style.display==='block' && typeof loadDOR==='function'){ _lastDorKick=Date.now(); setTimeout(loadDOR,1200); } } }catch(e){}  // keep DOR live
+          try{ if(!isZero && (Date.now()-_lastDorKick)>4000){ var dp=document.getElementById('dorPage'); if(dp && dp.style.display==='block' && typeof loadDOR==='function'){ _lastDorKick=Date.now(); setTimeout(loadDOR,1200); } } }catch(e){}
         }
         return _asr.apply(this,arguments);
       }; _applySmsResult._zw=1;
@@ -689,7 +693,7 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
 
     if(typeof showToast==='function' && !showToast._zw){ var _st=showToast; window.showToast=function(t,kind){ try{ if(typeof t==='string' && /new SMS!?\s*$/.test(t) && kind==='success') return; }catch(e){} return _st.apply(this,arguments); }; showToast._zw=1; } // drop the redundant green "+N new SMS!" watch toast
 
-    try{ if(localStorage.getItem('app_session')){ var c=zget('zamil_cache_smscount'); var el=document.getElementById('smsBigNum'); if(c&&el&&(el.textContent||'').trim()==='0'){ window._applySmsResult({ok:true,count:c.count,recent:c.recent||[]}); } } }catch(e){}
+    try{ if(localStorage.getItem('app_session')){ var c=zget('zamil_cache_smscount'); var el=document.getElementById('smsBigNum'); var _bd=new Date().toISOString().slice(0,10); if(c&&el&&(el.textContent||'').trim()==='0'&&c.day===_bd){ window._applySmsResult({ok:true,count:c.count,recent:c.recent||[]}); } } }catch(e){}
   }
 
   if(document.readyState==='complete') install(); else window.addEventListener('load', install);
