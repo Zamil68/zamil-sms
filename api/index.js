@@ -639,6 +639,7 @@ module.exports = async (req, res) => {
     if (url === '/auth/change-password' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
+      const role = await getRole(user.username);
       const oldPassword = req.body.oldPassword || '';
       const newPassword = req.body.newPassword || '';
       if (!newPassword || String(newPassword).length < 6) return error(res, 400, 'New password must be at least 6 characters.');
@@ -1626,7 +1627,7 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
         window: win, mode: cfg.mode, goal: Number(cfg.goal_usd) || 50, ratesLoaded: rc.count,
         me: { userNet: me.userNet, gross: me.gross, perRange },
         leaderboard,
-        pool: { grossTotal, userNetTotal }
+        pool: (role === 'super') ? { grossTotal, userNetTotal } : null
       });
     }
 
