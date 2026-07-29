@@ -144,6 +144,12 @@ body.earn-is-super #earnGrossWrap{display:block}
 .earn-drop-tx small{font-size:.66rem;color:var(--muted);font-weight:600}
 @media (max-width:420px){.earn-hero .big{font-size:2.5rem}.earn-ring{width:78px;height:78px}}
 
+/* super-only data — hidden from regular users */
+#earnPoolGrid{display:none}
+body.earn-is-super #earnPoolGrid{display:grid}
+#earnGrossWrap{display:none}
+body.earn-is-super #earnGrossWrap{display:block}
+  
 </style>
 
 <div id="earnPage" style="position:fixed;inset:0;z-index:600;overflow-y:auto">
