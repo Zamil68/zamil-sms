@@ -1,6 +1,5 @@
 /* ═══ earning.js — Earnings module (Zamil SMS) ═══ */
 (function(){
-  /* ── helpers ── */
   function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
   function sess(){ return localStorage.getItem('app_session'); }
   function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -11,12 +10,10 @@
       .catch(function(){ cb({ok:false, error:'Connection error — check your network'}); });
   }
 
-  /* ── state ── */
   var _data=null, _role='none', _notifs=[], _injected=false;
   var _cur = localStorage.getItem('earn_cur') || 'USD';
   var _pkr = parseFloat(localStorage.getItem('earn_pkr_rate')) || 278;
 
-  /* ── formatting ── */
   function hueFor(s){ s=String(s||''); var h=0; for(var i=0;i<s.length;i++){ h=(h*31+s.charCodeAt(i))%360; } return h; }
   function fmt(usd){
     if(_cur==='PKR') return 'Rs '+Math.round(usd*_pkr).toLocaleString();
@@ -37,7 +34,6 @@
     requestAnimationFrame(step);
   }
 
-  /* ── scroll reveal ── */
   function reveal(){
     var els=document.querySelectorAll('#earnPage .rv');
     if(!('IntersectionObserver' in window)){ els.forEach(function(e){e.classList.add('in');}); return; }
@@ -47,23 +43,19 @@
     els.forEach(function(e){io.observe(e);});
   }
 
-  /* ── inject markup (race-safe: re-renders if data arrived first) ── */
   function inject(){
     if(_injected) return; _injected=true;
     fetch('/dashboard/earning.html').then(function(r){return r.text();}).then(function(h){
       var d=document.createElement('div'); d.innerHTML=h;
       while(d.firstElementChild) document.body.appendChild(d.firstElementChild);
-      reveal();
-      syncCurUI();
-      if(_data) render(_data);   // data arrived before HTML → paint now
+      reveal(); syncCurUI();
+      if(_data) render(_data);
     });
   }
 
-  /* ── open / close ── */
   window.openEarnPage=function(){ inject(); var p=document.getElementById('earnPage'); if(p) p.style.display='block'; window.scrollTo(0,0); syncCurUI(); loadAll(); };
   window.closeEarnPage=function(){ var p=document.getElementById('earnPage'); if(p) p.style.display='none'; };
 
-  /* ── currency toggle ── */
   function syncCurUI(){
     document.querySelectorAll('#earnCur button').forEach(function(b){ b.classList.toggle('on', b.dataset.cur===_cur); });
     var pr=document.getElementById('earnPKRrow'); if(pr) pr.style.display=(_cur==='PKR')?'flex':'none';
@@ -72,7 +64,21 @@
   window.setEarnCur=function(c){ _cur=c; localStorage.setItem('earn_cur',c); syncCurUI(); if(_data) render(_data); };
   window.savePKR=function(){ var ri=document.getElementById('earnPKRrate'); _pkr=parseFloat(ri.value)||0; localStorage.setItem('earn_pkr_rate',String(_pkr)); if(_data) render(_data); };
 
-  /* ── load everything ── */
+  /* ── detail modal ── */
+  var _DETAILS={
+    hero:{t:'💰 Your Earnings',b:'Total payout earned from your OTPs in the selected window. The ring shows progress toward the team goal.'},
+    ranges:{t:'📈 Range Breakdown',b:'Each range that received OTPs, with the count and your total earning from it. Sorted highest first.'},
+    board:{t:'🏆 Leaderboard',b:'All users ranked by their total earning in the selected window. Updated live from CDR data.'}
+  };
+  window.earnDetail=function(key){
+    var d=_DETAILS[key]; if(!d) return;
+    var t=document.getElementById('earnDetailTitle'); if(t) t.textContent=d.t;
+    var b=document.getElementById('earnDetailBody'); if(b) b.textContent=d.b;
+    var ov=document.getElementById('earnDetail'); if(ov) ov.classList.add('show');
+  };
+  window.closeEarnDetail=function(){ var ov=document.getElementById('earnDetail'); if(ov) ov.classList.remove('show'); };
+
+  /* ── load ── */
   function loadAll(){
     post('/api/auth/role',{},function(r){
       _role=(r&&r.ok)?r.role:'none';
@@ -94,11 +100,9 @@
     var winLabel=(d.window&&d.window.label)||'—';
     var wl=document.getElementById('earnWinLbl'); if(wl) wl.textContent=winLabel+(d.mode==='weekly'?' (weekly)':'');
 
-    /* hero: user's own earning (always visible) */
     var mn=document.getElementById('earnMeNet'); if(mn) animNum(mn, d.me.userNet, 'plain');
     var cl=document.getElementById('earnCurLabel'); if(cl) cl.textContent=(_cur==='PKR'?'Rs':'$');
 
-    /* gross + pool: super-only */
     if(isSuper){
       var mg=document.getElementById('earnMeGross'); if(mg) mg.textContent=fmt(d.me.gross);
       var pool=d.pool||null;
@@ -106,21 +110,19 @@
       var pg=document.getElementById('earnPoolGross'); if(pg) pg.textContent=pool?fmt(pool.grossTotal):'—';
     }
 
-    /* goal ring + progress bar */
     var goal=Math.max(1, d.goal||50);
-    var pool=d.pool||null;
-    var progVal=(isSuper && pool && pool.grossTotal!=null)?pool.grossTotal:d.me.userNet;
+    var pool2=d.pool||null;
+    var progVal=(isSuper && pool2 && pool2.grossTotal!=null)?pool2.grossTotal:d.me.userNet;
     var pct=Math.min(100,(progVal/goal)*100);
     var arc=document.getElementById('earnRingArc'); if(arc) arc.style.strokeDashoffset=(251.3*(1-pct/100)).toFixed(1);
     var gp=document.getElementById('earnGoalPct'); if(gp) gp.textContent=Math.round(pct)+'%';
     var pb=document.getElementById('earnProgressBar'); if(pb) pb.style.width=pct.toFixed(1)+'%';
     var ga=document.getElementById('earnGoalAmt'); if(ga) ga.textContent=fmt(goal);
 
-    /* slogan */
     var sl=document.getElementById('earnSlogan');
     if(sl){ var ns=_sloganFor(d.me.userNet,goal); if(sl.textContent!==ns){ sl.style.animation='none'; void sl.offsetWidth; sl.style.animation=''; sl.textContent=ns; } }
 
-    /* per-range breakdown (gross line super-only) */
+    /* per-range: non-super sees count + earning only (no rate, no gross — confidential) */
     var ranges=d.me.perRange||[];
     var rc=document.getElementById('earnRangeCount'); if(rc) rc.textContent=ranges.length;
     var rg=document.getElementById('earnRanges');
@@ -130,9 +132,12 @@
         var maxN=ranges[0].userNet||1;
         rg.innerHTML=ranges.slice(0,60).map(function(r){
           var h=hueFor(r.range), share=Math.max(4,(r.userNet/maxN)*100);
+          var subLine = isSuper
+            ? r.count+' OTP'+(r.count>1?'s':'')+' · gross '+fmt(r.gross)
+            : r.count+' OTP'+(r.count>1?'s':'');
           return '<div class="rr rv in" style="--rc:hsl('+h+',70%,55%)">'
             +'<div class="meta"><div class="rn">'+esc(r.range)+'</div>'
-            +'<div class="rc">'+r.count+' OTP'+(r.count>1?'s':'')+' · '+fmt(r.userRate)+'/OTP</div>'
+            +'<div class="rc">'+subLine+'</div>'
             +'<div class="bar"><i data-w="'+share+'"></i></div></div>'
             +'<div class="figs"><div class="net">'+fmt(r.userNet)+'</div>'
             +(isSuper?'<div class="grs">gross '+fmt(r.gross)+'</div>':'')
@@ -142,7 +147,6 @@
       }
     }
 
-    /* leaderboard — public, ranked by each user's own earning */
     var lb=d.leaderboard||[];
     var bc=document.getElementById('earnBoardCount'); if(bc) bc.textContent=lb.length;
     var bd=document.getElementById('earnBoard');
@@ -161,8 +165,7 @@
       }
     }
 
-    /* rate count (super panel) */
-    var rrc=document.getElementById('earnRateCount'); if(rrc) rrc.textContent=(d.ratesLoaded||0)+' ranges loaded';
+    var rrc=document.getElementById('earnRateCount'); if(rrc) rrc.textContent=(d.ratesLoaded||0)+' loaded';
   }
 
   /* ── notifications ── */
@@ -172,7 +175,7 @@
       var btn=document.getElementById('earnNotifBtn');
       var last=parseInt(localStorage.getItem('earn_last_notif')||'0');
       var latest=_notifs.length?_notifs[0].id:0;
-      if(btn) btn.classList.toggle('has', latest>last && _notifs.length>0);
+      if(btn){ btn.style.display='flex'; btn.classList.toggle('has', latest>last && _notifs.length>0); }
       if(latest>last && _notifs.length) showNotif(_notifs[0]);
     });
   }
@@ -220,11 +223,11 @@
     });
   };
 
-  /* ── super: rate import ── */
+  /* ── super: rate import (stores EVERY row, no filtering) ── */
   window.importEarnRates=function(){
     var ta=document.getElementById('eaRatesTA');
     var txt=(ta&&ta.value)||'';
-    if(!txt.trim()){ earnMsg('Paste Range + Rate rows, or upload a CSV file.', false); return; }
+    if(!txt.trim()){ earnMsg('Paste rows or upload a CSV file.', false); return; }
     doImport(parseRateRows(txt));
   };
   function earnMsg(t,good){
@@ -236,7 +239,7 @@
     for(var i=0;i<lines.length;i++){
       var line=lines[i]; if(!line) continue;
       var trimmed=line.trim(); if(!trimmed) continue;
-      if(/^[-|:\s]+$/.test(trimmed)) continue;
+      if(/^[-|:\s]+$/.test(trimmed)) continue;                       // separator
       var pipeWrapped=trimmed.charAt(0)==='|'||trimmed.charAt(trimmed.length-1)==='|';
       if(pipeWrapped) trimmed=trimmed.replace(/^\|/,'').replace(/\|$/,'');
       var parts;
@@ -248,25 +251,25 @@
       for(var a=0;a<parts.length;a++){ if(/[A-Za-z]/.test(parts[a])){ rangeIdx=a; break; } }
       if(rangeIdx<0){ skipped++; continue; }
       var range=parts[rangeIdx];
-      if(/^(range|currency|rate|super|user)/i.test(range)){ skipped++; continue; }
+      if(/^(range|currency|rate|super\s*30|user\s*70)/i.test(range)){ skipped++; continue; }  // header only
       var rate=NaN;
       for(var b=rangeIdx+1;b<parts.length;b++){ var n=parseFloat(String(parts[b]).replace(/[^\d.]/g,'')); if(isFinite(n)){ rate=n; break; } }
-      if(!isFinite(rate)||rate<=0){
-        for(var c=0;c<parts.length;c++){ if(c===rangeIdx) continue; var n2=parseFloat(String(parts[c]).replace(/[^\d.]/g,'')); if(isFinite(n2)&&n2>0){ rate=n2; break; } }
+      if(!isFinite(rate)){
+        for(var c=0;c<parts.length;c++){ if(c===rangeIdx) continue; var n2=parseFloat(String(parts[c]).replace(/[^\d.]/g,'')); if(isFinite(n2)){ rate=n2; break; } }
       }
-      if(!isFinite(rate)||rate<=0){ skipped++; continue; }
+      if(!isFinite(rate)) rate=0;   // store zero-rate rows too (e.g. "Not for use")
       rows.push({range:range, rate:rate});
     }
     return {rows:rows, skipped:skipped};
   }
   function doImport(parsed){
-    if(!parsed.rows.length){ earnMsg('No valid rows found. Need two columns: Range + Rate. Headers, blanks & zero-rate rows are skipped automatically.', false); return; }
+    if(!parsed.rows.length){ earnMsg('No valid rows found.', false); return; }
+    earnMsg('Importing '+parsed.rows.length+' rows…', true);
     post('/api/earn/import-rates',{rows:parsed.rows}, function(d){
       if(d&&d.ok){
         var extra=[];
-        if(parsed.skipped) extra.push(parsed.skipped+' skipped in file');
-        if(d.saved<parsed.rows.length) extra.push((parsed.rows.length-d.saved)+' duplicates merged');
-        earnMsg('✅ Saved '+d.saved+' rates'+(extra.length?(' · '+extra.join(' · ')):'')+'. A CSV upload guarantees every row (e.g. all 972).', true);
+        if(parsed.skipped) extra.push(parsed.skipped+' header/blank skipped');
+        earnMsg('✅ Stored '+d.saved+' / '+parsed.rows.length+' rows'+(extra.length?(' · '+extra.join(' · ')):''), true);
         loadAll();
       } else earnMsg((d&&d.error)||'Import failed', false);
     });
@@ -277,6 +280,8 @@
       f._w=true;
       f.addEventListener('change', function(){
         var file=f.files&&f.files[0]; if(!file) return;
+        var fn=document.getElementById('earnFileNameTx'); if(fn) fn.textContent=file.name+' ('+Math.round(file.size/1024)+' KB)';
+        var fw=document.getElementById('earnFileName'); if(fw) fw.classList.add('show');
         var rd=new FileReader();
         rd.onload=function(e){ doImport(parseRateRows(String(e.target.result||''))); };
         rd.onerror=function(){ earnMsg('Could not read that file.', false); };
@@ -290,6 +295,8 @@
       ['dragleave','drop'].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.remove('drag'); }); });
       drop.addEventListener('drop', function(e){
         var file=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0]; if(!file) return;
+        var fn=document.getElementById('earnFileNameTx'); if(fn) fn.textContent=file.name;
+        var fw=document.getElementById('earnFileName'); if(fw) fw.classList.add('show');
         var rd=new FileReader();
         rd.onload=function(ev){ doImport(parseRateRows(String(ev.target.result||''))); };
         rd.readAsText(file);
@@ -298,7 +305,6 @@
   }
   function tryWire(){ if(document.getElementById('earnRatesFile')) wireRatesFile(); else setTimeout(tryWire,250); }
 
-  /* ── motivational slogans ── */
   function _sloganFor(net, goal){
     var lists={
       zero:["Your first dollar is one OTP away 💪","Every champion started at zero — move on 😉","The money's out there waiting — go get it 🌅"],
@@ -313,6 +319,5 @@
     return arr[Math.floor(Date.now()/86400000)%arr.length];
   }
 
-  /* ── init ── */
   ready(function(){ tryWire(); });
 })();
