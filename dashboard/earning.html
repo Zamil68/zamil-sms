@@ -94,6 +94,56 @@
 .en-close{ border:0; border-radius:12px; padding:11px 22px; font:inherit; font-weight:700; cursor:pointer; color:#06080F; background:linear-gradient(135deg,var(--accent),var(--accent2)) }
 .en-x{ position:absolute; top:12px; right:14px; background:none; border:0; color:var(--muted); font-size:1.1rem; cursor:pointer }
 .earn-empty{ text-align:center; padding:30px 18px; color:var(--muted); font-size:.84rem; line-height:1.6 }
+
+  /* ── Earnings hero v2 ── */
+.earn-hero{position:relative;overflow:hidden;border-radius:24px;padding:22px 20px 16px;margin:14px 0;
+  background:linear-gradient(150deg, color-mix(in srgb,var(--accent) 26%, var(--card)) 0%, var(--card) 55%, color-mix(in srgb,var(--emag) 14%, var(--card)) 100%);
+  border:1px solid color-mix(in srgb,var(--accent) 30%, var(--border));
+  box-shadow:0 22px 60px -28px color-mix(in srgb,var(--accent) 70%, transparent);
+  display:grid;grid-template-columns:1fr auto;grid-template-areas:"main ring" "prog prog";gap:6px 14px;align-items:center;
+  transition:transform .18s ease, box-shadow .18s ease;}
+.earn-hero:hover{transform:translateY(-2px);box-shadow:0 28px 70px -26px color-mix(in srgb,var(--accent) 80%, transparent);}
+.earn-hero-glow{position:absolute;inset:-40% -10% auto auto;width:240px;height:240px;border-radius:50%;
+  background:radial-gradient(circle, color-mix(in srgb,var(--egold) 35%, transparent), transparent 65%);
+  filter:blur(6px);opacity:.5;pointer-events:none;animation:earnGlow 7s ease-in-out infinite;}
+@keyframes earnGlow{0%,100%{transform:translate(0,0) scale(1);opacity:.45}50%{transform:translate(-12px,10px) scale(1.12);opacity:.7}}
+.earn-hero-main{grid-area:main;position:relative;z-index:1;min-width:0}
+.earn-eyebrow{display:flex;align-items:center;gap:7px;font-size:.6rem;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+.earn-dot{width:7px;height:7px;border-radius:50%;background:var(--eg);box-shadow:0 0 0 0 rgba(52,211,153,.5);animation:livePulse 1.8s infinite}
+.earn-win{margin-left:auto;color:var(--accent);letter-spacing:.04em}
+.earn-figure{display:flex;align-items:baseline;gap:6px;margin:8px 0 4px;line-height:.9}
+.earn-currency{font-family:'Space Grotesk',ui-monospace,monospace;font-size:1.4rem;font-weight:700;color:var(--muted);align-self:flex-start;margin-top:.35rem}
+.earn-hero .big{font-size:3.1rem;font-weight:700;letter-spacing:-.03em;
+  background:linear-gradient(120deg,var(--text),color-mix(in srgb,var(--accent) 60%, var(--text)));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+.earn-slogan{font-size:.82rem;font-weight:600;color:var(--text);opacity:.82;line-height:1.35;margin-top:2px;animation:sloganIn .5s ease both}
+@keyframes sloganIn{from{opacity:0;transform:translateY(6px)}to{opacity:.82;transform:none}}
+.earn-gross-k{font-size:.58rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-right:6px}
+#earnGrossWrap{margin-top:8px;font-size:.8rem}
+#earnGrossWrap b{font-family:'Space Grotesk',ui-monospace,monospace;color:var(--emag)}
+.earn-ring{grid-area:ring;position:relative;width:92px;height:92px;flex-shrink:0}
+.earn-ring svg{transform:rotate(-90deg)}
+.earn-ring .rtxt{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.earn-ring .rpct{font-family:'Space Grotesk',monospace;font-size:1.15rem;font-weight:700;color:var(--egold)}
+.earn-ring .rlbl{font-size:.5rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.earn-progress{grid-area:prog;position:relative;z-index:1;margin-top:6px}
+.earn-progress-bar{height:6px;background:var(--border);border-radius:4px;overflow:hidden}
+.earn-progress-bar > i{display:block;height:100%;width:0;border-radius:4px;background:linear-gradient(90deg,var(--accent),var(--egold),var(--emag));transition:width 1.1s cubic-bezier(.2,.8,.2,1)}
+.earn-progress-lbl{display:flex;justify-content:space-between;font-size:.58rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-top:5px}
+.earn-progress-lbl b{color:var(--text);font-family:'Space Grotesk',monospace}
+#earnPoolGrid{display:none}
+body.earn-is-super #earnPoolGrid{display:grid}
+#earnGrossWrap{display:none}
+body.earn-is-super #earnGrossWrap{display:block}
+/* ── CSV drop zone ── */
+.earn-drop{display:flex;align-items:center;gap:12px;padding:14px 16px;border:1.5px dashed color-mix(in srgb,var(--accent) 45%, var(--border));
+  border-radius:14px;background:color-mix(in srgb,var(--accent) 5%, var(--surface));cursor:pointer;transition:border-color .15s,background .15s,transform .12s}
+.earn-drop:hover{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%, var(--surface));transform:translateY(-1px)}
+.earn-drop.drag{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 14%, var(--surface))}
+.earn-drop-ic{font-size:1.3rem}
+.earn-drop-tx{display:flex;flex-direction:column;font-size:.82rem;color:var(--text)}
+.earn-drop-tx small{font-size:.66rem;color:var(--muted);font-weight:600}
+@media (max-width:420px){.earn-hero .big{font-size:2.5rem}.earn-ring{width:78px;height:78px}}
+
 </style>
 
 <div id="earnPage" style="position:fixed;inset:0;z-index:600;overflow-y:auto">
@@ -113,20 +163,29 @@
     </div>
 
     <div class="earn-hero rv">
-      <div class="lbl">Your earnings · <span id="earnWinLbl">—</span></div>
-      <div class="big earn-display" id="earnMeNet">$0.00</div>
-      <div class="sub">Gross value <b id="earnMeGross">$0.00</b> · your 70% share</div>
+      <div class="earn-hero-glow" aria-hidden="true"></div>
+      <div class="earn-hero-main">
+        <div class="earn-eyebrow"><span class="earn-dot"></span><span>Your earnings</span><span class="earn-win" id="earnWinLbl">—</span></div>
+        <div class="earn-figure">
+          <span class="earn-currency" id="earnCurLabel">$</span>
+          <span class="big earn-display" id="earnMeNet">0.00</span>
+        </div>
+        <div class="earn-slogan" id="earnSlogan">Your first dollar is one OTP away 💪</div>
+        <div id="earnGrossWrap"><span class="earn-gross-k">company gross</span><b id="earnMeGross">$0.00</b></div>
+      </div>
       <div class="earn-ring">
-        <svg width="84" height="84" viewBox="0 0 84 84">
-          <circle cx="42" cy="42" r="36" fill="none" stroke="var(--border)" stroke-width="7"/>
-          <circle id="earnRingArc" cx="42" cy="42" r="36" fill="none" stroke="var(--egold)" stroke-width="7" stroke-linecap="round" stroke-dasharray="226.2" stroke-dashoffset="226.2" style="transition:stroke-dashoffset 1s cubic-bezier(.2,.8,.2,1)"/>
+        <svg width="92" height="92" viewBox="0 0 92 92">
+          <circle cx="46" cy="46" r="40" fill="none" stroke="var(--border)" stroke-width="7"/>
+          <circle id="earnRingArc" cx="46" cy="46" r="40" fill="none" stroke="url(#earnRingGrad)" stroke-width="7" stroke-linecap="round" stroke-dasharray="251.3" stroke-dashoffset="251.3" style="transition:stroke-dashoffset 1.1s cubic-bezier(.2,.8,.2,1)"/>
+          <defs><linearGradient id="earnRingGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="var(--egold)"/><stop offset="1" stop-color="var(--emag)"/></linearGradient></defs>
         </svg>
         <div class="rtxt"><div class="rpct" id="earnGoalPct">0%</div><div class="rlbl">of goal</div></div>
       </div>
+      <div class="earn-progress"><div class="earn-progress-bar"><i id="earnProgressBar"></i></div><div class="earn-progress-lbl"><span>toward goal</span><b id="earnGoalAmt">$50</b></div></div>
     </div>
 
-    <div class="earn-grid2">
-      <div class="earn-mini rv"><div class="k">Team payout pool</div><div class="v earn-display" id="earnPoolNet" style="color:var(--eg)">$0.00</div></div>
+    <div class="earn-grid2" id="earnPoolGrid">
+      <div class="earn-mini rv"><div class="k">Team payout pool</div><div class="v earn-display" id="earnPoolNet">$0.00</div></div>
       <div class="earn-mini rv"><div class="k">Gross volume (company)</div><div class="v earn-display" id="earnPoolGross">$0.00</div></div>
     </div>
 
@@ -151,10 +210,17 @@
       <textarea class="ea-ta" id="eaNotifBody" placeholder="Message shown to every user as a card…"></textarea>
       <div class="ea-row" style="margin-top:8px"><button class="ea-btn" onclick="pushEarnNotif()">Send to all users</button></div>
 
-      <h2 style="margin-top:18px">📥 Import rate table (one-time)</h2>
-      <div style="font-size:.7rem;color:var(--muted);line-height:1.5;margin-bottom:8px">From <b>Zamil Rates.xlsx</b> copy column <b>A (Range)</b> + <b>C (Rate)</b> and paste below (tab-separated). Re-import anytime to update.</div>
+      <h2 style="margin-top:18px">📥 Rate table — paste or upload</h2>
+      <div style="font-size:.7rem;color:var(--muted);line-height:1.5;margin-bottom:10px">Two columns: <b>Range</b> + <b>Rate</b>. Upload a <b>.csv / .tsv</b> (recommended — guarantees every row, e.g. all 972), or paste below. Headers, blanks & zero‑rate rows are auto‑skipped; the rate column is detected for you.</div>
+      <label class="earn-drop" id="earnDrop">
+        <input type="file" id="earnRatesFile" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values" hidden>
+        <span class="earn-drop-ic">⬆️</span>
+        <span class="earn-drop-tx"><b>Click to upload CSV / TSV</b><small>or drop the file right here</small></span>
+      </label>
+      <div style="display:flex;align-items:center;gap:8px;margin:12px 0 6px;color:var(--muted);font-size:.62rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase"><span style="flex:1;height:1px;background:var(--border)"></span>or paste<span style="flex:1;height:1px;background:var(--border)"></span></div>
       <textarea class="ea-ta" id="eaRatesTA" placeholder="Malaysia Celcom LX 20Jul&#9;0.019&#10;Sri Lanka LX 02Jul&#9;0.023&#10;…"></textarea>
-      <div class="ea-row" style="margin-top:8px"><button class="ea-btn" onclick="importEarnRates()">Import rates</button><span class="pill" id="earnRateCount" style="margin-left:auto">0 ranges loaded</span></div>
+      <div class="ea-row" style="margin-top:8px"><button class="ea-btn" onclick="importEarnRates()">Import pasted</button><span class="pill" id="earnRateCount" style="margin-left:auto">0 ranges loaded</span></div>
+      <div class="ea-msg" id="earnImportMsg" style="display:none;margin-top:8px"></div>
     </div>
   </div>
 </div>
