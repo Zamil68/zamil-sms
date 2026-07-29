@@ -1,111 +1,39 @@
 <!-- earning.html — injected by earning.js -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap');
-#earnPage{ --eg:#34d399; --egold:#fbbf24; --emag:#f472b6; font-family:inherit;
-  background:
-    radial-gradient(900px 380px at 50% -8%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%),
-    radial-gradient(700px 320px at 100% 100%, color-mix(in srgb, var(--emag) 10%, transparent), transparent 72%),
-    var(--bg);
-  background-attachment: fixed;
-}
-#earnPage::before{ content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
-  background-image:radial-gradient(rgba(255,255,255,.05) 1px, transparent 1.4px); background-size:22px 22px; opacity:.5; }
-[data-theme="light"] #earnPage::before{ background-image:radial-gradient(rgba(15,23,42,.05) 1px, transparent 1.4px); }
-#earnPage > *{ position:relative; z-index:1; }
-.earn-display{ font-family:'Space Grotesk',ui-monospace,monospace; letter-spacing:-.02em; }
-.earn-head{ display:flex; align-items:center; gap:10px; padding:14px 2px 6px; }
-.earn-back{ width:38px;height:38px;flex-shrink:0;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:1.05rem;display:flex;align-items:center;justify-content:center;transition:transform .12s }
-.earn-back:active{ transform:scale(.9) }
-.earn-head h1{ font-family:'Space Grotesk',sans-serif; font-size:1.18rem; font-weight:700; margin:0; letter-spacing:-.02em; flex:1; min-width:0 }
-.earn-ibtn{ width:38px;height:38px;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;font-size:.95rem;display:flex;align-items:center;justify-content:center;position:relative;transition:transform .12s,color .15s }
-.earn-ibtn:active{ transform:scale(.9) }
-.earn-ibtn.has::after{ content:''; position:absolute; top:7px; right:8px; width:7px;height:7px;border-radius:50%;background:var(--emag);box-shadow:0 0 0 2px var(--surface) }
-.cur-toggle{ display:inline-flex; background:var(--surface); border:1px solid var(--border); border-radius:11px; padding:3px; gap:2px }
-.cur-toggle button{ border:0; background:transparent; color:var(--muted); font:inherit; font-size:.72rem; font-weight:700; padding:6px 12px; border-radius:8px; cursor:pointer; transition:all .15s }
-.cur-toggle button.on{ background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#06080F; box-shadow:0 3px 10px -3px color-mix(in srgb,var(--accent) 60%,transparent) }
-.earn-hero{ margin:14px 0; border-radius:22px; padding:22px 20px; position:relative; overflow:hidden;
-  background:linear-gradient(150deg, color-mix(in srgb,var(--accent) 22%, var(--card)), var(--card) 60%);
-  border:1px solid color-mix(in srgb,var(--accent) 30%, var(--border)); box-shadow:0 18px 50px -22px color-mix(in srgb,var(--accent) 60%,transparent); }
-.earn-hero::after{ content:''; position:absolute; right:-40px; top:-40px; width:180px;height:180px; border-radius:50%;
-  background:conic-gradient(from 180deg, color-mix(in srgb,var(--egold) 30%,transparent), transparent 60%); filter:blur(8px); opacity:.5; animation:earnSpin 18s linear infinite }
-@keyframes earnSpin{ to{ transform:rotate(360deg) } }
-.earn-hero .lbl{ font-size:.62rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--muted) }
-.earn-hero .big{ font-size:2.9rem; font-weight:700; line-height:1; margin:6px 0 2px; color:var(--text) }
-.earn-hero .sub{ font-size:.74rem; color:var(--muted); font-weight:600 }
-.earn-hero .sub b{ color:var(--eg) }
-.earn-ring{ position:absolute; right:18px; bottom:18px; width:84px;height:84px }
-.earn-ring svg{ transform:rotate(-90deg) }
-.earn-ring .rtxt{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center }
-.earn-ring .rpct{ font-family:'Space Grotesk',monospace; font-size:1.05rem; font-weight:700; color:var(--egold) }
-.earn-ring .rlbl{ font-size:.5rem; letter-spacing:.08em; text-transform:uppercase; color:var(--muted) }
-.earn-grid2{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px }
-.earn-mini{ background:var(--card); border:1px solid var(--border); border-radius:16px; padding:14px; transition:transform .14s, box-shadow .14s }
-.earn-mini:hover{ transform:translateY(-2px); box-shadow:0 12px 30px -16px rgba(0,0,0,.4) }
-.earn-mini .k{ font-size:.58rem; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:var(--muted) }
-.earn-mini .v{ font-family:'Space Grotesk',monospace; font-size:1.45rem; font-weight:700; margin-top:4px }
-.earn-sec-t{ display:flex; align-items:center; gap:8px; margin:18px 2px 10px; font-family:'Space Grotesk',sans-serif; font-size:.95rem; font-weight:700 }
-.earn-sec-t .pill{ margin-left:auto; font-size:.62rem; font-weight:700; color:var(--muted); background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:3px 10px }
-.rv{ opacity:0; transform:translateY(14px); transition:opacity .5s ease, transform .5s ease }
-.rv.in{ opacity:1; transform:none }
-/* per-range cards */
-.rr{ display:flex; align-items:center; gap:12px; background:var(--card); border:1px solid var(--border); border-radius:15px; padding:12px 14px; margin-bottom:8px; position:relative; overflow:hidden; transition:transform .14s, border-color .14s }
-.rr:hover{ transform:translateX(3px); border-color:color-mix(in srgb, var(--rc, var(--accent)) 50%, var(--border)) }
-.rr::before{ content:''; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--rc, var(--accent)) }
-.rr .meta{ flex:1; min-width:0 }
-.rr .rn{ font-size:.82rem; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
-.rr .rc{ font-size:.62rem; color:var(--muted); margin-top:3px; font-weight:600 }
-.rr .bar{ height:4px; background:var(--border); border-radius:3px; margin-top:7px; overflow:hidden }
-.rr .bar > i{ display:block; height:100%; width:0; background:linear-gradient(90deg, var(--rc, var(--accent)), color-mix(in srgb, var(--rc, var(--accent)) 40%, #fff)); border-radius:3px; transition:width .8s cubic-bezier(.2,.8,.2,1) }
-.rr .figs{ text-align:right; flex-shrink:0 }
-.rr .net{ font-family:'Space Grotesk',monospace; font-size:1rem; font-weight:700; color:var(--eg) }
-.rr .grs{ font-size:.58rem; color:var(--muted); margin-top:2px }
-/* leaderboard */
-.elb{ display:flex; align-items:center; gap:11px; padding:10px 12px; border-radius:14px; margin-bottom:7px; background:var(--card); border:1px solid var(--border); transition:transform .14s }
-.elb:hover{ transform:translateX(3px) }
-.elb.top1{ background:linear-gradient(135deg, color-mix(in srgb,var(--egold) 16%, var(--card)), var(--card)); border-color:color-mix(in srgb,var(--egold) 45%, var(--border)) }
-.elb .rk{ width:30px; text-align:center; font-family:'Space Grotesk',monospace; font-weight:700; color:var(--muted); flex-shrink:0 }
-.elb.top1 .rk,.elb.top2 .rk,.elb.top3 .rk{ font-size:1.05rem }
-.elb .av{ width:34px;height:34px;border-radius:50%; display:flex;align-items:center;justify-content:center; font-family:'Space Grotesk',monospace; font-weight:700; font-size:.74rem; flex-shrink:0; color:#06080F; background:hsl(var(--hue,200),75%,62%) }
-.elb .nm{ flex:1; min-width:0; font-size:.82rem; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
-.elb .amt{ font-family:'Space Grotesk',monospace; font-weight:700; color:var(--eg); flex-shrink:0 }
-/* super admin panel */
-.earn-admin{ margin-top:22px; border:1px dashed color-mix(in srgb,var(--emag) 40%, var(--border)); border-radius:18px; padding:16px; background:color-mix(in srgb,var(--emag) 5%, var(--card)) }
-.earn-admin h2{ font-family:'Space Grotesk',sans-serif; font-size:.95rem; margin:0 0 12px; display:flex; align-items:center; gap:8px }
-.ea-row{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; align-items:center }
-.ea-row label{ font-size:.62rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--muted) }
-.ea-inp{ background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:9px 11px; color:var(--text); font:inherit; font-size:.82rem; outline:none }
-.ea-inp:focus{ border-color:var(--accent) }
-.ea-btn{ border:0; border-radius:10px; padding:9px 14px; font:inherit; font-size:.78rem; font-weight:700; cursor:pointer; color:#06080F; background:linear-gradient(135deg,var(--emag),#a855f7); transition:transform .12s }
-.ea-btn.ghost{ background:var(--surface); color:var(--text); border:1px solid var(--border) }
-.ea-btn:active{ transform:scale(.95) }
-.ea-msg{ font-size:.74rem; font-weight:700; margin-top:6px }
-.ea-ta{ width:100%; box-sizing:border-box; min-height:90px; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:10px; color:var(--text); font:inherit; font-size:.76rem; outline:none; resize:vertical }
-/* notification card */
-#earnNotif{ position:fixed; inset:0; z-index:950; background:rgba(6,8,15,.66); backdrop-filter:blur(10px); display:none; align-items:center; justify-content:center; padding:18px }
-#earnNotif.show{ display:flex }
-.en-card{ width:100%; max-width:360px; border-radius:24px; padding:26px 22px; text-align:center; position:relative;
-  background:linear-gradient(160deg, color-mix(in srgb,var(--accent) 20%, var(--card)), var(--card)); border:1px solid color-mix(in srgb,var(--accent) 35%, var(--border));
-  box-shadow:0 30px 80px -20px rgba(0,0,0,.6); animation:enPop .35s cubic-bezier(.2,1.2,.3,1) both }
-@keyframes enPop{ from{ opacity:0; transform:scale(.9) translateY(12px) } to{ opacity:1; transform:none } }
-.en-logo{ height:30px; margin:0 auto 14px; display:block }
-.en-tag{ font-size:.58rem; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--accent) }
-.en-body{ font-size:1rem; font-weight:600; line-height:1.5; color:var(--text); margin:10px 0 18px; white-space:pre-wrap }
-.en-close{ border:0; border-radius:12px; padding:11px 22px; font:inherit; font-weight:700; cursor:pointer; color:#06080F; background:linear-gradient(135deg,var(--accent),var(--accent2)) }
-.en-x{ position:absolute; top:12px; right:14px; background:none; border:0; color:var(--muted); font-size:1.1rem; cursor:pointer }
-.earn-empty{ text-align:center; padding:30px 18px; color:var(--muted); font-size:.84rem; line-height:1.6 }
+#earnPage{--eg:#34d399;--egold:#fbbf24;--emag:#f472b6;font-family:inherit;
+  background:radial-gradient(900px 380px at 50% -8%,color-mix(in srgb,var(--accent) 16%,transparent),transparent 70%),
+  radial-gradient(700px 320px at 100% 100%,color-mix(in srgb,var(--emag) 10%,transparent),transparent 72%),var(--bg);
+  background-attachment:fixed}
+#earnPage::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:radial-gradient(rgba(255,255,255,.05) 1px,transparent 1.4px);background-size:22px 22px;opacity:.5}
+[data-theme="light"] #earnPage::before{background-image:radial-gradient(rgba(15,23,42,.05) 1px,transparent 1.4px)}
+#earnPage>*{position:relative;z-index:1}
+.earn-display{font-family:'Space Grotesk',ui-monospace,monospace;letter-spacing:-.02em}
 
-  /* ── Earnings hero v2 ── */
+/* head */
+.earn-head{display:flex;align-items:center;gap:10px;padding:14px 2px 6px}
+.earn-back{width:38px;height:38px;flex-shrink:0;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:1.05rem;display:flex;align-items:center;justify-content:center;transition:transform .12s}
+.earn-back:active{transform:scale(.9)}
+.earn-head h1{font-family:'Space Grotesk',sans-serif;font-size:1.18rem;font-weight:700;margin:0;letter-spacing:-.02em;flex:1;min-width:0}
+.earn-ibtn{width:38px;height:38px;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;font-size:.95rem;display:flex;align-items:center;justify-content:center;position:relative;transition:transform .12s,color .15s}
+.earn-ibtn:active{transform:scale(.9)}
+.earn-ibtn.has::after{content:'';position:absolute;top:7px;right:8px;width:7px;height:7px;border-radius:50%;background:var(--emag);box-shadow:0 0 0 2px var(--surface)}
+.cur-toggle{display:inline-flex;background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:3px;gap:2px}
+.cur-toggle button{border:0;background:transparent;color:var(--muted);font:inherit;font-size:.72rem;font-weight:700;padding:6px 12px;border-radius:8px;cursor:pointer;transition:all .15s}
+.cur-toggle button.on{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06080F;box-shadow:0 3px 10px -3px color-mix(in srgb,var(--accent) 60%,transparent)}
+
+/* hero */
 .earn-hero{position:relative;overflow:hidden;border-radius:24px;padding:22px 20px 16px;margin:14px 0;
-  background:linear-gradient(150deg, color-mix(in srgb,var(--accent) 26%, var(--card)) 0%, var(--card) 55%, color-mix(in srgb,var(--emag) 14%, var(--card)) 100%);
-  border:1px solid color-mix(in srgb,var(--accent) 30%, var(--border));
-  box-shadow:0 22px 60px -28px color-mix(in srgb,var(--accent) 70%, transparent);
+  background:linear-gradient(150deg,color-mix(in srgb,var(--accent) 26%,var(--card)) 0%,var(--card) 55%,color-mix(in srgb,var(--emag) 14%,var(--card)) 100%);
+  border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border));
+  box-shadow:0 22px 60px -28px color-mix(in srgb,var(--accent) 70%,transparent);
   display:grid;grid-template-columns:1fr auto;grid-template-areas:"main ring" "prog prog";gap:6px 14px;align-items:center;
-  transition:transform .18s ease, box-shadow .18s ease;}
-.earn-hero:hover{transform:translateY(-2px);box-shadow:0 28px 70px -26px color-mix(in srgb,var(--accent) 80%, transparent);}
+  transition:transform .18s ease,box-shadow .18s ease}
+.earn-hero:hover{transform:translateY(-2px);box-shadow:0 28px 70px -26px color-mix(in srgb,var(--accent) 80%,transparent)}
 .earn-hero-glow{position:absolute;inset:-40% -10% auto auto;width:240px;height:240px;border-radius:50%;
-  background:radial-gradient(circle, color-mix(in srgb,var(--egold) 35%, transparent), transparent 65%);
-  filter:blur(6px);opacity:.5;pointer-events:none;animation:earnGlow 7s ease-in-out infinite;}
+  background:radial-gradient(circle,color-mix(in srgb,var(--egold) 35%,transparent),transparent 65%);
+  filter:blur(6px);opacity:.5;pointer-events:none;animation:earnGlow 7s ease-in-out infinite}
 @keyframes earnGlow{0%,100%{transform:translate(0,0) scale(1);opacity:.45}50%{transform:translate(-12px,10px) scale(1.12);opacity:.7}}
 .earn-hero-main{grid-area:main;position:relative;z-index:1;min-width:0}
 .earn-eyebrow{display:flex;align-items:center;gap:7px;font-size:.6rem;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
@@ -114,12 +42,14 @@
 .earn-figure{display:flex;align-items:baseline;gap:6px;margin:8px 0 4px;line-height:.9}
 .earn-currency{font-family:'Space Grotesk',ui-monospace,monospace;font-size:1.4rem;font-weight:700;color:var(--muted);align-self:flex-start;margin-top:.35rem}
 .earn-hero .big{font-size:3.1rem;font-weight:700;letter-spacing:-.03em;
-  background:linear-gradient(120deg,var(--text),color-mix(in srgb,var(--accent) 60%, var(--text)));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+  background:linear-gradient(120deg,var(--text),color-mix(in srgb,var(--accent) 60%,var(--text)));
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
 .earn-slogan{font-size:.82rem;font-weight:600;color:var(--text);opacity:.82;line-height:1.35;margin-top:2px;animation:sloganIn .5s ease both}
 @keyframes sloganIn{from{opacity:0;transform:translateY(6px)}to{opacity:.82;transform:none}}
 .earn-gross-k{font-size:.58rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-right:6px}
-#earnGrossWrap{margin-top:8px;font-size:.8rem}
+#earnGrossWrap{margin-top:8px;font-size:.8rem;display:none}
 #earnGrossWrap b{font-family:'Space Grotesk',ui-monospace,monospace;color:var(--emag)}
+body.earn-is-super #earnGrossWrap{display:block}
 .earn-ring{grid-area:ring;position:relative;width:92px;height:92px;flex-shrink:0}
 .earn-ring svg{transform:rotate(-90deg)}
 .earn-ring .rtxt{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
@@ -127,29 +57,112 @@
 .earn-ring .rlbl{font-size:.5rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .earn-progress{grid-area:prog;position:relative;z-index:1;margin-top:6px}
 .earn-progress-bar{height:6px;background:var(--border);border-radius:4px;overflow:hidden}
-.earn-progress-bar > i{display:block;height:100%;width:0;border-radius:4px;background:linear-gradient(90deg,var(--accent),var(--egold),var(--emag));transition:width 1.1s cubic-bezier(.2,.8,.2,1)}
+.earn-progress-bar>i{display:block;height:100%;width:0;border-radius:4px;background:linear-gradient(90deg,var(--accent),var(--egold),var(--emag));transition:width 1.1s cubic-bezier(.2,.8,.2,1)}
 .earn-progress-lbl{display:flex;justify-content:space-between;font-size:.58rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-top:5px}
 .earn-progress-lbl b{color:var(--text);font-family:'Space Grotesk',monospace}
-#earnPoolGrid{display:none}
-body.earn-is-super #earnPoolGrid{display:grid}
-#earnGrossWrap{display:none}
-body.earn-is-super #earnGrossWrap{display:block}
-/* ── CSV drop zone ── */
-.earn-drop{display:flex;align-items:center;gap:12px;padding:14px 16px;border:1.5px dashed color-mix(in srgb,var(--accent) 45%, var(--border));
-  border-radius:14px;background:color-mix(in srgb,var(--accent) 5%, var(--surface));cursor:pointer;transition:border-color .15s,background .15s,transform .12s}
-.earn-drop:hover{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%, var(--surface));transform:translateY(-1px)}
-.earn-drop.drag{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 14%, var(--surface))}
-.earn-drop-ic{font-size:1.3rem}
-.earn-drop-tx{display:flex;flex-direction:column;font-size:.82rem;color:var(--text)}
-.earn-drop-tx small{font-size:.66rem;color:var(--muted);font-weight:600}
-@media (max-width:420px){.earn-hero .big{font-size:2.5rem}.earn-ring{width:78px;height:78px}}
 
-/* super-only data — hidden from regular users */
+/* pool (super-only) */
+.earn-grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
 #earnPoolGrid{display:none}
 body.earn-is-super #earnPoolGrid{display:grid}
-#earnGrossWrap{display:none}
-body.earn-is-super #earnGrossWrap{display:block}
-  
+.earn-mini{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px;transition:transform .14s,box-shadow .14s}
+.earn-mini:hover{transform:translateY(-2px);box-shadow:0 12px 30px -16px rgba(0,0,0,.4)}
+.earn-mini .k{font-size:.58rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.earn-mini .v{font-family:'Space Grotesk',monospace;font-size:1.45rem;font-weight:700;margin-top:4px}
+
+/* section titles + info button */
+.earn-sec-t{display:flex;align-items:center;gap:8px;margin:18px 2px 10px;font-family:'Space Grotesk',sans-serif;font-size:.95rem;font-weight:700}
+.earn-sec-t .pill{margin-left:auto;font-size:.62rem;font-weight:700;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:3px 10px}
+.earn-info{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--border);background:var(--surface);color:var(--muted);
+  font-size:.68rem;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
+  flex-shrink:0;transition:all .15s;font-style:normal;line-height:1}
+.earn-info:hover{border-color:var(--accent);color:var(--accent);transform:scale(1.1)}
+
+/* reveal */
+.rv{opacity:0;transform:translateY(14px);transition:opacity .5s ease,transform .5s ease}
+.rv.in{opacity:1;transform:none}
+
+/* per-range cards */
+.rr{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:15px;padding:12px 14px;margin-bottom:8px;position:relative;overflow:hidden;transition:transform .14s,border-color .14s}
+.rr:hover{transform:translateX(3px);border-color:color-mix(in srgb,var(--rc,var(--accent)) 50%,var(--border))}
+.rr::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--rc,var(--accent))}
+.rr .meta{flex:1;min-width:0}
+.rr .rn{font-size:.82rem;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rr .rc{font-size:.62rem;color:var(--muted);margin-top:3px;font-weight:600}
+.rr .bar{height:4px;background:var(--border);border-radius:3px;margin-top:7px;overflow:hidden}
+.rr .bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--rc,var(--accent)),color-mix(in srgb,var(--rc,var(--accent)) 40%,#fff));border-radius:3px;transition:width .8s cubic-bezier(.2,.8,.2,1)}
+.rr .figs{text-align:right;flex-shrink:0}
+.rr .net{font-family:'Space Grotesk',monospace;font-size:1rem;font-weight:700;color:var(--eg)}
+.rr .grs{font-size:.58rem;color:var(--muted);margin-top:2px}
+
+/* leaderboard */
+.elb{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:14px;margin-bottom:7px;background:var(--card);border:1px solid var(--border);transition:transform .14s}
+.elb:hover{transform:translateX(3px)}
+.elb.top1{background:linear-gradient(135deg,color-mix(in srgb,var(--egold) 16%,var(--card)),var(--card));border-color:color-mix(in srgb,var(--egold) 45%,var(--border))}
+.elb .rk{width:30px;text-align:center;font-family:'Space Grotesk',monospace;font-weight:700;color:var(--muted);flex-shrink:0}
+.elb.top1 .rk,.elb.top2 .rk,.elb.top3 .rk{font-size:1.05rem}
+.elb .av{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',monospace;font-weight:700;font-size:.74rem;flex-shrink:0;color:#06080F;background:hsl(var(--hue,200),75%,62%)}
+.elb .nm{flex:1;min-width:0;font-size:.82rem;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.elb .amt{font-family:'Space Grotesk',monospace;font-weight:700;color:var(--eg);flex-shrink:0}
+
+/* super admin panel */
+.earn-admin{margin-top:22px;border:1px dashed color-mix(in srgb,var(--emag) 40%,var(--border));border-radius:18px;padding:16px;background:color-mix(in srgb,var(--emag) 5%,var(--card))}
+.earn-admin h2{font-family:'Space Grotesk',sans-serif;font-size:.95rem;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+.ea-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+.ea-row label{font-size:.62rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.ea-inp{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:9px 11px;color:var(--text);font:inherit;font-size:.82rem;outline:none}
+.ea-inp:focus{border-color:var(--accent)}
+.ea-btn{border:0;border-radius:10px;padding:9px 14px;font:inherit;font-size:.78rem;font-weight:700;cursor:pointer;color:#06080F;background:linear-gradient(135deg,var(--emag),#a855f7);transition:transform .12s}
+.ea-btn.ghost{background:var(--surface);color:var(--text);border:1px solid var(--border)}
+.ea-btn:active{transform:scale(.95)}
+.ea-msg{font-size:.74rem;font-weight:700;margin-top:6px}
+.ea-ta{width:100%;box-sizing:border-box;min-height:90px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px;color:var(--text);font:inherit;font-size:.76rem;outline:none;resize:vertical}
+
+/* CSV drop zone — animated gradient border */
+.earn-drop{position:relative;display:flex;align-items:center;gap:14px;padding:18px 18px;border-radius:16px;cursor:pointer;
+  background:var(--surface);transition:transform .12s,box-shadow .2s;overflow:hidden}
+.earn-drop::before{content:'';position:absolute;inset:0;border-radius:16px;padding:1.5px;
+  background:linear-gradient(135deg,var(--accent),var(--emag),var(--egold),var(--accent));background-size:300% 300%;
+  animation:dropGrad 4s ease infinite;
+  -webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+@keyframes dropGrad{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+.earn-drop:hover{transform:translateY(-2px);box-shadow:0 8px 24px -8px color-mix(in srgb,var(--accent) 40%,transparent)}
+.earn-drop.drag{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 30%,transparent)}
+.earn-drop-ic{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0;
+  background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 15%,var(--surface)),color-mix(in srgb,var(--emag) 10%,var(--surface)));
+  border:1px solid color-mix(in srgb,var(--accent) 20%,var(--border));transition:transform .2s}
+.earn-drop:hover .earn-drop-ic{transform:scale(1.08) rotate(-3deg)}
+.earn-drop-tx{display:flex;flex-direction:column;font-size:.82rem;color:var(--text);min-width:0}
+.earn-drop-tx small{font-size:.66rem;color:var(--muted);font-weight:600;margin-top:2px}
+.earn-drop-file{margin-top:4px;font-size:.68rem;font-weight:700;color:var(--eg);display:none;align-items:center;gap:4px}
+.earn-drop-file.show{display:flex}
+
+/* detail modal */
+#earnDetail{position:fixed;inset:0;z-index:960;background:rgba(6,8,15,.5);backdrop-filter:blur(8px);display:none;align-items:center;justify-content:center;padding:20px}
+#earnDetail.show{display:flex}
+.ed-card{width:100%;max-width:340px;border-radius:20px;padding:22px 20px;position:relative;
+  background:var(--card);border:1px solid var(--border);box-shadow:0 24px 60px -16px rgba(0,0,0,.5);
+  animation:enPop .3s cubic-bezier(.2,1.2,.3,1) both}
+.ed-title{font-family:'Space Grotesk',sans-serif;font-size:.92rem;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.ed-body{font-size:.78rem;color:var(--muted);line-height:1.6}
+.ed-x{position:absolute;top:12px;right:14px;background:none;border:0;color:var(--muted);font-size:1rem;cursor:pointer}
+
+/* notification card */
+#earnNotif{position:fixed;inset:0;z-index:950;background:rgba(6,8,15,.66);backdrop-filter:blur(10px);display:none;align-items:center;justify-content:center;padding:18px}
+#earnNotif.show{display:flex}
+.en-card{width:100%;max-width:360px;border-radius:24px;padding:26px 22px;text-align:center;position:relative;
+  background:linear-gradient(160deg,color-mix(in srgb,var(--accent) 20%,var(--card)),var(--card));
+  border:1px solid color-mix(in srgb,var(--accent) 35%,var(--border));
+  box-shadow:0 30px 80px -20px rgba(0,0,0,.6);animation:enPop .35s cubic-bezier(.2,1.2,.3,1) both}
+@keyframes enPop{from{opacity:0;transform:scale(.9) translateY(12px)}to{opacity:1;transform:none}}
+.en-logo{height:30px;margin:0 auto 14px;display:block}
+.en-tag{font-size:.58rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+.en-body{font-size:1rem;font-weight:600;line-height:1.5;color:var(--text);margin:10px 0 18px;white-space:pre-wrap}
+.en-close{border:0;border-radius:12px;padding:11px 22px;font:inherit;font-weight:700;cursor:pointer;color:#06080F;background:linear-gradient(135deg,var(--accent),var(--accent2))}
+.en-x{position:absolute;top:12px;right:14px;background:none;border:0;color:var(--muted);font-size:1.1rem;cursor:pointer}
+.earn-empty{text-align:center;padding:30px 18px;color:var(--muted);font-size:.84rem;line-height:1.6}
+@media(max-width:420px){.earn-hero .big{font-size:2.5rem}.earn-ring{width:78px;height:78px}}
 </style>
 
 <div id="earnPage" style="position:fixed;inset:0;z-index:600;overflow-y:auto">
@@ -168,17 +181,21 @@ body.earn-is-super #earnGrossWrap{display:block}
       <input class="ea-inp" id="earnPKRrate" type="number" step="0.01" style="width:120px" oninput="savePKR()">
     </div>
 
+    <!-- hero -->
     <div class="earn-hero rv">
       <div class="earn-hero-glow" aria-hidden="true"></div>
       <div class="earn-hero-main">
-        <div class="earn-eyebrow"><span class="earn-dot"></span><span>Your earnings</span><span class="earn-win" id="earnWinLbl">—</span></div>
-        
+        <div class="earn-eyebrow">
+          <span class="earn-dot"></span><span>Your earnings</span>
+          <button class="earn-info" onclick="earnDetail('hero')">i</button>
+          <span class="earn-win" id="earnWinLbl">—</span>
+        </div>
         <div class="earn-figure">
           <span class="earn-currency" id="earnCurLabel">$</span>
           <span class="big earn-display" id="earnMeNet">0.00</span>
         </div>
         <div class="earn-slogan" id="earnSlogan">Your first dollar is one OTP away 💪</div>
-        <div id="earnGrossWrap"><span class="earn-gross-k">company gross</span><b id="earnMeGross">$0.00</b></div>
+        <div id="earnGrossWrap"><span class="earn-gross-k">Your OTP value (gross)</span><b id="earnMeGross">$0.00</b></div>
       </div>
       <div class="earn-ring">
         <svg width="92" height="92" viewBox="0 0 92 92">
@@ -191,23 +208,33 @@ body.earn-is-super #earnGrossWrap{display:block}
       <div class="earn-progress"><div class="earn-progress-bar"><i id="earnProgressBar"></i></div><div class="earn-progress-lbl"><span>toward goal</span><b id="earnGoalAmt">$50</b></div></div>
     </div>
 
+    <!-- pool (super-only) -->
     <div class="earn-grid2" id="earnPoolGrid">
-      <div class="earn-mini rv"><div class="k">Team payout pool</div><div class="v earn-display" id="earnPoolNet">$0.00</div></div>
+      <div class="earn-mini rv"><div class="k">Team payout pool</div><div class="v earn-display" id="earnPoolNet" style="color:var(--eg)">$0.00</div></div>
       <div class="earn-mini rv"><div class="k">Gross volume (company)</div><div class="v earn-display" id="earnPoolGross">$0.00</div></div>
     </div>
 
-    <div class="earn-sec-t rv">📈 Your ranges <span class="pill" id="earnRangeCount">0</span></div>
+    <!-- per-range -->
+    <div class="earn-sec-t rv">📈 Your ranges
+      <button class="earn-info" onclick="earnDetail('ranges')">i</button>
+      <span class="pill" id="earnRangeCount">0</span>
+    </div>
     <div id="earnRanges"></div>
 
-    <div class="earn-sec-t rv">🏆 Earnings leaderboard <span class="pill" id="earnBoardCount">0</span></div>
+    <!-- leaderboard -->
+    <div class="earn-sec-t rv">🏆 Earnings leaderboard
+      <button class="earn-info" onclick="earnDetail('board')">i</button>
+      <span class="pill" id="earnBoardCount">0</span>
+    </div>
     <div id="earnBoard"></div>
 
+    <!-- super admin -->
     <div class="earn-admin rv" id="earnAdmin" style="display:none">
       <h2>🛠️ Super controls</h2>
       <div class="ea-row">
         <label>Window</label>
         <select class="ea-inp" id="eaMode"><option value="overall">Overall (custom dates)</option><option value="weekly">Rolling 7 days</option></select>
-        <input class="ea-inp" id="eaFrom" type="date"><input class="ea-inp" id="eaTo" type="date" placeholder="to (blank=now)">
+        <input class="ea-inp" id="eaFrom" type="date"><input class="ea-inp" id="eaTo" type="date">
         <input class="ea-inp" id="eaGoal" type="number" step="1" style="width:90px" title="Goal $">
         <button class="ea-btn" onclick="saveEarnSettings()">Save window</button>
       </div>
@@ -217,21 +244,34 @@ body.earn-is-super #earnGrossWrap{display:block}
       <textarea class="ea-ta" id="eaNotifBody" placeholder="Message shown to every user as a card…"></textarea>
       <div class="ea-row" style="margin-top:8px"><button class="ea-btn" onclick="pushEarnNotif()">Send to all users</button></div>
 
-      <h2 style="margin-top:18px">📥 Rate table — paste or upload</h2>
-      <div style="font-size:.7rem;color:var(--muted);line-height:1.5;margin-bottom:10px">Two columns: <b>Range</b> + <b>Rate</b>. Upload a <b>.csv / .tsv</b> (recommended — guarantees every row, e.g. all 972), or paste below. Headers, blanks & zero‑rate rows are auto‑skipped; the rate column is detected for you.</div>
+      <h2 style="margin-top:18px">📥 Rate table</h2>
       <label class="earn-drop" id="earnDrop">
         <input type="file" id="earnRatesFile" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values" hidden>
-        <span class="earn-drop-ic">⬆️</span>
-        <span class="earn-drop-tx"><b>Click to upload CSV / TSV</b><small>or drop the file right here</small></span>
+        <span class="earn-drop-ic">📄</span>
+        <span class="earn-drop-tx">
+          <b>Upload CSV / TSV</b>
+          <small>Drop file here or click to browse — every row is stored as‑is</small>
+          <span class="earn-drop-file" id="earnFileName">✓ <span id="earnFileNameTx"></span></span>
+        </span>
       </label>
       <div style="display:flex;align-items:center;gap:8px;margin:12px 0 6px;color:var(--muted);font-size:.62rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase"><span style="flex:1;height:1px;background:var(--border)"></span>or paste<span style="flex:1;height:1px;background:var(--border)"></span></div>
       <textarea class="ea-ta" id="eaRatesTA" placeholder="Malaysia Celcom LX 20Jul&#9;0.019&#10;Sri Lanka LX 02Jul&#9;0.023&#10;…"></textarea>
-      <div class="ea-row" style="margin-top:8px"><button class="ea-btn" onclick="importEarnRates()">Import pasted</button><span class="pill" id="earnRateCount" style="margin-left:auto">0 ranges loaded</span></div>
+      <div class="ea-row" style="margin-top:8px"><button class="ea-btn" onclick="importEarnRates()">Import pasted</button><span class="pill" id="earnRateCount" style="margin-left:auto">0 loaded</span></div>
       <div class="ea-msg" id="earnImportMsg" style="display:none;margin-top:8px"></div>
     </div>
   </div>
 </div>
 
+<!-- detail modal -->
+<div id="earnDetail">
+  <div class="ed-card">
+    <button class="ed-x" onclick="closeEarnDetail()">✕</button>
+    <div class="ed-title" id="earnDetailTitle"></div>
+    <div class="ed-body" id="earnDetailBody"></div>
+  </div>
+</div>
+
+<!-- notification card -->
 <div id="earnNotif">
   <div class="en-card">
     <button class="en-x" onclick="closeEarnNotif()">✕</button>
