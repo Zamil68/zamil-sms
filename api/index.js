@@ -539,36 +539,45 @@ function weekKey(dateStr) {
   return new Date(d.getTime() + diff * 86400000).toISOString().slice(0, 10);
 }
 
+  // ═══════════════════════════════════════════════════════════
+// 💰 EARNINGS — self-contained block (helpers + routes)
 // ═══════════════════════════════════════════════════════════
-// 💰 EARNINGS — rates (Supabase) + live compute from CDR + window + notifs
-// ═══════════════════════════════════════════════════════════
-let _ratesCache = { ts: 0, map: null, raw: null, count: 0 };
+let _ratesCache = { ts: 0, map: null, count: 0 };
 async function loadRateMap(force) {
-  if (!force && _ratesCache.map && (Date.now() - _ratesCache.ts) < 5 * 60 * 1000) return _ratesCache;
-  const map = new Map(); const raw = {}; let count = 0;
+  if (!force && _ratesCache.map && (Date.now() - _ratesCache.ts) < 300000) return _ratesCache;
+  const map = new Map(); let count = 0;
   if (supaEnabled()) {
     try {
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/range_rates?select=range,raw,rate&limit=2000`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/range_rates?select=range,rate&limit=5000`,
+        { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
       const rows = await r.json();
-      if (Array.isArray(rows)) rows.forEach(x => { const rt = parseFloat(x.rate); if (isFinite(rt) && rt > 0) { map.set(String(x.range), rt); raw[String(x.range)] = x.raw || x.range; count++; } });
+      if (Array.isArray(rows)) rows.forEach(x => {
+        const rt = parseFloat(x.rate);
+        if (isFinite(rt) && rt > 0) { map.set(norm(x.range), rt); count++; }
+      });
     } catch (e) { console.error('loadRateMap:', e.message); }
   }
-  _ratesCache = { ts: Date.now(), map, raw, count };
+  _ratesCache = { ts: Date.now(), map, count };
   return _ratesCache;
 }
 async function getEarnSettings() {
   const def = { mode: 'overall', from_date: '', to_date: '', goal_usd: 50 };
   if (!supaEnabled()) return def;
   try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/earn_settings?id=eq.1&select=*`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
-    const rows = await r.json(); return (Array.isArray(rows) && rows[0]) ? Object.assign(def, rows[0]) : def;
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/earn_settings?id=eq.1&select=*`,
+      { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+    const rows = await r.json();
+    return (Array.isArray(rows) && rows[0]) ? Object.assign(def, rows[0]) : def;
   } catch (e) { return def; }
 }
 function _earnWindow(cfg) {
   const today = businessDayPKT().label;
-  if (cfg.mode === 'weekly') { const f = new Date(new Date(today + 'T00:00:00Z').getTime() - 6 * 86400000).toISOString().slice(0, 10); return { from: f + ' 00:00:00', to: today + ' 23:59:59', label: 'Last 7 days' }; }
-  const f = cfg.from_date || today; const t = cfg.to_date || today;
-  return { from: f + ' 00:00:00', to: t + ' 23:59:59', label: (cfg.from_date || today) + ' → ' + (cfg.to_date || today) };
+  if (cfg.mode === 'weekly') {
+    const f = new Date(new Date(today + 'T00:00:00Z').getTime() - 6 * 86400000).toISOString().slice(0, 10);
+    return { from: f + ' 00:00:00', to: today + ' 23:59:59', label: 'Last 7 days' };
+  }
+  const f = cfg.from_date || today, t = cfg.to_date || today;
+  return { from: f + ' 00:00:00', to: t + ' 23:59:59', label: f + ' → ' + t };
 }
 
 module.exports = async (req, res) => {
@@ -1542,93 +1551,120 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
       } catch (err) { return error(res, 500, 'Failed to fetch clients'); }
     }
 
-    // 💰 rates: read (cached) + import (super) + count
+// ── routes (paste inside the try{} block, before the 404 line) ──
+
     if (url === '/earn/rates' && req.method === 'POST') {
-      const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
-      const rc = await loadRateMap(false);
-      return ok(res, { count: rc.count });
+      try {
+        const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+        const rc = await loadRateMap(false);
+        return ok(res, { count: rc.count });
+      } catch (e) { return error(res, 500, 'earn/rates: ' + e.message); }
     }
+
     if (url === '/earn/import-rates' && req.method === 'POST') {
-      const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
-      if ((await getRole(user.username)) !== 'super') return error(res, 403, 'Super admin only');
-      if (!supaEnabled()) return error(res, 400, 'Supabase required to store rates.');
-      const rows = Array.isArray(req.body.rows) ? req.body.rows : [];
-      let saved = 0;
-      for (let i = 0; i < rows.length; i += 200) {
-        const chunk = rows.slice(i, i + 200).map(r => ({ range: norm(r.range), raw: String(r.range || '').trim(), rate: parseFloat(r.rate) || 0, currency: 'USD' })).filter(r => r.range && r.rate > 0);
-        if (!chunk.length) continue;
-        try { await fetch(`${SUPABASE_URL}/rest/v1/range_rates`, { method: 'POST', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(chunk) }); saved += chunk.length; } catch (e) {}
-      }
-      _ratesCache = { ts: 0, map: null, raw: null, count: 0 };   // bust cache
-      return ok(res, { saved });
+      try {
+        const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+        if ((await getRole(user.username)) !== 'super') return error(res, 403, 'Super admin only');
+        if (!supaEnabled()) return error(res, 400, 'Supabase required.');
+        const rows = Array.isArray(req.body.rows) ? req.body.rows : [];
+        let saved = 0; const errors = [];
+        for (let i = 0; i < rows.length; i += 100) {
+          const chunk = rows.slice(i, i + 100)
+            .map(r => ({ range: norm(r.range), raw: String(r.range || '').trim(), rate: parseFloat(r.rate) || 0, currency: 'USD' }))
+            .filter(r => r.range && r.rate > 0);
+          if (!chunk.length) continue;
+          try {
+            const cr = await fetch(`${SUPABASE_URL}/rest/v1/range_rates`, {
+              method: 'POST',
+              headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+              body: JSON.stringify(chunk)
+            });
+            if (cr.ok) saved += chunk.length;
+            else { const t = await cr.text(); errors.push('chunk ' + (i / 100 + 1) + ': HTTP ' + cr.status + ' ' + t.slice(0, 120)); }
+          } catch (e) { errors.push('chunk ' + (i / 100 + 1) + ': ' + e.message); }
+        }
+        _ratesCache = { ts: 0, map: null, count: 0 };
+        return ok(res, { saved, received: rows.length, errors: errors.length ? errors : undefined });
+      } catch (e) { return error(res, 500, 'earn/import-rates: ' + e.message); }
     }
-    // 💰 window settings (super set / anyone read)
+
     if (url === '/earn/settings' && req.method === 'POST') {
-      const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
-      const cfg = await getEarnSettings();
-      return ok(res, { settings: cfg });
+      try {
+        const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+        return ok(res, { settings: await getEarnSettings() });
+      } catch (e) { return error(res, 500, 'earn/settings: ' + e.message); }
     }
+
     if (url === '/earn/set-settings' && req.method === 'POST') {
-      const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
-      if ((await getRole(user.username)) !== 'super') return error(res, 403, 'Super admin only');
-      if (!supaEnabled()) return error(res, 400, 'Supabase required.');
-      const body = { id: 1, mode: (req.body.mode === 'weekly' ? 'weekly' : 'overall'), from_date: String(req.body.from_date || ''), to_date: String(req.body.to_date || ''), goal_usd: Math.max(1, parseFloat(req.body.goal_usd) || 50), updated_by: user.username, updated_at: new Date().toISOString() };
-      try { await fetch(`${SUPABASE_URL}/rest/v1/earn_settings`, { method: 'POST', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(body) }); return ok(res, { settings: body }); }
-      catch (e) { return error(res, 500, 'Failed to save settings'); }
+      try {
+        const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+        if ((await getRole(user.username)) !== 'super') return error(res, 403, 'Super admin only');
+        if (!supaEnabled()) return error(res, 400, 'Supabase required.');
+        const body = { id: 1, mode: (req.body.mode === 'weekly' ? 'weekly' : 'overall'), from_date: String(req.body.from_date || ''), to_date: String(req.body.to_date || ''), goal_usd: Math.max(1, parseFloat(req.body.goal_usd) || 50), updated_by: user.username, updated_at: new Date().toISOString() };
+        await fetch(`${SUPABASE_URL}/rest/v1/earn_settings`, { method: 'POST', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(body) });
+        return ok(res, { settings: body });
+      } catch (e) { return error(res, 500, 'earn/set-settings: ' + e.message); }
     }
-    // 💰 notifications (super post / anyone read)
+
     if (url === '/earn/notifs' && req.method === 'POST') {
-      const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
-      if (!supaEnabled()) return ok(res, { notifs: [] });
-      try { const r = await fetch(`${SUPABASE_URL}/rest/v1/earn_notifs?order=created_at.desc&limit=20&select=*`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }); const rows = await r.json(); return ok(res, { notifs: Array.isArray(rows) ? rows : [] }); }
-      catch (e) { return ok(res, { notifs: [] }); }
+      try {
+        const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+        if (!supaEnabled()) return ok(res, { notifs: [] });
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/earn_notifs?order=created_at.desc&limit=20&select=*`,
+          { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+        const rows = await r.json();
+        return ok(res, { notifs: Array.isArray(rows) ? rows : [] });
+      } catch (e) { return ok(res, { notifs: [] }); }
     }
+
     if (url === '/earn/push-notif' && req.method === 'POST') {
-      const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
-      if ((await getRole(user.username)) !== 'super') return error(res, 403, 'Super admin only');
-      const bodyText = String(req.body.body || '').trim(); if (!bodyText) return error(res, 400, 'Message required');
-      if (!supaEnabled()) return error(res, 400, 'Supabase required.');
-      try { await fetch(`${SUPABASE_URL}/rest/v1/earn_notifs`, { method: 'POST', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' }, body: JSON.stringify({ body: bodyText, created_by: user.username }) }); return ok(res, { pushed: true }); }
-      catch (e) { return error(res, 500, 'Failed to push'); }
+      try {
+        const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+        if ((await getRole(user.username)) !== 'super') return error(res, 403, 'Super admin only');
+        const bodyText = String(req.body.body || '').trim(); if (!bodyText) return error(res, 400, 'Message required');
+        if (!supaEnabled()) return error(res, 400, 'Supabase required.');
+        await fetch(`${SUPABASE_URL}/rest/v1/earn_notifs`, { method: 'POST', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' }, body: JSON.stringify({ body: bodyText, created_by: user.username }) });
+        return ok(res, { pushed: true });
+      } catch (e) { return error(res, 500, 'earn/push-notif: ' + e.message); }
     }
-    // 💰 compute earnings over the active window
+
     if (url === '/earn/compute' && req.method === 'POST') {
-      const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
-      const rc = await loadRateMap(false);
-      const cfg = await getEarnSettings();
-      const win = _earnWindow(cfg);
-      const rows = await getCachedCDR(win.from, win.to, CDR_TTL_WIDE);
-      const USER_SHARE = 0.7, SUPER_SHARE = 0.3;
-      const me = { userNet: 0, gross: 0, perRange: {} };
-      const board = {};            // username -> { userNet, gross }
-      let grossTotal = 0, userNetTotal = 0;
-      const t1 = (user.clientName || '').toLowerCase().trim(), t2 = (user.username || '').toLowerCase().trim();
-      rows.forEach(r => {
-        const rt = rc.map.get(norm(r.range)); if (!rt) return;     // no rate → skip (not in sheet)
-        const uRate = rt * USER_SHARE;
-        grossTotal += rt; userNetTotal += uRate;
-        const cli = (r.client || '').trim();
-        if (cli) {
-          if (!board[cli]) board[cli] = { username: cli, userNet: 0, gross: 0 };
-          board[cli].userNet += uRate; board[cli].gross += rt;
-        }
-        const c = (cli || '').toLowerCase();
-        const isMe = c && (c === t1 || c === t2 || c.includes(t1) || c.includes(t2));
-        if (isMe) {
-          me.userNet += uRate; me.gross += rt;
-          const k = r.range || 'Unknown';
-          if (!me.perRange[k]) me.perRange[k] = { range: k, count: 0, rate: rt, userRate: uRate, userNet: 0, gross: 0 };
-          const pr = me.perRange[k]; pr.count++; pr.userNet += uRate; pr.gross += rt;
-        }
-      });
-      const perRange = Object.values(me.perRange).sort((a, b) => b.userNet - a.userNet);
-      const leaderboard = Object.values(board).sort((a, b) => b.userNet - a.userNet);
-      return ok(res, {
-        window: win, mode: cfg.mode, goal: Number(cfg.goal_usd) || 50, ratesLoaded: rc.count,
-        me: { userNet: me.userNet, gross: me.gross, perRange },
-        leaderboard,
-        pool: (role === 'super') ? { grossTotal, userNetTotal } : null
-      });
+      try {
+        const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+        const role = await getRole(user.username);
+        const rc = await loadRateMap(false);
+        const cfg = await getEarnSettings();
+        const win = _earnWindow(cfg);
+        const rows = await getCachedCDR(win.from, win.to, CDR_TTL_WIDE);
+        const USER_SHARE = 0.7;
+        const me = { userNet: 0, gross: 0, perRange: {} };
+        const board = {};
+        let grossTotal = 0, userNetTotal = 0;
+        const t1 = (user.clientName || '').toLowerCase().trim(), t2 = (user.username || '').toLowerCase().trim();
+        (rows || []).forEach(r => {
+          const rt = rc.map.get(norm(r.range)); if (!rt) return;
+          const uRate = rt * USER_SHARE;
+          grossTotal += rt; userNetTotal += uRate;
+          const cli = (r.client || '').trim();
+          if (cli) { if (!board[cli]) board[cli] = { username: cli, userNet: 0, gross: 0 }; board[cli].userNet += uRate; board[cli].gross += rt; }
+          const c = (cli || '').toLowerCase();
+          const isMe = c && (c === t1 || c === t2 || c.includes(t1) || c.includes(t2));
+          if (isMe) {
+            me.userNet += uRate; me.gross += rt;
+            const k = r.range || 'Unknown';
+            if (!me.perRange[k]) me.perRange[k] = { range: k, count: 0, rate: rt, userRate: uRate, userNet: 0, gross: 0 };
+            const pr = me.perRange[k]; pr.count++; pr.userNet += uRate; pr.gross += rt;
+          }
+        });
+        const perRange = Object.values(me.perRange).sort((a, b) => b.userNet - a.userNet);
+        const leaderboard = Object.values(board).sort((a, b) => b.userNet - a.userNet);
+        return ok(res, {
+          window: win, mode: cfg.mode, goal: Number(cfg.goal_usd) || 50, ratesLoaded: rc.count,
+          me: { userNet: me.userNet, gross: me.gross, perRange },
+          leaderboard,
+          pool: (role === 'super') ? { grossTotal, userNetTotal } : null
+        });
+      } catch (e) { return error(res, 500, 'earn/compute: ' + e.message); }
     }
 
     return error(res, 404, 'Route not found');
