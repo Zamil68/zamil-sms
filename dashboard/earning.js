@@ -125,7 +125,7 @@
     var rc=document.getElementById('earnRangeCount'); if(rc) rc.textContent=ranges.length;
     var rg=document.getElementById('earnRanges');
     if(rg){
-      if(!ranges.length){ rg.innerHTML='<div class="earn-empty">No matched OTPs yet for this window. Check that rates are imported and the window covers your traffic.</div>'; }
+      if(!ranges.length){ rg.innerHTML='<div class="earn-empty">📭 No OTPs matched yet</div>'; }
       else {
         var maxN=ranges[0].userNet||1;
         rg.innerHTML=ranges.slice(0,60).map(function(r){
@@ -147,7 +147,7 @@
     var bc=document.getElementById('earnBoardCount'); if(bc) bc.textContent=lb.length;
     var bd=document.getElementById('earnBoard');
     if(bd){
-      if(!lb.length){ bd.innerHTML='<div class="earn-empty">No earnings recorded yet.</div>'; }
+      if(!lb.length){ bd.innerHTML='<div class="earn-empty">📭 No earnings yet</div>'; }
       else {
         bd.innerHTML=lb.slice(0,30).map(function(u,i){
           var h=hueFor(u.username), cls=i===0?'top1':i===1?'top2':i===2?'top3':'';
