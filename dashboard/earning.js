@@ -1,13 +1,27 @@
-/* ═══ earning.js — Earnings module (Zamil SMS) ═══ */
+/* ═══ earning.js — Earnings module (Zamil SMS) — FULL WORKING VERSION ═══ */
 (function(){
+  'use strict';
+
+  /* ── helpers ── */
   function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
   function sess(){ return localStorage.getItem('app_session'); }
   function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
   function post(url, body, cb){
+    console.log('[EARN] POST', url, body);
     fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(Object.assign({session:sess()}, body||{}))})
-      .then(function(r){ return r.json().catch(function(){ return {ok:false, error:'Unexpected response (HTTP '+r.status+')'}; }); })
-      .then(cb)
-      .catch(function(){ cb({ok:false, error:'Connection error — check your network'}); });
+      .then(function(r){
+        console.log('[EARN] Response status:', r.status, url);
+        return r.json().catch(function(){ return {ok:false, error:'HTTP '+r.status+' — not JSON'}; });
+      })
+      .then(function(d){
+        console.log('[EARN] Data:', url, d);
+        cb(d);
+      })
+      .catch(function(e){
+        console.error('[EARN] Fetch error:', url, e);
+        cb({ok:false, error:'Connection error — '+e.message});
+      });
   }
 
   var _data=null, _role='none', _notifs=[], _injected=false;
@@ -45,15 +59,31 @@
 
   function inject(){
     if(_injected) return; _injected=true;
-    fetch('/dashboard/earning.html').then(function(r){return r.text();}).then(function(h){
+    console.log('[EARN] Injecting earning.html...');
+    fetch('/dashboard/earning.html').then(function(r){
+      console.log('[EARN] earning.html status:', r.status);
+      return r.text();
+    }).then(function(h){
+      console.log('[EARN] earning.html loaded, length:', h.length);
       var d=document.createElement('div'); d.innerHTML=h;
       while(d.firstElementChild) document.body.appendChild(d.firstElementChild);
       reveal(); syncCurUI();
       if(_data) render(_data);
+    }).catch(function(e){
+      console.error('[EARN] Failed to load earning.html:', e);
     });
   }
 
-  window.openEarnPage=function(){ inject(); var p=document.getElementById('earnPage'); if(p) p.style.display='block'; window.scrollTo(0,0); syncCurUI(); loadAll(); };
+  window.openEarnPage=function(){
+    console.log('[EARN] openEarnPage called');
+    inject();
+    var p=document.getElementById('earnPage');
+    if(p) p.style.display='block';
+    window.scrollTo(0,0);
+    syncCurUI();
+    loadAll();
+    setTimeout(initEarningsDates, 200);
+  };
   window.closeEarnPage=function(){ var p=document.getElementById('earnPage'); if(p) p.style.display='none'; };
 
   function syncCurUI(){
@@ -80,15 +110,23 @@
 
   /* ── load ── */
   function loadAll(){
+    console.log('[EARN] loadAll() called');
     post('/api/auth/role',{},function(r){
+      console.log('[EARN] Role result:', r);
       _role=(r&&r.ok)?r.role:'none';
       document.body.classList.toggle('earn-is-super', _role==='super');
-      var ad=document.getElementById('earnAdmin'); if(ad) ad.style.display=(_role==='super')?'block':'none';
+      var ad=document.getElementById('earnAdmin');
+      console.log('[EARN] earnAdmin element:', ad, 'role:', _role);
+      if(ad) ad.style.display=(_role==='super' || _role==='admin')?'block':'none';
       if(_role==='super') loadSettings();
     });
     post('/api/earn/compute',{},function(d){
+      console.log('[EARN] Compute result:', d);
       if(d&&d.ok){ _data=d; render(d); }
-      else { var rg=document.getElementById('earnRanges'); if(rg) rg.innerHTML='<div class="earn-empty">⚠️ '+esc((d&&d.error)||'Could not load earnings')+'</div>'; }
+      else {
+        var rg=document.getElementById('earnRanges');
+        if(rg) rg.innerHTML='<div class="earn-empty">⚠️ '+esc((d&&d.error)||'Could not load earnings')+'</div>';
+      }
     });
     loadNotifs();
   }
@@ -99,17 +137,14 @@
     var isSuper=(_role==='super');
     var winLabel=(d.window&&d.window.label)||'—';
     var wl=document.getElementById('earnWinLbl'); if(wl) wl.textContent=winLabel+(d.mode==='weekly'?' (weekly)':'');
-
     var mn=document.getElementById('earnMeNet'); if(mn) animNum(mn, d.me.userNet, 'plain');
     var cl=document.getElementById('earnCurLabel'); if(cl) cl.textContent=(_cur==='PKR'?'Rs':'$');
-
     if(isSuper){
       var mg=document.getElementById('earnMeGross'); if(mg) mg.textContent=fmt(d.me.gross);
       var pool=d.pool||null;
       var pn=document.getElementById('earnPoolNet'); if(pn) pn.textContent=pool?fmt(pool.userNetTotal):'—';
       var pg=document.getElementById('earnPoolGross'); if(pg) pg.textContent=pool?fmt(pool.grossTotal):'—';
     }
-
     var goal=Math.max(1, d.goal||50);
     var pool2=d.pool||null;
     var progVal=(isSuper && pool2 && pool2.grossTotal!=null)?pool2.grossTotal:d.me.userNet;
@@ -118,11 +153,8 @@
     var gp=document.getElementById('earnGoalPct'); if(gp) gp.textContent=Math.round(pct)+'%';
     var pb=document.getElementById('earnProgressBar'); if(pb) pb.style.width=pct.toFixed(1)+'%';
     var ga=document.getElementById('earnGoalAmt'); if(ga) ga.textContent=fmt(goal);
-
     var sl=document.getElementById('earnSlogan');
     if(sl){ var ns=_sloganFor(d.me.userNet,goal); if(sl.textContent!==ns){ sl.style.animation='none'; void sl.offsetWidth; sl.style.animation=''; sl.textContent=ns; } }
-
-    /* per-range: non-super sees count + earning only (no rate, no gross — confidential) */
     var ranges=d.me.perRange||[];
     var rc=document.getElementById('earnRangeCount'); if(rc) rc.textContent=ranges.length;
     var rg=document.getElementById('earnRanges');
@@ -132,21 +164,12 @@
         var maxN=ranges[0].userNet||1;
         rg.innerHTML=ranges.slice(0,60).map(function(r){
           var h=hueFor(r.range), share=Math.max(4,(r.userNet/maxN)*100);
-          var subLine = isSuper
-            ? r.count+' OTP'+(r.count>1?'s':'')+' · gross '+fmt(r.gross)
-            : r.count+' OTP'+(r.count>1?'s':'');
-          return '<div class="rr rv in" style="--rc:hsl('+h+',70%,55%)">'
-            +'<div class="meta"><div class="rn">'+esc(r.range)+'</div>'
-            +'<div class="rc">'+subLine+'</div>'
-            +'<div class="bar"><i data-w="'+share+'"></i></div></div>'
-            +'<div class="figs"><div class="net">'+fmt(r.userNet)+'</div>'
-            +(isSuper?'<div class="grs">gross '+fmt(r.gross)+'</div>':'')
-            +'</div></div>';
+          var subLine = isSuper ? r.count+' OTP'+(r.count>1?'s':'')+' · gross '+fmt(r.gross) : r.count+' OTP'+(r.count>1?'s':'');
+          return '<div class="rr rv in" style="--rc:hsl('+h+',70%,55%)"><div class="meta"><div class="rn">'+esc(r.range)+'</div><div class="rc">'+subLine+'</div><div class="bar"><i data-w="'+share+'"></i></div></div><div class="figs"><div class="net">'+fmt(r.userNet)+'</div>'+(isSuper?'<div class="grs">gross '+fmt(r.gross)+'</div>':'')+'</div></div>';
         }).join('');
         requestAnimationFrame(function(){ rg.querySelectorAll('.rr .bar > i').forEach(function(i){ i.style.width=i.dataset.w+'%'; }); });
       }
     }
-
     var lb=d.leaderboard||[];
     var bc=document.getElementById('earnBoardCount'); if(bc) bc.textContent=lb.length;
     var bd=document.getElementById('earnBoard');
@@ -156,15 +179,10 @@
         bd.innerHTML=lb.slice(0,30).map(function(u,i){
           var h=hueFor(u.username), cls=i===0?'top1':i===1?'top2':i===2?'top3':'';
           var medal=i===0?'👑':i===1?'🥈':i===2?'🥉':('#'+(i+1));
-          return '<div class="elb '+cls+' rv in" style="--hue:'+h+'">'
-            +'<div class="rk">'+medal+'</div>'
-            +'<div class="av">'+esc(String(u.username||'?').slice(0,2).toUpperCase())+'</div>'
-            +'<div class="nm">'+esc(u.username)+'</div>'
-            +'<div class="amt">'+fmt(u.userNet)+'</div></div>';
+          return '<div class="elb '+cls+' rv in" style="--hue:'+h+'"><div class="rk">'+medal+'</div><div class="av">'+esc(String(u.username||'?').slice(0,2).toUpperCase())+'</div><div class="nm">'+esc(u.username)+'</div><div class="amt">'+fmt(u.userNet)+'</div></div>';
         }).join('');
       }
     }
-
     var rrc=document.getElementById('earnRateCount'); if(rrc) rrc.textContent=(d.ratesLoaded||0)+' loaded';
   }
 
@@ -189,105 +207,132 @@
   window.openEarnNotif=function(){ if(_notifs.length) showNotif(_notifs[0]); };
   window.closeEarnNotif=function(){ var ov=document.getElementById('earnNotif'); if(ov) ov.classList.remove('show'); };
 
-  /* ── super: settings ── */
-  /* ── super: earnings report & client settings ── */
-function initEarningsDates() {
-  const now = new Date();
-  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59);
-  const formatDT = (d) => {
-    const pad = (n) => n.toString().padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  /* ── super: settings (window/goal) ── */
+  function loadSettings(){
+    console.log('[EARN] loadSettings() called');
+    post('/api/earn/settings',{},function(d){
+      if(!d||!d.ok) return;
+      var s=d.settings||{};
+      var m=document.getElementById('eaMode');  if(m) m.value=s.mode||'overall';
+      var f=document.getElementById('eaFrom'); if(f) f.value=s.from_date||'';
+      var t=document.getElementById('eaTo');   if(t) t.value=s.to_date||'';
+      var g=document.getElementById('eaGoal'); if(g) g.value=s.goal_usd||50;
+    });
+  }
+  window.saveEarnSettings=function(){
+    var msg=document.getElementById('eaMsg');
+    post('/api/earn/set-settings',{
+      mode:document.getElementById('eaMode').value,
+      from_date:document.getElementById('eaFrom').value,
+      to_date:document.getElementById('eaTo').value,
+      goal_usd:document.getElementById('eaGoal').value
+    },function(d){
+      if(msg){ msg.style.display='block'; msg.style.color=(d&&d.ok)?'var(--eg)':'var(--red)'; msg.textContent=(d&&d.ok)?'✅ Saved — recomputing…':((d&&d.error)||'Failed'); }
+      if(d&&d.ok) loadAll();
+    });
   };
-  const startInput = document.getElementById('earnStartDate');
-  const endInput = document.getElementById('earnEndDate');
-  if (startInput) startInput.value = formatDT(firstDay);
-  if (endInput) endInput.value = formatDT(lastDay);
-}
+  window.pushEarnNotif=function(){
+    var ta=document.getElementById('eaNotifBody');
+    var body=(ta&&ta.value||'').trim();
+    if(!body) return;
+    post('/api/earn/push-notif',{body:body},function(d){
+      var msg=document.getElementById('eaMsg');
+      if(msg){ msg.style.display='block'; msg.style.color=(d&&d.ok)?'var(--eg)':'var(--red)'; msg.textContent=(d&&d.ok)?'✅ Sent to all users':((d&&d.error)||'Failed'); }
+      if(d&&d.ok) ta.value='';
+    });
+  };
 
-window.fetchEarningsReport = function() {
-  const startDate = document.getElementById('earnStartDate').value;
-  const endDate = document.getElementById('earnEndDate').value;
-  if (!startDate || !endDate) { alert('Please select both start and end dates.'); return; }
-
-  const btn = event.target;
-  const originalText = btn.textContent;
-  btn.textContent = 'Scraping Lamix...';
-  btn.disabled = true;
-
-  post('/api/admin/earnings-report?startDate=' + encodeURIComponent(startDate) + '&endDate=' + encodeURIComponent(endDate), {}, function(d) {
-    btn.textContent = originalText;
-    btn.disabled = false;
-    if (!d || !d.ok || !d.data) { alert('Error: ' + ((d && d.error) || 'Failed to fetch report')); return; }
-    renderEarningsReport(d.data, d.totals);
-  });
-};
-
-function renderEarningsReport(data, totals) {
-  document.getElementById('totalSms').textContent = totals.totalSms.toLocaleString();
-  document.getElementById('totalGrossPay').textContent = '$' + totals.totalGrossPay.toFixed(4);
-  document.getElementById('totalCompanyGross').textContent = '$' + totals.totalCompanyGross.toFixed(4);
-  document.getElementById('totalUserPool').textContent = '$' + totals.totalUserPool.toFixed(4);
-
-  const tbody = document.getElementById('earningsTableBody');
-  tbody.innerHTML = '';
-  if (!data || data.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:24px; color:var(--muted);">No data found for this period.</td></tr>';
-    return;
+  /* ── NEW: verified earnings report ── */
+  function initEarningsDates(){
+    var now=new Date();
+    var firstDay=new Date(now.getFullYear(), now.getMonth(), 1);
+    var lastDay=new Date(now.getFullYear(), now.getMonth()+1, 0, 23, 59);
+    function pad(n){ return n.toString().padStart(2,'0'); }
+    function fmtDT(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes()); }
+    var s=document.getElementById('earnStartDate');
+    var e=document.getElementById('earnEndDate');
+    if(s) s.value=fmtDT(firstDay);
+    if(e) e.value=fmtDT(lastDay);
+    console.log('[EARN] Dates initialized:', s?s.value:'missing', e?e.value:'missing');
   }
 
-  data.forEach(row => {
-    const tr = document.createElement('tr');
-    tr.style.borderBottom = '1px solid var(--border)';
-    tr.innerHTML = `
-      <td style="padding:10px 8px; font-weight:700;">${esc(row.client)}</td>
-      <td style="padding:10px 8px;">${row.smsCount.toLocaleString()}</td>
-      <td style="padding:10px 8px;">${row.grossPay.toFixed(4)}</td>
-      <td style="padding:10px 8px;">
-        <input type="number" class="ea-inp" style="width:60px; padding:4px 8px;" value="${row.deductionPercent}" min="0" max="100" step="1" data-client-id="${row.userId}" data-field="deduction"> %
-      </td>
-      <td style="padding:10px 8px;">
-        <input type="checkbox" style="width:18px; height:18px; cursor:pointer;" ${row.isFullRate ? 'checked' : ''} data-client-id="${row.userId}" data-field="fullrate" title="Check to give user 100% of Gross Pay">
-      </td>
-      <td style="padding:10px 8px; color:var(--emag); font-weight:700;">${row.companyGross.toFixed(4)}</td>
-      <td style="padding:10px 8px; color:var(--accent); font-weight:700;">${row.userPool.toFixed(4)}</td>
-      <td style="padding:10px 8px;">
-        <button class="ea-btn" style="padding:6px 12px; font-size:.72rem;" onclick="saveClientSettings(this, '${row.userId}')">Save</button>
-      </td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
+  window.fetchEarningsReport=function(btn){
+    console.log('[EARN] fetchEarningsReport clicked');
+    var startDate=document.getElementById('earnStartDate');
+    var endDate=document.getElementById('earnEndDate');
+    if(!startDate||!endDate){ alert('Date inputs not found in DOM'); return; }
+    var sv=startDate.value, ev=endDate.value;
+    if(!sv||!ev){ alert('Please select both start and end dates.'); return; }
 
-window.saveClientSettings = function(btn, clientId) {
-  const row = btn.closest('tr');
-  const deductionPercent = row.querySelector('[data-field="deduction"]').value;
-  const isFullRate = row.querySelector('[data-field="fullrate"]').checked;
-  const originalText = btn.textContent;
-  btn.textContent = 'Saving...';
-  btn.disabled = true;
+    if(!btn) btn=document.getElementById('fetchEarnBtn');
+    var originalText=btn?btn.textContent:'Fetch';
+    if(btn){ btn.textContent='Scraping Lamix…'; btn.disabled=true; }
 
-  post('/api/admin/update-client-settings', { clientId, deductionPercent, isFullRate }, function(d) {
-    if (d && d.ok) {
-      btn.textContent = 'Saved!';
-      btn.style.background = 'var(--eg)';
-      setTimeout(() => { btn.textContent = originalText; btn.style.background = ''; btn.disabled = false; }, 1500);
-    } else {
-      alert('Failed to save: ' + ((d && d.error) || 'Unknown error'));
-      btn.textContent = originalText;
-      btn.disabled = false;
+    console.log('[EARN] Fetching report:', sv, '→', ev);
+    post('/api/admin/earnings-report',{startDate:sv, endDate:ev},function(d){
+      if(btn){ btn.textContent=originalText; btn.disabled=false; }
+      console.log('[EARN] Report response:', d);
+      if(!d||!d.ok||!d.data){
+        alert('Error: '+((d&&d.error)||'Failed to fetch report'));
+        return;
+      }
+      renderEarningsReport(d.data, d.totals);
+    });
+  };
+
+  function renderEarningsReport(data, totals){
+    console.log('[EARN] Rendering report:', data.length, 'rows');
+    var ts=document.getElementById('totalSms');
+    var tg=document.getElementById('totalGrossPay');
+    var tc=document.getElementById('totalCompanyGross');
+    var tu=document.getElementById('totalUserPool');
+    if(ts) ts.textContent=totals.totalSms.toLocaleString();
+    if(tg) tg.textContent='$'+totals.totalGrossPay.toFixed(4);
+    if(tc) tc.textContent='$'+totals.totalCompanyGross.toFixed(4);
+    if(tu) tu.textContent='$'+totals.totalUserPool.toFixed(4);
+
+    var tbody=document.getElementById('earningsTableBody');
+    if(!tbody){ console.error('[EARN] earningsTableBody not found!'); return; }
+    tbody.innerHTML='';
+    if(!data||!data.length){
+      tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--muted)">No data for this period.</td></tr>';
+      return;
     }
-  });
-};
+    data.forEach(function(row){
+      var tr=document.createElement('tr');
+      tr.style.borderBottom='1px solid var(--border)';
+      tr.innerHTML=
+        '<td style="padding:10px 8px;font-weight:700">'+esc(row.client)+'</td>'+
+        '<td style="padding:10px 8px">'+row.smsCount.toLocaleString()+'</td>'+
+        '<td style="padding:10px 8px">'+row.grossPay.toFixed(4)+'</td>'+
+        '<td style="padding:10px 8px"><input type="number" class="ea-inp" style="width:60px;padding:4px 8px" value="'+row.deductionPercent+'" min="0" max="100" step="1" data-field="deduction"> %</td>'+
+        '<td style="padding:10px 8px"><input type="checkbox" style="width:18px;height:18px;cursor:pointer" '+(row.isFullRate?'checked':'')+' data-field="fullrate" title="100% to user"></td>'+
+        '<td style="padding:10px 8px;color:var(--emag);font-weight:700">'+row.companyGross.toFixed(4)+'</td>'+
+        '<td style="padding:10px 8px;color:var(--accent);font-weight:700">'+row.userPool.toFixed(4)+'</td>'+
+        '<td style="padding:10px 8px"><button class="ea-btn" style="padding:6px 12px;font-size:.72rem" data-uid="'+esc(row.userId||'')+'">Save</button></td>';
+      var saveBtn=tr.querySelector('button');
+      saveBtn.addEventListener('click',function(){
+        var r=this.closest('tr');
+        var dp=r.querySelector('[data-field="deduction"]').value;
+        var fr=r.querySelector('[data-field="fullrate"]').checked;
+        var uid=this.getAttribute('data-uid');
+        var orig=this.textContent;
+        this.textContent='…'; this.disabled=true;
+        post('/api/admin/update-client-settings',{clientId:uid, deductionPercent:dp, isFullRate:fr},function(d2){
+          if(d2&&d2.ok){
+            saveBtn.textContent='✓'; saveBtn.style.background='var(--eg)';
+            setTimeout(function(){ saveBtn.textContent=orig; saveBtn.style.background=''; saveBtn.disabled=false; },1500);
+          } else {
+            alert('Save failed: '+((d2&&d2.error)||'?'));
+            saveBtn.textContent=orig; saveBtn.disabled=false;
+          }
+        });
+      });
+      tbody.appendChild(tr);
+    });
+  }
 
-// Hook into existing openEarnPage to initialize dates
-const _origOpenEarnPage = window.openEarnPage;
-window.openEarnPage = function() {
-  if (_origOpenEarnPage) _origOpenEarnPage();
-  setTimeout(initEarningsDates, 100);
-};
-
-  /* ── super: rate import (stores EVERY row, no filtering) ── */
+  /* ── super: rate import ── */
   window.importEarnRates=function(){
     var ta=document.getElementById('eaRatesTA');
     var txt=(ta&&ta.value)||'';
@@ -303,7 +348,7 @@ window.openEarnPage = function() {
     for(var i=0;i<lines.length;i++){
       var line=lines[i]; if(!line) continue;
       var trimmed=line.trim(); if(!trimmed) continue;
-      if(/^[-|:\s]+$/.test(trimmed)) continue;                       // separator
+      if(/^[-|:\s]+$/.test(trimmed)) continue;
       var pipeWrapped=trimmed.charAt(0)==='|'||trimmed.charAt(trimmed.length-1)==='|';
       if(pipeWrapped) trimmed=trimmed.replace(/^\|/,'').replace(/\|$/,'');
       var parts;
@@ -315,13 +360,13 @@ window.openEarnPage = function() {
       for(var a=0;a<parts.length;a++){ if(/[A-Za-z]/.test(parts[a])){ rangeIdx=a; break; } }
       if(rangeIdx<0){ skipped++; continue; }
       var range=parts[rangeIdx];
-      if(/^(range|currency|rate|super\s*30|user\s*70)/i.test(range)){ skipped++; continue; }  // header only
+      if(/^(range|currency|rate|super\s*30|user\s*70)/i.test(range)){ skipped++; continue; }
       var rate=NaN;
       for(var b=rangeIdx+1;b<parts.length;b++){ var n=parseFloat(String(parts[b]).replace(/[^\d.]/g,'')); if(isFinite(n)){ rate=n; break; } }
       if(!isFinite(rate)){
         for(var c=0;c<parts.length;c++){ if(c===rangeIdx) continue; var n2=parseFloat(String(parts[c]).replace(/[^\d.]/g,'')); if(isFinite(n2)){ rate=n2; break; } }
       }
-      if(!isFinite(rate)) rate=0;   // store zero-rate rows too (e.g. "Not for use")
+      if(!isFinite(rate)) rate=0;
       rows.push({range:range, rate:rate});
     }
     return {rows:rows, skipped:skipped};
