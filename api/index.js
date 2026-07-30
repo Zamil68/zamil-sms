@@ -580,6 +580,26 @@ async function loadRateMap(force) {
   }
   return _ratesCache;
 }
+// ── Per-range deduction settings ──
+let _deductionsCache = { ts: 0, map: null };
+const DEDUCTIONS_TTL = 60000; // 1 min
+
+async function loadDeductions(force) {
+  if (!force && _deductionsCache.map && (Date.now() - _deductionsCache.ts) < DEDUCTIONS_TTL) return _deductionsCache.map;
+  const map = new Map();
+  if (supaEnabled()) {
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/range_deductions?select=range_norm,deduction_percent,is_full_rate&limit=5000`,
+        { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+      const rows = await r.json();
+      if (Array.isArray(rows)) rows.forEach(x => map.set(x.range_norm, { pct: x.deduction_percent ?? 30, full: !!x.is_full_rate }));
+    } catch (e) { console.error('[deductions]', e.message); }
+  }
+  _deductionsCache = { ts: Date.now(), map };
+  return map;
+}
+
+
 async function getEarnSettings() {
   const def = { mode: 'overall', from_date: '', to_date: '', goal_usd: 50 };
   if (!supaEnabled()) return def;
