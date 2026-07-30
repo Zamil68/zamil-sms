@@ -1673,41 +1673,20 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
       } catch (e) { return error(res, 500, 'earn/compute: ' + e.message); }
     }
 
-    // ==========================================
-// NEW VERIFIED EARNING & SCRAPING SYSTEM
+   // ==========================================
+// NEW VERIFIED EARNING SYSTEM (uses user_creds, NOT users)
 // ==========================================
 async function scrapeClientStats(cookies, startDate, endDate) {
   try {
-    const url = `http://51.210.208.26/ints/agent/res/data_smsclientstats.php?fdate1=${encodeURIComponent(startDate)}&fdate2=${encodeURIComponent(endDate)}&fclient=&sEcho=1&iColumns=5&sColumns=&iDisplayStart=0&iDisplayLength=-1&mDataProp_0=0&sSearch_0=&bRegex_0=false&bSearchable_0=true&bSortable_0=true&mDataProp_1=1&sSearch_1=&bRegex_1=false&bSearchable_1=true&bSortable_1=true&mDataProp_2=2&sSearch_2=&bRegex_2=false&bSearchable_2=true&bSortable_2=true&mDataProp_3=3&sSearch_3=&bRegex_3=false&bSearchable_3=true&bSortable_3=true&mDataProp_4=4&sSearch_4=&bRegex_4=false&bSearchable_4=true&bSortable_4=true&sSearch=&bRegex=false&iSortCol_0=0&sSortDir_0=desc&iSortingCols=1`;
-    
-    const response = await axios.get(url, {
-      headers: {
-        'Cookie': cookies,
-        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36',
-        'Accept': 'application/json, text/javascript, */*; q=0.01',
-        'X-Requested-With': 'XMLHttpRequest',
-        'Referer': 'http://51.210.208.26/ints/agent/SMSClientStats'
-      },
-      timeout: 15000,
-      maxRedirects: 5,
-      validateStatus: () => true
-    });
-    
-    let data = response.data;
-    if (typeof data === 'string' && looksLikeLogin(data)) {
-      await ensureAgentSession(true);
-      const retryRes = await axios.get(url, { headers: { 'Cookie': AGENT_COOKIE, 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json, text/javascript, */*; q=0.01', 'X-Requested-With': 'XMLHttpRequest' }, timeout: 15000 });
-      data = retryRes.data;
-    }
-
-    let parsedData = data;
-    if (typeof data === 'string') {
-      try { parsedData = JSON.parse(data); } catch(e) { return []; }
-    }
-    
+    const url = `${AGENT_BASE_URL}res/data_smsclientstats.php?fdate1=${encodeURIComponent(startDate)}&fdate2=${encodeURIComponent(endDate)}&fclient=&sEcho=1&iColumns=5&sColumns=&iDisplayStart=0&iDisplayLength=-1&mDataProp_0=0&sSearch_0=&bRegex_0=false&bSearchable_0=true&bSortable_0=true&mDataProp_1=1&sSearch_1=&bRegex_1=false&bSearchable_1=true&bSortable_1=true&mDataProp_2=2&sSearch_2=&bRegex_2=false&bSearchable_2=true&bSortable_2=true&mDataProp_3=3&sSearch_3=&bRegex_3=false&bSearchable_3=true&bSortable_3=true&mDataProp_4=4&sSearch_4=&bRegex_4=false&bSearchable_4=true&bSortable_4=true&sSearch=&bRegex=false&iSortCol_0=0&sSortDir_0=desc&iSortingCols=1`;
+    const doReq = async () => (await axios.get(url, { headers: browserHeaders('http://51.210.208.26/ints/agent/SMSClientStats'), timeout: 20000, maxRedirects: 5, validateStatus: () => true })).data;
+    let data = await doReq();
+    if (looksLikeLogin(data)) { await ensureAgentSession(true); data = await doReq(); }
+    let parsed = data;
+    if (typeof data === 'string') { try { parsed = JSON.parse(data); } catch(e) { return []; } }
     const stats = [];
-    if (parsedData && parsedData.aaData) {
-      for (const row of parsedData.aaData) {
+    if (parsed && parsed.aaData) {
+      for (const row of parsed.aaData) {
         stats.push({
           client: String(row[0] || '').replace(/<[^>]*>/g, '').trim(),
           smsCount: parseInt(row[1]) || 0,
@@ -1719,60 +1698,53 @@ async function scrapeClientStats(cookies, startDate, endDate) {
     }
     return stats;
   } catch (error) {
-    console.error('Error scraping client stats:', error);
+    console.error('[earnings] scrapeClientStats error:', error.message);
     return [];
   }
 }
 
-if (url === '/admin/earnings-report' && (req.method === 'GET' || req.method === 'POST')) {
+if (url === '/admin/earnings-report' && req.method === 'POST') {
   try {
-    const session = req.body.session || (req.headers.authorization ? req.headers.authorization.split(' ')[1] : null);
-    const user = getUserFromSession(session);
+    const user = getUserFromSession(req.body.session);
     if (!user) return error(res, 401, 'Unauthorized');
     const role = await getRole(user.username);
     if (role !== 'super' && role !== 'admin') return error(res, 403, 'Forbidden');
 
-    const { startDate, endDate } = req.query || req.body;
-    if (!startDate || !endDate) return error(res, 400, 'startDate and endDate are required');
+    const startDate = req.body.startDate || req.query.startDate;
+    const endDate = req.body.endDate || req.query.endDate;
+    if (!startDate || !endDate) return error(res, 400, 'startDate and endDate required');
 
-    let cookies = AGENT_COOKIE;
+    await ensureAgentSession();
+    const clientStats = await scrapeClientStats(AGENT_COOKIE, startDate, endDate);
+    console.log('[earnings] Scraped', clientStats.length, 'client rows');
+
+    // Get all user_creds for deduction settings
+    let allCreds = [];
     if (supaEnabled()) {
       try {
-        const r = await fetch(`${SUPABASE_URL}/rest/v1/user_sessions?user_id=eq.${user.id}&order=created_at.desc&limit=1&select=cookies`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
-        const rows = await r.json();
-        if (Array.isArray(rows) && rows[0] && rows[0].cookies) cookies = rows[0].cookies;
-      } catch(e) {}
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/user_creds?select=username,client_id,client_name,deduction_percent,is_full_rate`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+        allCreds = (await r.json()) || [];
+      } catch(e) { console.error('[earnings] creds fetch error:', e.message); }
     }
 
-    const clientStats = await scrapeClientStats(cookies, startDate, endDate);
-    
-    let targetUsers = [];
+    // Get team prefixes for admin scoping
+    const allPrefixes = await supaGetPrefixes();
+    const pinsMap = await getPinsMap();
+    let allowedPrefixes = [];
     if (role === 'super') {
-      if (supaEnabled()) {
-        const r = await fetch(`${SUPABASE_URL}/rest/v1/users?select=id,username,role,deduction_percent,is_full_rate`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
-        targetUsers = (await r.json()) || [];
-      }
+      allowedPrefixes = allPrefixes.map(p => p.prefix.toLowerCase());
     } else {
-      if (supaEnabled()) {
-        const pRes = await fetch(`${SUPABASE_URL}/rest/v1/team_prefixes?admin_username=eq.${encodeURIComponent(user.username)}&select=prefix`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
-        const prefixes = (await pRes.json()) || [];
-        const allowedPrefixes = prefixes.map(p => p.prefix.toLowerCase());
-        
-        const uRes = await fetch(`${SUPABASE_URL}/rest/v1/users?select=id,username,role,deduction_percent,is_full_rate`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
-        const allUsers = (await uRes.json()) || [];
-        targetUsers = allUsers.filter(u => {
-          if (u.role === 'user' || u.role === 'admin') {
-            return allowedPrefixes.some(prefix => u.username.toLowerCase().startsWith(prefix));
-          }
-          return false;
-        });
-      }
+      allowedPrefixes = prefixesFor(role, user.username, allPrefixes).map(p => p.prefix.toLowerCase());
     }
 
     const report = clientStats.map(stat => {
-      const matchedUser = targetUsers.find(u => u.username.toLowerCase() === stat.client.toLowerCase());
-      const deductionPercent = matchedUser ? (matchedUser.deduction_percent ?? 30) : 30;
-      const isFullRate = matchedUser ? (matchedUser.is_full_rate ?? false) : false;
+      const matchedCred = allCreds.find(c => String(c.username || '').toLowerCase() === stat.client.toLowerCase() || String(c.client_name || '').toLowerCase() === stat.client.toLowerCase());
+      const deductionPercent = matchedCred ? (matchedCred.deduction_percent != null ? matchedCred.deduction_percent : 30) : 30;
+      const isFullRate = matchedCred ? !!matchedCred.is_full_rate : false;
+
+      // Check if this client belongs to admin's team
+      const team = resolveTeam(stat.client, allPrefixes, pinsMap);
+      const inScope = (role === 'super') || allowedPrefixes.some(p => String(team).toLowerCase() === p || stat.client.toLowerCase().startsWith(p));
 
       const grossPay = stat.myPayout;
       const companyGross = isFullRate ? 0 : grossPay * (deductionPercent / 100);
@@ -1782,14 +1754,15 @@ if (url === '/admin/earnings-report' && (req.method === 'GET' || req.method === 
         client: stat.client,
         smsCount: stat.smsCount,
         currency: stat.currency,
-        grossPay: grossPay,
-        deductionPercent: deductionPercent,
-        isFullRate: isFullRate,
-        companyGross: companyGross,
-        userPool: userPool,
-        userId: matchedUser ? matchedUser.id : null
+        grossPay,
+        deductionPercent,
+        isFullRate,
+        companyGross,
+        userPool,
+        userId: matchedCred ? matchedCred.username : null,
+        inScope
       };
-    });
+    }).filter(r => r.inScope);
 
     const totals = report.reduce((acc, curr) => {
       acc.totalSms += curr.smsCount;
@@ -1799,10 +1772,11 @@ if (url === '/admin/earnings-report' && (req.method === 'GET' || req.method === 
       return acc;
     }, { totalSms: 0, totalGrossPay: 0, totalCompanyGross: 0, totalUserPool: 0 });
 
-    return ok(res, { success: true, data: report, totals });
-  } catch (error) {
-    console.error('Earnings report error:', error);
-    return error(res, 500, 'Internal server error');
+    console.log('[earnings] Report:', report.length, 'rows, totals:', JSON.stringify(totals));
+    return ok(res, { data: report, totals });
+  } catch (e) {
+    console.error('[earnings] report error:', e);
+    return error(res, 500, 'Earnings report failed: ' + e.message);
   }
 }
 
@@ -1812,20 +1786,21 @@ if (url === '/admin/update-client-settings' && req.method === 'POST') {
     if (!user) return error(res, 401, 'Unauthorized');
     const role = await getRole(user.username);
     if (role !== 'super' && role !== 'admin') return error(res, 403, 'Forbidden');
+    if (!supaEnabled()) return error(res, 400, 'Supabase required.');
 
     const { clientId, deductionPercent, isFullRate } = req.body;
-    if (!supaEnabled()) return error(res, 400, 'Supabase required.');
-    
-    await fetch(`${SUPABASE_URL}/rest/v1/users`, { 
-      method: 'PATCH', 
-      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' }, 
-      body: JSON.stringify({ deduction_percent: parseFloat(deductionPercent), is_full_rate: !!isFullRate, id: clientId }) 
+    if (!clientId) return error(res, 400, 'clientId (username) required');
+
+    await fetch(`${SUPABASE_URL}/rest/v1/user_creds`, {
+      method: 'PATCH',
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ deduction_percent: parseFloat(deductionPercent) || 30, is_full_rate: !!isFullRate, username: clientId })
     });
 
-    return ok(res, { success: true, message: 'Settings updated successfully' });
-  } catch (error) {
-    console.error('Update client settings error:', error);
-    return error(res, 500, 'Internal server error');
+    return ok(res, { message: 'Settings updated for ' + clientId });
+  } catch (e) {
+    console.error('[earnings] update error:', e);
+    return error(res, 500, 'Update failed: ' + e.message);
   }
 }
 
