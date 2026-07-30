@@ -39,7 +39,6 @@
             <div id="mainScreen" style="display:block">
                 <!-- RANGES PANEL -->
                 <div id="rangesPanel">
-                    <!-- 🔥 Today's OTP hero counter (mirrors the live value — NO extra requests) -->
                     <div class="otp-hero" id="otpHeroCard">
                       <div class="otp-hero-ic">📬</div>
                       <div class="otp-hero-info">
@@ -62,7 +61,6 @@
 
                 <!-- NUMBERS PANEL -->
               <div id="numbersPanel">
-                    <!-- ✅ Prominent Back Button -->
                     <button class="panel-back" onclick="showRanges()" style="margin-bottom:12px; font-size:0.95rem; font-weight:700; padding:8px 0;">
                         ← Back to Ranges
                     </button>
@@ -195,7 +193,7 @@
                     <div id="smsRecentList" style="padding:4px 0"></div>
                 </div>
             </div>
-              <!-- DOR (Detail OTP Report) PAGE -->
+              <!-- DOR PAGE -->
             <div id="dorPage" style="display:none">
                 <div class="dor-hdr">
                     <div class="dor-title">📊 OTP Report</div>
@@ -210,7 +208,7 @@
         </div>
     </div>
 
-    <!-- BOTTOM NAV (New Order) -->
+    <!-- BOTTOM NAV -->
     <nav class="bottom-nav">
         <button class="bn-item active" data-page="ranges" onclick="bnSwitch('ranges')">
             <span class="bn-icon">📡</span>
@@ -295,8 +293,6 @@
         <div id="loadingText" class="loading-text">Loading…</div>
     </div>
 
-    <!-- Flag helper: turns an ISO country code into a real flag (emoji or crisp image).
-         Load before app.js since app.js's render code will call it. -->
     <script src="/dashboard/flags.js" defer></script>
     <script src="/login/providers.js" defer></script>
     <script src="/dashboard/utils.js" defer></script>
@@ -325,7 +321,6 @@
     });
     </script>
 
-    <!-- 🔥 Clear browser auto-fill on load (kept from your version) -->
     <script>
         window.addEventListener('DOMContentLoaded', () => {
             document.querySelectorAll('input[type="text"]').forEach(input => {
@@ -334,7 +329,8 @@
             });
         });
     </script>
-    <script>
+
+<script>
 /* ═══ Visual-pack behaviour (additive; no app.js / backend changes) ═══ */
 (function(){
   function syncHero(){
@@ -344,8 +340,8 @@
   try { var src = document.getElementById('smsBigNum');
     if (src && window.MutationObserver) new MutationObserver(syncHero).observe(src, {childList:true, characterData:true, subtree:true});
   } catch(e){}
-  setInterval(syncHero, 1500);                 // DOM-only mirror — NO network, NO console spam
-  try { var s = localStorage.getItem('app_session');   // one-time initial fill
+  setInterval(syncHero, 1500);
+  try { var s = localStorage.getItem('app_session');
     if (s) fetch('/api/smscount',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:s})})
       .then(function(r){return r.json();}).then(function(d){ if(d&&d.ok){ var dst=document.getElementById('rangesOtpToday'); if(dst) dst.textContent=(d.count!=null?d.count:0);} }).catch(function(){});
   } catch(e){}
@@ -357,7 +353,6 @@
 </script>
 
     <style>
-/* ═══ Floating OTP toast + colorful inbox codes (additive only) ═══ */
 #otpFloat{position:fixed;top:64px;left:50%;transform:translateX(-50%) translateY(-18px);
   width:min(92vw,380px);z-index:650;display:none;opacity:0;
   transition:opacity .25s ease, transform .25s ease;pointer-events:none}
@@ -383,20 +378,13 @@
 </style>
 
 <script>
-/* ═══════════════════════════════════════════════════════════
-   🟢 ADD-ON 1 — Real-time floating OTP (toast + ✕ + sound + dedupe)
-   Rides the EXISTING 3s poll → NO extra requests.
-   Baseline-dedupe: a toast only fires for a message that arrives
-   AFTER this page's baseline, so a stale "top" message never
-   re-floats (fixes "float shows even when nothing new").
-   ═══════════════════════════════════════════════════════════ */
+/* ═══ ADD-ON 1 — Real-time floating OTP ═══ */
 (function(){
   function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
   function codeOf(m){ var x=String(m||'').match(/\b(\d{4,8})\b/); return x?x[1]:''; }
   function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function keyOf(r){ return ((r&&(r.datetime||r.time))||'')+'|'+((r&&r.number)||''); }
 
-  // baseline dedupe set (shared with the cache layer add-on)
   window._floatSeen = window._floatSeen || new Set();
   window.seedFloatSeen = function(recent){ try{ (recent||[]).forEach(function(r){ window._floatSeen.add(keyOf(r)); }); }catch(e){} };
 
@@ -413,10 +401,10 @@
   function showFloat(text, recent){
     var r=(recent&&recent[0])||null;
     var k=keyOf(r);
-    if(!r || window._floatSeen.has(k)) return;          // ← baseline dedupe: not new → no float
+    if(!r || window._floatSeen.has(k)) return;
     window._floatSeen.add(k);
     var code=codeOf(r.message), cli=(r.cli||'OTP'), num=(r.number||''), t=(r.time||''), more=(recent&&recent.length>1)?(' +'+(recent.length-1)+' more'):'';
-    if(!code && !num) return;                            // nothing meaningful → no float
+    if(!code && !num) return;
     var h=toastHost();
     h.innerHTML='<div class="otp-float-card" title="Tap to copy '+(code||num)+'">'
       +'<button class="otp-float-close" onclick="event.stopPropagation();hideOtpFloat()" aria-label="Dismiss">✕</button>'
@@ -426,7 +414,7 @@
       +(r.message?'<div class="otp-float-msg">'+esc(r.message)+'</div>':'')
       +'<div class="otp-float-hint">tap card to copy code</div></div>';
     var card=h.querySelector('.otp-float-card'); if(card) card.onclick=function(){ var v=code||num; if(v&&navigator.clipboard) navigator.clipboard.writeText(v).catch(function(){}); };
-    h.classList.add('show'); clearTimeout(hideT); hideT=setTimeout(window.hideOtpFloat, 4000);   // ← 4s
+    h.classList.add('show'); clearTimeout(hideT); hideT=setTimeout(window.hideOtpFloat, 4000);
     if(!document.hidden) chime();
   }
   function enhanceCodes(){ try{ document.querySelectorAll('#smsRecentList .rsms-body').forEach(function(el){
@@ -440,9 +428,7 @@
   });
 })();
 
-/* ═══════════════════════════════════════════════════════════
-   🟢 ADD-ON 2 — Remember the active tab across a browser refresh.
-   ═══════════════════════════════════════════════════════════ */
+/* ═══ ADD-ON 2 — Remember active tab (sessionStorage) ═══ */
 (function(){
   function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
   var KEY='zamil_view', NKEY='zamil_num';
@@ -464,7 +450,7 @@
 })();
 </script>
 
-    <!-- ═══ LEFT DRAWER (nav) ═══ -->
+    <!-- ═══ LEFT DRAWER ═══ -->
 <div class="zdrawer-overlay" id="zdrawerOverlay" onclick="closeDrawer()"></div>
 <aside class="zdrawer" id="zdrawer">
   <div class="zdrawer-hdr">
@@ -511,21 +497,16 @@
       <span>🚪</span><span>Sign Out</span>
     </button>
   </div>
-  <!-- hidden target so app.js theme code never errors after we removed the header theme button -->
   <span id="themeBtn" aria-hidden="true" style="display:none"></span>
 </aside>
 
 <script>
-/* ═══ Drawer open/close + theme icon sync ═══ */
 function openDrawer(){ var d=document.getElementById('zdrawer'),o=document.getElementById('zdrawerOverlay'); if(d)d.classList.add('open'); if(o)o.classList.add('open'); syncDrawerTheme(); }
 function closeDrawer(){ var d=document.getElementById('zdrawer'),o=document.getElementById('zdrawerOverlay'); if(d)d.classList.remove('open'); if(o)o.classList.remove('open'); }
 function syncDrawerTheme() {
     var ic = document.getElementById('drawerThemeIcon');
     if (ic) {
-        var t = (typeof THEME !== 'undefined')
-            ? THEME
-            : (document.documentElement.getAttribute('data-theme') || 'light');
-
+        var t = (typeof THEME !== 'undefined') ? THEME : (document.documentElement.getAttribute('data-theme') || 'light');
         ic.textContent = (t === 'dark') ? '🌙' : '☀️';
     }
 }
@@ -533,7 +514,6 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
 </script>
 
 <style>
-/* ═══ UI COMPACT PACK + LEFT DRAWER (additive only) ═══ */
 .header-left{display:flex;align-items:center;min-width:0}
 .hamburger{display:flex;flex-direction:column;justify-content:center;gap:4px;width:34px;height:34px;padding:7px 6px;border:1px solid var(--border);border-radius:8px;background:var(--surface);cursor:pointer;flex-shrink:0;margin-right:8px}
 .hamburger span{display:block;width:100%;height:2px;background:var(--text);border-radius:2px}
@@ -583,7 +563,6 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
 </style>
 
    <style>
-/* float ✕ + inbox refresh button */
 .otp-float-close{position:absolute;top:6px;right:8px;width:22px;height:22px;border:0;border-radius:50%;
   background:var(--surface);color:var(--muted);font-size:.8rem;cursor:pointer;line-height:1;
   display:flex;align-items:center;justify-content:center}
@@ -594,19 +573,66 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
 </style>
 
 <script>
-/* ═══ CACHE LAYER (corrected) — installs AFTER app.js so wrappers attach ═══ */
+/* ═══════════════════════════════════════════════════════════
+   🟢 IMPROVED CACHE LAYER — User-specific keys + TTL + logout clear
+   Replaces the old global cache. All existing functions preserved.
+   ═══════════════════════════════════════════════════════════ */
 (function(){
-  function zget(k){ try{ var v=localStorage.getItem(k); return v?JSON.parse(v):null; }catch(e){ return null; } }
-  function zset(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+  'use strict';
+
+  // ── Centralized cache helper ──
+  var ZCache = window.ZCache = {
+    _uid: function(){
+      try {
+        var u = localStorage.getItem('app_username') || '';
+        if (!u) { var s = localStorage.getItem('app_session'); if (s) { var p = s.split('.'); if (p[1]) { var d = JSON.parse(atob(p[1])); u = d.username || d.clientName || ''; } } }
+        return u ? u.toLowerCase().replace(/[^a-z0-9]/g,'') : 'anon';
+      } catch(e){ return 'anon'; }
+    },
+    _key: function(name){ return 'zc_' + this._uid() + '_' + name; },
+    get: function(name, maxAgeMs){
+      try {
+        var raw = localStorage.getItem(this._key(name));
+        if (!raw) return null;
+        var obj = JSON.parse(raw);
+        if (!obj || obj.d === undefined) return null;
+        if (maxAgeMs && (Date.now() - obj.t) > maxAgeMs) { localStorage.removeItem(this._key(name)); return null; }
+        return obj.d;
+      } catch(e){ return null; }
+    },
+    set: function(name, data){
+      try { localStorage.setItem(this._key(name), JSON.stringify({ d: data, t: Date.now() })); } catch(e){}
+    },
+    remove: function(name){ try { localStorage.removeItem(this._key(name)); } catch(e){} },
+    clearAll: function(){
+      try {
+        var uid = this._uid(), prefix = 'zc_' + uid + '_';
+        var keys = [];
+        for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k && k.indexOf(prefix) === 0) keys.push(k); }
+        keys.forEach(function(k){ localStorage.removeItem(k); });
+      } catch(e){}
+    }
+  };
+
+  // ── TTL constants (ms) ──
+  var TTL_RANGES   = 5 * 60 * 1000;   // 5 min
+  var TTL_SMS      = 60 * 1000;        // 1 min
+  var TTL_DOR      = 3 * 60 * 1000;   // 3 min
+  var TTL_LB       = 5 * 60 * 1000;   // 5 min
+  var TTL_WEEK     = 5 * 60 * 1000;   // 5 min
+  var TTL_MONTH    = 10 * 60 * 1000;  // 10 min
+  var TTL_SEARCH   = 60 * 1000;        // 1 min
+
   function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-  function _tallyBadges(recent){   // make per-number badges LIVE from the poll (no extra requests)
-    var tally={}; recent.forEach(function(r){ var n=(r.number||'').replace(/[^0-9]/g,''); if(n) tally[n]=(tally[n]||0)+1; });
+  function _tallyBadges(recent){
+    var tally={}; (recent||[]).forEach(function(r){ var n=(r.number||'').replace(/[^0-9]/g,''); if(n) tally[n]=(tally[n]||0)+1; });
     var keys=Object.keys(tally); if(!keys.length) return;
     keys.forEach(function(n){ var c=tally[n]; try{ NUM_SMS_CACHE[n]=c; }catch(e){} var el=document.getElementById('sms_'+n); if(el){ el.textContent=c+'/'+SMS_DAILY_LIMIT; el.className='num-sms-badge'+(c>0?' has-sms':''); } });
     try{ _otpSave(); }catch(e){}
   }
- function dorRows(recent){
+
+  function dorRows(recent){
     var h="<div style='display:flex;flex-direction:column;gap:8px;'>"; var show=(recent||[]).slice(0,200);
     for(var i=0;i<show.length;i++){ var r=show[i];
       h+="<div class='recent-item' style='margin-bottom:0;'><div class='rsms-inner'>"
@@ -618,29 +644,62 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
     if((recent||[]).length>200) h+="<div style='text-align:center;padding:12px;color:var(--muted);font-size:.75rem;'>Showing latest 200 of "+recent.length+" total</div>";
     return h+"</div>";
   }
+
   function _paintAlloc(ranges){ ASTATE.ranges=ranges; ASTATE.availCache={}; ranges.forEach(function(r){ ASTATE.availCache[r.id]={available:r.available||0,total:r.total||0}; }); if(typeof renderAllocRanges==='function') renderAllocRanges(); }
 
-  function install(){
-    if(typeof renderRanges==='function' && !renderRanges._zw){ var _rr=renderRanges; renderRanges=function(list){ try{ var q=((document.getElementById('rangesSearch')||{}).value||'').trim(); if(list&&list.length&&!q) zset('zamil_cache_ranges',list); }catch(e){} return _rr.apply(this,arguments); }; renderRanges._zw=1; }
-    if(typeof loadRanges==='function' && !loadRanges._zw){ var _lr=loadRanges; loadRanges=function(force){ var r=_lr.apply(this,arguments); try{ setTimeout(function(){ var el=document.getElementById('rangesList'); if(!el)return; var failed=el.querySelector('.empty button')||/⚠|Error|retry/i.test(el.textContent||''); var blank=!el.children.length; if(failed||blank){ var c=zget('zamil_cache_ranges'); if(c&&c.length&&typeof renderRanges==='function') renderRanges(c); } },2500); }catch(e){} return r; }; loadRanges._zw=1; }
+  // ── Logout hook: clear all user cache ──
+  function hookLogout(){
+    if (typeof doLogout === 'function' && !doLogout._zcHook) {
+      var _orig = doLogout;
+      window.doLogout = function(){ ZCache.clearAll(); try{ sessionStorage.clear(); }catch(e){} return _orig.apply(this, arguments); };
+      doLogout._zcHook = true;
+    }
+  }
 
+  function install(){
+    hookLogout();
+
+    // ── renderRanges: save to user cache ──
+    if(typeof renderRanges==='function' && !renderRanges._zw){
+      var _rr=renderRanges;
+      renderRanges=function(list){
+        try{ var q=((document.getElementById('rangesSearch')||{}).value||'').trim(); if(list&&list.length&&!q) ZCache.set('ranges',list); }catch(e){}
+        return _rr.apply(this,arguments);
+      }; renderRanges._zw=1;
+    }
+
+    // ── loadRanges: fallback to user cache on failure ──
+    if(typeof loadRanges==='function' && !loadRanges._zw){
+      var _lr=loadRanges;
+      loadRanges=function(force){
+        var r=_lr.apply(this,arguments);
+        try{ setTimeout(function(){
+          var el=document.getElementById('rangesList'); if(!el)return;
+          var failed=el.querySelector('.empty button')||/⚠|Error|retry/i.test(el.textContent||'');
+          var blank=!el.children.length;
+          if(failed||blank){ var c=ZCache.get('ranges', TTL_RANGES); if(c&&c.length&&typeof renderRanges==='function') renderRanges(c); }
+        },2500); }catch(e){}
+        return r;
+      }; loadRanges._zw=1;
+    }
+
+    // ── _applySmsResult: user-specific SMS cache + grace + dedupe ──
     if(typeof _applySmsResult==='function' && !_applySmsResult._zw){
       var _asr=_applySmsResult; window._zeroStreak=0; var _seeded=false;
       window._lastNonZeroSms = window._lastNonZeroSms || { count:0, ts:0, day:'' };
       var _lastDorKick = 0;
-      function _bizDay(){ return new Date().toISOString().slice(0,10); }  // UTC date = PKT business day (flips at 05:00 PKT)
+      function _bizDay(){ return new Date().toISOString().slice(0,10); }
       window._applySmsResult=function(d){
         if(d&&d.ok){
-          var cached=zget('zamil_cache_smscount');
+          var cached=ZCache.get('sms', TTL_SMS);
           var isZero=(d.count===0);
           var today=_bizDay();
           if(!isZero){ window._lastNonZeroSms={ count:d.count, ts:Date.now(), day:today }; window._zeroStreak=0; }
           else { window._zeroStreak=(window._zeroStreak||0)+1; }
-          // Grace only within the SAME business day — at the 05:00 PKT rollover, reset immediately
           var sameDay = window._lastNonZeroSms.day === today;
           var grace = sameDay && window._lastNonZeroSms.count>0 && (Date.now()-window._lastNonZeroSms.ts) < 180000;
-          if(isZero && grace){ var keep=(cached&&cached.count>0&&cached.day===today)?cached.count:window._lastNonZeroSms.count; return _asr.call(this,{ok:true,count:keep,recent:(cached&&cached.recent)||d.recent||[]}); }
-          if(!isZero) zset('zamil_cache_smscount',{count:d.count,recent:(d.recent||[]).slice(0,30),ts:Date.now(),day:today});
+          if(isZero && grace){ var keep=(cached&&cached.count>0)?cached.count:window._lastNonZeroSms.count; return _asr.call(this,{ok:true,count:keep,recent:(cached&&cached.recent)||d.recent||[]}); }
+          if(!isZero) ZCache.set('sms',{count:d.count,recent:(d.recent||[]).slice(0,30),day:today});
           if((d.count||0)<=50 && !isZero) _tallyBadges(d.recent||[]);
           if(!_seeded){ _seeded=true; if(d.recent&&typeof window.seedFloatSeen==='function') window.seedFloatSeen(d.recent); }
           try{ if(!isZero && (Date.now()-_lastDorKick)>4000){ var dp=document.getElementById('dorPage'); if(dp && dp.style.display==='block' && typeof loadDOR==='function'){ _lastDorKick=Date.now(); setTimeout(loadDOR,1200); } } }catch(e){}
@@ -648,55 +707,92 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
         return _asr.apply(this,arguments);
       }; _applySmsResult._zw=1;
     }
+
+    // ── loadDOR: user cache ──
     if(typeof loadDOR==='function' && !loadDOR._zw){
       window.loadDOR=function(){
         var loading=document.getElementById('dorLoading'), list=document.getElementById('dorList');
-        var cached=zget('zamil_cache_dor');
+        var cached=ZCache.get('dor', TTL_DOR);
         if(cached&&cached.recent&&cached.recent.length){ if(loading)loading.style.display='none'; if(list){ list.style.display='block'; list.innerHTML=dorRows(cached.recent); } }
         if(typeof apiCall!=='function') return;
         apiCall('/api/dor',{session:(typeof SESSION!=='undefined'?SESSION:'')},function(d){
           if(loading)loading.style.display='none'; if(!list) return;
-          if(d&&d.ok&&d.recent&&d.recent.length){ zset('zamil_cache_dor',{recent:d.recent.slice(0,200),ts:Date.now()}); list.style.display='block'; list.innerHTML=dorRows(d.recent); }
+          if(d&&d.ok&&d.recent&&d.recent.length){ ZCache.set('dor',{recent:d.recent.slice(0,200)}); list.style.display='block'; list.innerHTML=dorRows(d.recent); }
           else if(!(cached&&cached.recent&&cached.recent.length)){ list.style.display='block'; list.innerHTML="<div style='padding:24px;text-align:center;color:var(--muted)'>📭 No global messages found today.</div>"; }
         });
       }; loadDOR._zw=1;
     }
 
-    if(typeof renderLeaderboard==='function' && !renderLeaderboard._zw){ var _rlb=renderLeaderboard; renderLeaderboard=function(users){ try{ if(users&&users.length){ var rg=(typeof LB_RANGE!=='undefined'?LB_RANGE:'today'); zset('zamil_cache_lb_'+rg,users); } else { var rg2=(typeof LB_RANGE!=='undefined'?LB_RANGE:'today'); var c=zget('zamil_cache_lb_'+rg2); if(c&&c.length) return _rlb(c); } }catch(e){} return _rlb.apply(this,arguments); }; renderLeaderboard._zw=1; }
-    if(typeof loadLeaderboard==='function' && !loadLeaderboard._zw){ var _llb=loadLeaderboard; loadLeaderboard=function(range){ try{ var rg=range||(typeof LB_RANGE!=='undefined'?LB_RANGE:'today'); var c=zget('zamil_cache_lb_'+rg); if(c&&c.length&&typeof renderLeaderboard==='function'){ var coming=document.getElementById('lbComing'),list=document.getElementById('lbList'); if(coming)coming.style.display='none'; if(list)list.style.display='block'; renderLeaderboard(c); } }catch(e){} return _llb.apply(this,arguments); }; loadLeaderboard._zw=1; }
+    // ── Leaderboard: user cache ──
+    if(typeof renderLeaderboard==='function' && !renderLeaderboard._zw){
+      var _rlb=renderLeaderboard;
+      renderLeaderboard=function(users){
+        try{ if(users&&users.length){ var rg=(typeof LB_RANGE!=='undefined'?LB_RANGE:'today'); ZCache.set('lb_'+rg,users); } else { var rg2=(typeof LB_RANGE!=='undefined'?LB_RANGE:'today'); var c=ZCache.get('lb_'+rg2, TTL_LB); if(c&&c.length) return _rlb(c); } }catch(e){}
+        return _rlb.apply(this,arguments);
+      }; renderLeaderboard._zw=1;
+    }
+    if(typeof loadLeaderboard==='function' && !loadLeaderboard._zw){
+      var _llb=loadLeaderboard;
+      loadLeaderboard=function(range){
+        try{ var rg=range||(typeof LB_RANGE!=='undefined'?LB_RANGE:'today'); var c=ZCache.get('lb_'+rg, TTL_LB); if(c&&c.length&&typeof renderLeaderboard==='function'){ var coming=document.getElementById('lbComing'),list=document.getElementById('lbList'); if(coming)coming.style.display='none'; if(list)list.style.display='block'; renderLeaderboard(c); } }catch(e){}
+        return _llb.apply(this,arguments);
+      }; loadLeaderboard._zw=1;
+    }
 
+    // ── Week/Month counts: user cache ──
     if(typeof loadSmsRangeCounts==='function' && !loadSmsRangeCounts._zw){
       window.loadSmsRangeCounts=function(){
         if(typeof SESSION==='undefined'||!SESSION) return;
-        function apply(id,val,key){ var el=document.getElementById(id); if(!el)return; if(val>0){ zset(key,{v:val,ts:Date.now()}); el.textContent=val.toLocaleString(); } else { var c=zget(key); if(c&&c.v>0&&(Date.now()-c.ts)<300000) el.textContent=c.v.toLocaleString(); else el.textContent='0'; } }
-        apiCall('/api/smscount-range',{session:SESSION,range:'week'},function(d){ apply('smsWeekNum',(d&&d.ok?d.count:0),'zamil_week'); });
-        apiCall('/api/smscount-range',{session:SESSION,range:'month'},function(d){ apply('smsMonthNum',(d&&d.ok?d.count:0),'zamil_month'); });
+        function apply(id,val,key,ttl){ var el=document.getElementById(id); if(!el)return; if(val>0){ ZCache.set(key,{v:val}); el.textContent=val.toLocaleString(); } else { var c=ZCache.get(key,ttl); if(c&&c.v>0) el.textContent=c.v.toLocaleString(); else el.textContent='0'; } }
+        apiCall('/api/smscount-range',{session:SESSION,range:'week'},function(d){ apply('smsWeekNum',(d&&d.ok?d.count:0),'week',TTL_WEEK); });
+        apiCall('/api/smscount-range',{session:SESSION,range:'month'},function(d){ apply('smsMonthNum',(d&&d.ok?d.count:0),'month',TTL_MONTH); });
         if(typeof loadTopClis==='function') loadTopClis();
       }; loadSmsRangeCounts._zw=1;
     }
 
+    // ── Alloc search: user cache ──
     if(typeof allocSearch==='function' && !allocSearch._zw){
       window.allocSearch=function(){
         var q=(document.getElementById('aCountryInput').value||'').trim();
         if(!q){ if(typeof showToast==='function')showToast('Type a country or range name','error'); return; }
         var btn=document.getElementById('aSearchBtn'), list=document.getElementById('aRangeList');
         btn.disabled=true; btn.textContent='…';
-        var ck='zamil_as_'+q.toLowerCase(), cached=zget(ck);
+        var ck='as_'+q.toLowerCase(), cached=ZCache.get(ck, TTL_SEARCH);
         if(cached&&cached.length) _paintAlloc(cached); else list.innerHTML='<div class="empty"><div class="spinner"></div></div>';
         ASTATE.availCache={};
         apiCall('/api/alloc/search-ranges',{query:q,session:SESSION},function(d){
           btn.disabled=false; btn.textContent='🔍 Search';
           var ranges=(d&&d.ranges)||[];
-          if(ranges.length){ zset(ck,ranges); _paintAlloc(ranges); return; }
-          if(cached&&cached.length){ _paintAlloc(cached); return; }   // transient empty → keep cached
+          if(ranges.length){ ZCache.set(ck,ranges); _paintAlloc(ranges); return; }
+          if(cached&&cached.length){ _paintAlloc(cached); return; }
           ASTATE.ranges=[]; list.innerHTML='<div class="empty" style="color:var(--red)">No available ranges for "'+escHtml(q)+'"</div>';
         });
       }; allocSearch._zw=1;
     }
 
-    if(typeof showToast==='function' && !showToast._zw){ var _st=showToast; window.showToast=function(t,kind){ try{ if(typeof t==='string' && /new SMS!?\s*$/.test(t) && kind==='success') return; }catch(e){} return _st.apply(this,arguments); }; showToast._zw=1; } // drop the redundant green "+N new SMS!" watch toast
+    // ── Suppress redundant "+N new SMS!" toast ──
+    if(typeof showToast==='function' && !showToast._zw){
+      var _st=showToast;
+      window.showToast=function(t,kind){ try{ if(typeof t==='string' && /new SMS!?\s*$/.test(t) && kind==='success') return; }catch(e){} return _st.apply(this,arguments); };
+      showToast._zw=1;
+    }
 
-    try{ if(localStorage.getItem('app_session')){ var c=zget('zamil_cache_smscount'); var el=document.getElementById('smsBigNum'); var _bd=new Date().toISOString().slice(0,10); if(c&&el&&(el.textContent||'').trim()==='0'&&c.day===_bd){ window._applySmsResult({ok:true,count:c.count,recent:c.recent||[]}); } } }catch(e){}
+    // ── Instant paint from cache on load ──
+    try{
+      if(localStorage.getItem('app_session')){
+        var c=ZCache.get('sms', TTL_SMS);
+        var el=document.getElementById('smsBigNum');
+        var _bd=new Date().toISOString().slice(0,10);
+        if(c&&el&&(el.textContent||'').trim()==='0'&&c.day===_bd){
+          window._applySmsResult({ok:true,count:c.count,recent:c.recent||[]});
+        }
+        var rc=ZCache.get('ranges', TTL_RANGES);
+        if(rc&&rc.length&&typeof renderRanges==='function'){
+          var rp=document.getElementById('rangesPanel');
+          if(rp&&rp.style.display!=='none') renderRanges(rc);
+        }
+      }
+    }catch(e){}
   }
 
   if(document.readyState==='complete') install(); else window.addEventListener('load', install);
@@ -708,16 +804,15 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
 #otpFloat{ top:auto !important; bottom:84px !important; transform:translateX(-50%) translateY(18px); }
 #otpFloat.show{ transform:translateX(-50%) translateY(0); }
 </style>
+
     <script>
-/* ═══ RANGES INSTANT-CACHE — never show a blank/spinner when we have cached
-       ranges; gentle background refresh keeps them current. Additive. ═══ */
+/* ═══ RANGES INSTANT-CACHE — gentle background refresh (respects TTL) ═══ */
 (function(){
-  function zget(k){ try{ var v=localStorage.getItem(k); return v?JSON.parse(v):null; }catch(e){ return null; } }
   function paintFromCache(){
     try{
       var q=((document.getElementById('rangesSearch')||{}).value||'').trim();
-      if(q) return;                                   // never clobber an active search
-      var c=zget('zamil_cache_ranges');
+      if(q) return;
+      var c=window.ZCache ? ZCache.get('ranges', 5*60*1000) : null;
       if(c && c.length && typeof renderRanges==='function') renderRanges(c);
     }catch(e){}
   }
@@ -725,17 +820,16 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
     if(typeof loadRanges!=='function' || loadRanges._zi) return;
     var _lr=loadRanges;
     window.loadRanges=function(force){
-      var r=_lr.apply(this,arguments);   // original may pop a spinner if its cache expired…
-      paintFromCache();                  // …so immediately paint our durable cache over it
+      var r=_lr.apply(this,arguments);
+      paintFromCache();
       return r;
     };
     loadRanges._zi=1;
-    // gentle background refresh — only while the Ranges list is actually visible
     setInterval(function(){
       try{
         var rp=document.getElementById('rangesPanel'), ms=document.getElementById('mainScreen');
         if(rp && ms && ms.style.display!=='none' && rp.style.display!=='none' && !document.hidden && typeof SESSION!=='undefined' && SESSION){
-          loadRanges(false);             // silent; respects cache TTL, no toast
+          loadRanges(false);
         }
       }catch(e){}
     }, 90000);
@@ -745,6 +839,6 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
 })();
 </script>
 
-   <div id="featureRoot"></div> 
+   <div id="featureRoot"></div>
 </body>
 </html>
