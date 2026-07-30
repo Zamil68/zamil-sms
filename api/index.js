@@ -543,21 +543,41 @@ function weekKey(dateStr) {
 // 💰 EARNINGS — self-contained block (helpers + routes)
 // ═══════════════════════════════════════════════════════════
 let _ratesCache = { ts: 0, map: null, count: 0 };
-async function loadRateMap(force) {
-  if (!force && _ratesCache.map && (Date.now() - _ratesCache.ts) < 300000) return _ratesCache;
-  const map = new Map(); let count = 0;
-  if (supaEnabled()) {
-    try {
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/range_rates?select=range_norm,rate&limit=5000`,
-        { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
-      const rows = await r.json();
-      if (Array.isArray(rows)) rows.forEach(x => {
-        const rt = parseFloat(x.rate);
-        if (isFinite(rt)) { map.set(x.range_norm, rt); count++; }
-      });
-    } catch (e) { console.error('loadRateMap:', e.message); }
+const RATES_TTL = 5 * 60 * 1000; // 5 min cache
+
+async function scrapeRangeRatesFromLamix() {
+  await ensureAgentSession();
+  const doReq = async () => (await axios.get(`${AGENT_BASE_URL}res/data_smsnumbers.php`, {
+    params: { frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 },
+    headers: browserHeaders('http://51.210.208.26/ints/agent/MySMSNumbers'),
+    timeout: 20000, maxRedirects: 5, validateStatus: () => true
+  })).data;
+  try {
+    let data = await doReq();
+    if (looksLikeLogin(data)) { await ensureAgentSession(true); data = await doReq(); }
+    if (!data || !data.aaData) return new Map();
+    const map = new Map();
+    data.aaData.forEach(row => {
+      const range = String(row[1] || '').replace(/<[^>]*>/g, '').trim();
+      const payout = parseFloat(String(row[4] || '0').replace(/<[^>]*>/g, '').replace(/[^0-9.]/g, ''));
+      if (range && isFinite(payout) && payout > 0 && !map.has(norm(range))) {
+        map.set(norm(range), { rate: payout, raw: range });
+      }
+    });
+    console.log('[rates] Scraped', map.size, 'unique range rates from Lamix');
+    return map;
+  } catch (e) {
+    console.error('[rates] Scrape error:', e.message);
+    return new Map();
   }
-  _ratesCache = { ts: Date.now(), map, count };
+}
+
+async function loadRateMap(force) {
+  if (!force && _ratesCache.map && (Date.now() - _ratesCache.ts) < RATES_TTL) return _ratesCache;
+  const scraped = await scrapeRangeRatesFromLamix();
+  if (scraped.size) {
+    _ratesCache = { ts: Date.now(), map: scraped, count: scraped.size };
+  }
   return _ratesCache;
 }
 async function getEarnSettings() {
