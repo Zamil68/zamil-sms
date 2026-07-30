@@ -228,45 +228,71 @@ body.earn-is-super #earnPoolGrid{display:grid}
     </div>
     <div id="earnBoard"></div>
 
-    <!-- super admin -->
-    <!-- super admin: new verified earnings report -->
+   <!-- super admin: verified earnings report -->
 <div class="earn-admin rv" id="earnAdmin" style="display:none">
-  <h2>💰 Earnings Report & Client Rate Controls</h2>
-  
-  <div class="ea-row" style="margin-bottom:16px">
+  <h2>💰 Earnings Report & Rate Controls</h2>
+
+  <div class="ea-row" style="margin-bottom:14px">
     <label>From</label>
-    <input class="ea-inp" id="earnStartDate" type="datetime-local" style="width:180px">
+    <input class="ea-inp" id="earnStartDate" type="datetime-local" style="width:190px">
     <label>To</label>
-    <input class="ea-inp" id="earnEndDate" type="datetime-local" style="width:180px">
-    <button class="ea-btn" onclick="fetchEarningsReport()">Fetch Verified Report</button>
+    <input class="ea-inp" id="earnEndDate" type="datetime-local" style="width:190px">
+    <button class="ea-btn" id="fetchEarnBtn" onclick="fetchEarningsReport(this)">Fetch Report</button>
   </div>
 
-  <div class="earn-grid2" style="margin-bottom:16px">
+  <div class="earn-grid2" style="margin-bottom:14px">
     <div class="earn-mini"><div class="k">Total SMS</div><div class="v earn-display" id="totalSms">0</div></div>
-    <div class="earn-mini"><div class="k">Gross Pay (Lamix My Payout)</div><div class="v earn-display" id="totalGrossPay" style="color:var(--eg)">$0.0000</div></div>
-    <div class="earn-mini"><div class="k">Company Gross (Profit)</div><div class="v earn-display" id="totalCompanyGross" style="color:var(--emag)">$0.0000</div></div>
-    <div class="earn-mini"><div class="k">User Pool (Net Payout)</div><div class="v earn-display" id="totalUserPool" style="color:var(--accent)">$0.0000</div></div>
+    <div class="earn-mini"><div class="k">Gross Pay (Lamix)</div><div class="v earn-display" id="totalGrossPay" style="color:var(--eg)">$0.0000</div></div>
+    <div class="earn-mini"><div class="k">Company Gross</div><div class="v earn-display" id="totalCompanyGross" style="color:var(--emag)">$0.0000</div></div>
+    <div class="earn-mini"><div class="k">User Pool</div><div class="v earn-display" id="totalUserPool" style="color:var(--accent)">$0.0000</div></div>
   </div>
 
-  <div style="overflow-x:auto; background:var(--card); border:1px solid var(--border); border-radius:16px; padding:12px;">
-    <table style="width:100%; border-collapse:collapse; font-size:.78rem; color:var(--text); min-width:700px;">
+  <div style="overflow-x:auto;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:12px">
+    <table style="width:100%;border-collapse:collapse;font-size:.78rem;color:var(--text);min-width:720px">
       <thead>
-        <tr style="border-bottom:2px solid var(--border); text-align:left;">
-          <th style="padding:10px 8px;">Client</th>
-          <th style="padding:10px 8px;">SMS</th>
-          <th style="padding:10px 8px;">Gross Pay ($)</th>
-          <th style="padding:10px 8px;">Deduction (%)</th>
-          <th style="padding:10px 8px;">Full Rate</th>
-          <th style="padding:10px 8px;">Company Gross ($)</th>
-          <th style="padding:10px 8px;">User Pool ($)</th>
-          <th style="padding:10px 8px;">Action</th>
+        <tr style="border-bottom:2px solid var(--border);text-align:left">
+          <th style="padding:10px 8px">Client</th>
+          <th style="padding:10px 8px">SMS</th>
+          <th style="padding:10px 8px">Gross ($)</th>
+          <th style="padding:10px 8px">Deduct %</th>
+          <th style="padding:10px 8px">Full Rate</th>
+          <th style="padding:10px 8px">Company ($)</th>
+          <th style="padding:10px 8px">User Pool ($)</th>
+          <th style="padding:10px 8px">Save</th>
         </tr>
       </thead>
       <tbody id="earningsTableBody">
-        <tr><td colspan="8" style="text-align:center; padding:24px; color:var(--muted);">Select a date range and click "Fetch Verified Report"</td></tr>
+        <tr><td colspan="8" style="text-align:center;padding:24px;color:var(--muted)">Pick dates → Fetch Report</td></tr>
       </tbody>
     </table>
   </div>
+
+  <h2 style="margin-top:20px">🛠️ Window & Goal</h2>
+  <div class="ea-row">
+    <label>Window</label>
+    <select class="ea-inp" id="eaMode"><option value="overall">Overall (custom)</option><option value="weekly">Rolling 7 days</option></select>
+    <input class="ea-inp" id="eaFrom" type="date"><input class="ea-inp" id="eaTo" type="date">
+    <input class="ea-inp" id="eaGoal" type="number" step="1" style="width:90px" title="Goal $">
+    <button class="ea-btn" onclick="saveEarnSettings()">Save</button>
+  </div>
+  <div class="ea-msg" id="eaMsg" style="display:none"></div>
+
+  <h2 style="margin-top:18px">📢 Push Announcement</h2>
+  <textarea class="ea-ta" id="eaNotifBody" placeholder="Message shown to every user…"></textarea>
+  <div class="ea-row" style="margin-top:8px"><button class="ea-btn" onclick="pushEarnNotif()">Send to all</button></div>
+
+  <h2 style="margin-top:18px">📥 Rate Table</h2>
+  <label class="earn-drop" id="earnDrop">
+    <input type="file" id="earnRatesFile" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values" hidden>
+    <span class="earn-drop-ic">📄</span>
+    <span class="earn-drop-tx"><b>Upload CSV / TSV</b><small>Drop or click — every row stored as-is</small>
+    <span class="earn-drop-file" id="earnFileName">✓ <span id="earnFileNameTx"></span></span></span>
+  </label>
+  <div style="display:flex;align-items:center;gap:8px;margin:12px 0 6px;color:var(--muted);font-size:.62rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase"><span style="flex:1;height:1px;background:var(--border)"></span>or paste<span style="flex:1;height:1px;background:var(--border)"></span></div>
+  <textarea class="ea-ta" id="eaRatesTA" placeholder="Malaysia Celcom LX 20Jul&#9;0.019&#10;Sri Lanka LX 02Jul&#9;0.023"></textarea>
+  <div class="ea-row" style="margin-top:8px"><button class="ea-btn" onclick="importEarnRates()">Import</button><span class="pill" id="earnRateCount" style="margin-left:auto">0 loaded</span></div>
+  <div class="ea-msg" id="earnImportMsg" style="display:none;margin-top:8px"></div>
+</div>
 </div>
 <!-- detail modal -->
 <div id="earnDetail">
