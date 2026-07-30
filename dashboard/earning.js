@@ -190,38 +190,102 @@
   window.closeEarnNotif=function(){ var ov=document.getElementById('earnNotif'); if(ov) ov.classList.remove('show'); };
 
   /* ── super: settings ── */
-  function loadSettings(){
-    post('/api/earn/settings',{},function(d){
-      if(!d||!d.ok) return;
-      var s=d.settings||{};
-      var m=document.getElementById('eaMode'); if(m) m.value=s.mode||'overall';
-      var f=document.getElementById('eaFrom'); if(f) f.value=s.from_date||'';
-      var t=document.getElementById('eaTo'); if(t) t.value=s.to_date||'';
-      var g=document.getElementById('eaGoal'); if(g) g.value=s.goal_usd||50;
-    });
+  /* ── super: earnings report & client settings ── */
+function initEarningsDates() {
+  const now = new Date();
+  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59);
+  const formatDT = (d) => {
+    const pad = (n) => n.toString().padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+  const startInput = document.getElementById('earnStartDate');
+  const endInput = document.getElementById('earnEndDate');
+  if (startInput) startInput.value = formatDT(firstDay);
+  if (endInput) endInput.value = formatDT(lastDay);
+}
+
+window.fetchEarningsReport = function() {
+  const startDate = document.getElementById('earnStartDate').value;
+  const endDate = document.getElementById('earnEndDate').value;
+  if (!startDate || !endDate) { alert('Please select both start and end dates.'); return; }
+
+  const btn = event.target;
+  const originalText = btn.textContent;
+  btn.textContent = 'Scraping Lamix...';
+  btn.disabled = true;
+
+  post('/api/admin/earnings-report?startDate=' + encodeURIComponent(startDate) + '&endDate=' + encodeURIComponent(endDate), {}, function(d) {
+    btn.textContent = originalText;
+    btn.disabled = false;
+    if (!d || !d.ok || !d.data) { alert('Error: ' + ((d && d.error) || 'Failed to fetch report')); return; }
+    renderEarningsReport(d.data, d.totals);
+  });
+};
+
+function renderEarningsReport(data, totals) {
+  document.getElementById('totalSms').textContent = totals.totalSms.toLocaleString();
+  document.getElementById('totalGrossPay').textContent = '$' + totals.totalGrossPay.toFixed(4);
+  document.getElementById('totalCompanyGross').textContent = '$' + totals.totalCompanyGross.toFixed(4);
+  document.getElementById('totalUserPool').textContent = '$' + totals.totalUserPool.toFixed(4);
+
+  const tbody = document.getElementById('earningsTableBody');
+  tbody.innerHTML = '';
+  if (!data || data.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:24px; color:var(--muted);">No data found for this period.</td></tr>';
+    return;
   }
-  window.saveEarnSettings=function(){
-    var msg=document.getElementById('eaMsg');
-    post('/api/earn/set-settings',{
-      mode:document.getElementById('eaMode').value,
-      from_date:document.getElementById('eaFrom').value,
-      to_date:document.getElementById('eaTo').value,
-      goal_usd:document.getElementById('eaGoal').value
-    },function(d){
-      if(msg){ msg.style.display='block'; msg.style.color=(d&&d.ok)?'var(--eg)':'var(--red)'; msg.textContent=(d&&d.ok)?'✅ Window saved — recomputing…':((d&&d.error)||'Failed'); }
-      if(d&&d.ok) loadAll();
-    });
-  };
-  window.pushEarnNotif=function(){
-    var ta=document.getElementById('eaNotifBody');
-    var body=(ta&&ta.value||'').trim();
-    if(!body) return;
-    post('/api/earn/push-notif',{body:body},function(d){
-      var msg=document.getElementById('eaMsg');
-      if(msg){ msg.style.display='block'; msg.style.color=(d&&d.ok)?'var(--eg)':'var(--red)'; msg.textContent=(d&&d.ok)?'✅ Sent to all users':((d&&d.error)||'Failed'); }
-      if(d&&d.ok) ta.value='';
-    });
-  };
+
+  data.forEach(row => {
+    const tr = document.createElement('tr');
+    tr.style.borderBottom = '1px solid var(--border)';
+    tr.innerHTML = `
+      <td style="padding:10px 8px; font-weight:700;">${esc(row.client)}</td>
+      <td style="padding:10px 8px;">${row.smsCount.toLocaleString()}</td>
+      <td style="padding:10px 8px;">${row.grossPay.toFixed(4)}</td>
+      <td style="padding:10px 8px;">
+        <input type="number" class="ea-inp" style="width:60px; padding:4px 8px;" value="${row.deductionPercent}" min="0" max="100" step="1" data-client-id="${row.userId}" data-field="deduction"> %
+      </td>
+      <td style="padding:10px 8px;">
+        <input type="checkbox" style="width:18px; height:18px; cursor:pointer;" ${row.isFullRate ? 'checked' : ''} data-client-id="${row.userId}" data-field="fullrate" title="Check to give user 100% of Gross Pay">
+      </td>
+      <td style="padding:10px 8px; color:var(--emag); font-weight:700;">${row.companyGross.toFixed(4)}</td>
+      <td style="padding:10px 8px; color:var(--accent); font-weight:700;">${row.userPool.toFixed(4)}</td>
+      <td style="padding:10px 8px;">
+        <button class="ea-btn" style="padding:6px 12px; font-size:.72rem;" onclick="saveClientSettings(this, '${row.userId}')">Save</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+window.saveClientSettings = function(btn, clientId) {
+  const row = btn.closest('tr');
+  const deductionPercent = row.querySelector('[data-field="deduction"]').value;
+  const isFullRate = row.querySelector('[data-field="fullrate"]').checked;
+  const originalText = btn.textContent;
+  btn.textContent = 'Saving...';
+  btn.disabled = true;
+
+  post('/api/admin/update-client-settings', { clientId, deductionPercent, isFullRate }, function(d) {
+    if (d && d.ok) {
+      btn.textContent = 'Saved!';
+      btn.style.background = 'var(--eg)';
+      setTimeout(() => { btn.textContent = originalText; btn.style.background = ''; btn.disabled = false; }, 1500);
+    } else {
+      alert('Failed to save: ' + ((d && d.error) || 'Unknown error'));
+      btn.textContent = originalText;
+      btn.disabled = false;
+    }
+  });
+};
+
+// Hook into existing openEarnPage to initialize dates
+const _origOpenEarnPage = window.openEarnPage;
+window.openEarnPage = function() {
+  if (_origOpenEarnPage) _origOpenEarnPage();
+  setTimeout(initEarningsDates, 100);
+};
 
   /* ── super: rate import (stores EVERY row, no filtering) ── */
   window.importEarnRates=function(){
