@@ -1,0 +1,234 @@
+<!-- withdrawal.html — injected by withdrawal.js -->
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap');
+#wdPage{--wgreen:#34d399;--wgold:#fbbf24;--wblue:#60a5fa;--wred:#f87171;font-family:inherit;
+background:radial-gradient(900px 380px at 50% -8%,color-mix(in srgb,var(--wgreen) 12%,transparent),transparent 70%),var(--bg);
+background-attachment:fixed;position:fixed;inset:0;z-index:600;overflow-y:auto}
+#wdPage>*{position:relative;z-index:1}
+.wd-display{font-family:'Space Grotesk',ui-monospace,monospace;letter-spacing:-.02em}
+.wd-head{display:flex;align-items:center;gap:10px;padding:14px 2px 6px}
+.wd-back{width:38px;height:38px;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:1.05rem;display:flex;align-items:center;justify-content:center}
+.wd-head h1{font-family:'Space Grotesk',sans-serif;font-size:1.18rem;font-weight:700;margin:0;flex:1}
+/* Balance hero */
+.wd-hero{position:relative;overflow:hidden;border-radius:24px;padding:28px 22px 22px;margin:14px 0;text-align:center;
+background:linear-gradient(150deg,color-mix(in srgb,var(--wgreen) 20%,var(--card)),var(--card) 60%,color-mix(in srgb,var(--wgold) 12%,var(--card)));
+border:1px solid color-mix(in srgb,var(--wgreen) 30%,var(--border));
+box-shadow:0 22px 60px -28px color-mix(in srgb,var(--wgreen) 60%,transparent)}
+.wd-hero-glow{position:absolute;top:-60px;right:-40px;width:200px;height:200px;border-radius:50%;
+background:radial-gradient(circle,color-mix(in srgb,var(--wgold) 30%,transparent),transparent 65%);filter:blur(8px);opacity:.5;animation:wdGlow 6s ease-in-out infinite}
+@keyframes wdGlow{0%,100%{transform:scale(1);opacity:.4}50%{transform:scale(1.15);opacity:.7}}
+.wd-hero-label{font-size:.62rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.wd-hero-amount{font-family:'Space Grotesk',monospace;font-size:2.8rem;font-weight:700;
+background:linear-gradient(120deg,var(--wgreen),var(--wgold));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.wd-hero-pkr{font-size:.82rem;color:var(--muted);font-weight:600;margin-top:4px}
+.wd-hero-sub{display:flex;justify-content:center;gap:16px;margin-top:14px;font-size:.68rem;color:var(--muted);font-weight:600}
+.wd-hero-sub b{color:var(--text)}
+/* Progress bar */
+.wd-progress{margin:16px 0 0;height:8px;background:var(--border);border-radius:6px;overflow:hidden}
+.wd-progress>i{display:block;height:100%;width:0;border-radius:6px;background:linear-gradient(90deg,var(--wgreen),var(--wgold));transition:width 1s cubic-bezier(.2,.8,.2,1)}
+.wd-progress-lbl{display:flex;justify-content:space-between;font-size:.6rem;color:var(--muted);margin-top:5px;font-weight:700}
+/* Disabled banner */
+.wd-disabled{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);border-radius:14px;padding:16px;text-align:center;margin:12px 0;color:var(--wred);font-weight:700;font-size:.84rem}
+/* Form card */
+.wd-card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:20px;margin-bottom:14px}
+.wd-card-title{font-family:'Space Grotesk',sans-serif;font-size:.92rem;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.wd-field{margin-bottom:12px}
+.wd-field label{display:block;font-size:.64rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+.wd-field input,.wd-field select,.wd-field textarea{width:100%;box-sizing:border-box;padding:11px 13px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;font-size:.84rem;outline:none;transition:border-color .15s}
+.wd-field input:focus,.wd-field select:focus,.wd-field textarea:focus{border-color:var(--wgreen)}
+.wd-field textarea{min-height:60px;resize:vertical}
+.wd-field .hint{font-size:.6rem;color:var(--muted);margin-top:3px}
+.wd-field .warn{font-size:.6rem;color:var(--wred);margin-top:3px;font-weight:700}
+.wd-row{display:flex;gap:10px}
+.wd-row>*{flex:1}
+.wd-btn{width:100%;padding:14px;border:0;border-radius:12px;font:inherit;font-size:.9rem;font-weight:700;cursor:pointer;
+background:linear-gradient(135deg,var(--wgreen),#059669);color:#06080F;transition:transform .12s,opacity .15s}
+.wd-btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.wd-btn:not(:disabled):active{transform:scale(.97)}
+.wd-btn.secondary{background:var(--surface);color:var(--text);border:1px solid var(--border)}
+.wd-notice{font-size:.68rem;color:var(--muted);text-align:center;margin-top:10px;line-height:1.5}
+.wd-save-row{display:flex;align-items:center;gap:8px;margin:10px 0;font-size:.74rem;color:var(--muted)}
+.wd-save-row input{width:16px;height:16px}
+/* History cards */
+.wd-hist{display:flex;flex-direction:column;gap:10px}
+.wd-hist-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;position:relative;overflow:hidden}
+.wd-hist-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px}
+.wd-hist-card.pending::before{background:var(--wgold)}
+.wd-hist-card.approved::before{background:var(--wgreen)}
+.wd-hist-card.rejected::before{background:var(--wred)}
+.wd-hist-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.wd-hist-amt{font-family:'Space Grotesk',monospace;font-weight:700;font-size:1.05rem}
+.wd-hist-status{font-size:.62rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:3px 10px;border-radius:20px}
+.wd-hist-status.pending{background:rgba(251,191,36,.12);color:var(--wgold)}
+.wd-hist-status.approved{background:rgba(52,211,153,.12);color:var(--wgreen)}
+.wd-hist-status.rejected{background:rgba(248,113,113,.1);color:var(--wred)}
+.wd-hist-meta{font-size:.68rem;color:var(--muted);line-height:1.5}
+.wd-hist-msg{margin-top:8px;padding:8px 12px;border-radius:8px;font-size:.72rem;font-weight:600}
+.wd-hist-msg.approved{background:rgba(52,211,153,.08);color:var(--wgreen)}
+.wd-hist-msg.rejected{background:rgba(248,113,113,.08);color:var(--wred)}
+/* Recent withdrawals ticker */
+.wd-recent{margin-top:16px}
+.wd-recent-item{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:.76rem}
+.wd-recent-item:last-child{border-bottom:0}
+.wd-recent-av{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--wgreen),var(--wblue));display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:800;color:#06080F;flex-shrink:0}
+.wd-recent-name{flex:1;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wd-recent-amt{font-family:'Space Grotesk',monospace;font-weight:700;color:var(--wgreen)}
+/* Success overlay */
+.wd-success-overlay{position:fixed;inset:0;z-index:999;background:rgba(6,8,15,.7);backdrop-filter:blur(10px);display:none;align-items:center;justify-content:center;padding:20px}
+.wd-success-overlay.show{display:flex}
+.wd-success-card{width:100%;max-width:340px;border-radius:24px;padding:32px 24px;text-align:center;
+background:linear-gradient(160deg,color-mix(in srgb,var(--wgreen) 15%,var(--card)),var(--card));
+border:1px solid color-mix(in srgb,var(--wgreen) 30%,var(--border));
+box-shadow:0 30px 80px -20px rgba(0,0,0,.6);animation:wdPop .35s cubic-bezier(.2,1.2,.3,1) both}
+@keyframes wdPop{from{opacity:0;transform:scale(.9) translateY(12px)}to{opacity:1;transform:none}}
+.wd-success-logo{height:32px;margin:0 auto 14px;display:block}
+.wd-success-icon{font-size:3rem;margin-bottom:10px}
+.wd-success-title{font-family:'Space Grotesk',sans-serif;font-size:1.1rem;font-weight:700;margin-bottom:8px}
+.wd-success-body{font-size:.82rem;color:var(--muted);line-height:1.5;margin-bottom:18px}
+.wd-success-btn{border:0;border-radius:12px;padding:12px 24px;font:inherit;font-weight:700;cursor:pointer;color:#06080F;background:linear-gradient(135deg,var(--wgreen),#059669)}
+/* Crypto section */
+.wd-crypto{display:none}
+.wd-crypto.show{display:block}
+.wd-bank{display:block}
+.wd-bank.hide{display:none}
+</style>
+
+<div id="wdPage" style="display:none">
+<div style="max-width:560px;margin:0 auto;padding:0 14px 90px">
+
+<div class="wd-head">
+<button class="wd-back" onclick="closeWdPage()">←</button>
+<h1>💸 Withdrawal</h1>
+</div>
+
+<!-- Disabled banner -->
+<div class="wd-disabled" id="wdDisabledBanner" style="display:none"></div>
+
+<!-- Balance hero -->
+<div class="wd-hero">
+<div class="wd-hero-glow"></div>
+<div class="wd-hero-label">Available Balance</div>
+<div class="wd-hero-amount wd-display" id="wdBalance">$0.00</div>
+<div class="wd-hero-pkr" id="wdBalancePkr">≈ Rs 0</div>
+<div class="wd-hero-sub">
+<span>Total Earned: <b id="wdTotalEarned">$0</b></span>
+<span>Withdrawn: <b id="wdTotalWithdrawn">$0</b></span>
+</div>
+<div class="wd-progress"><i id="wdProgressBar"></i></div>
+<div class="wd-progress-lbl"><span>Minimum $<span id="wdMinLabel">2</span></span><span id="wdProgressPct">0%</span></div>
+</div>
+
+<!-- Withdrawal form -->
+<div class="wd-card" id="wdFormCard">
+<div class="wd-card-title">📤 New Withdrawal</div>
+
+<div class="wd-field">
+<label>Amount (USD) *</label>
+<input type="number" id="wdAmount" step="0.01" min="0" placeholder="0.00" oninput="wdCalcPkr()">
+<div class="hint">≈ <span id="wdAmountPkr">Rs 0</span> · Fee: $<span id="wdFeeLabel">0</span> (crypto only)</div>
+</div>
+
+<div class="wd-field">
+<label>Payment Method *</label>
+<select id="wdMethod" onchange="wdMethodChange()">
+<option value="">— Select —</option>
+<option value="easypaisa">Easypaisa</option>
+<option value="jazzcash">JazzCash</option>
+<option value="nayapay">NayaPay</option>
+<option value="opay">OPay</option>
+<option value="bank">Bank Transfer</option>
+<option value="other">Other Wallet</option>
+<option value="crypto">Crypto (USDT)</option>
+</select>
+</div>
+
+<!-- Bank / Wallet fields -->
+<div class="wd-bank" id="wdBankSection">
+<div class="wd-field" id="wdBankNameField" style="display:none">
+<label>Bank / Wallet Name *</label>
+<input type="text" id="wdBankName" placeholder="e.g. HBL, Meezan, SadaPay">
+</div>
+<div class="wd-field">
+<label>Account Number *</label>
+<input type="text" id="wdAccNum" placeholder="03XX XXXXXXX" inputmode="numeric">
+</div>
+<div class="wd-field">
+<label>Confirm Account Number *</label>
+<input type="text" id="wdAccNum2" placeholder="Re-enter account number" inputmode="numeric">
+<div class="warn">⚠️ Double-check! We are not responsible for wrong details. Payments cannot be reversed.</div>
+</div>
+<div class="wd-field">
+<label>Account Holder Name *</label>
+<input type="text" id="wdAccHolder" placeholder="Full name on account">
+</div>
+</div>
+
+<!-- Crypto fields -->
+<div class="wd-crypto" id="wdCryptoSection">
+<div class="wd-field">
+<label>Platform *</label>
+<select id="wdCryptoPlatform">
+<option value="">— Select —</option>
+<option value="binance">Binance</option>
+<option value="okx">OKX</option>
+<option value="other">Other</option>
+</select>
+</div>
+<div class="wd-field">
+<label>UID (Binance/OKX) *</label>
+<input type="text" id="wdCryptoUid" placeholder="Your exchange UID">
+</div>
+<div class="wd-field">
+<label>USDT Address (EVM) *</label>
+<input type="text" id="wdCryptoAddr" placeholder="0x...">
+</div>
+<div class="wd-field">
+<label>Confirm Address *</label>
+<input type="text" id="wdCryptoAddr2" placeholder="Re-enter address">
+<div class="warn">⚠️ Wrong address = permanent loss. Verify carefully!</div>
+</div>
+<div class="wd-field">
+<label>Chain Name *</label>
+<input type="text" id="wdCryptoChain" placeholder="e.g. BSC, Ethereum, Polygon, Arbitrum">
+</div>
+</div>
+
+<div class="wd-field">
+<label>Note (Optional)</label>
+<textarea id="wdNote" placeholder="Any message for admin..."></textarea>
+</div>
+
+<div class="wd-save-row">
+<input type="checkbox" id="wdSaveMethod" checked>
+<label for="wdSaveMethod" style="margin:0;text-transform:none;letter-spacing:0;font-size:.74rem">Save payment details for next time</label>
+</div>
+
+<button class="wd-btn" id="wdSubmitBtn" disabled onclick="wdSubmit()">💸 Request Withdrawal</button>
+<div class="wd-notice">⏱ Payment processed within <b>3 hours</b> on business days.<br>In rare cases, up to <b>3 working days</b>.</div>
+</div>
+
+<!-- History -->
+<div class="wd-card">
+<div class="wd-card-title">📋 Withdrawal History</div>
+<div class="wd-hist" id="wdHistory"><div style="text-align:center;padding:20px;color:var(--muted);font-size:.8rem">No withdrawals yet</div></div>
+</div>
+
+<!-- Recent (public) -->
+<div class="wd-card wd-recent">
+<div class="wd-card-title">🌐 Recent Withdrawals</div>
+<div id="wdRecentList"><div style="text-align:center;padding:14px;color:var(--muted);font-size:.76rem">Loading…</div></div>
+</div>
+
+</div>
+</div>
+
+<!-- Success overlay -->
+<div class="wd-success-overlay" id="wdSuccessOverlay">
+<div class="wd-success-card">
+<img class="wd-success-logo" src="/branding/logo-dark.png" alt="Zamil SMS" onerror="this.style.display='none'">
+<div class="wd-success-icon">✅</div>
+<div class="wd-success-title" id="wdSuccessTitle">Withdrawal Submitted!</div>
+<div class="wd-success-body" id="wdSuccessBody">Your request is pending. You'll be notified once processed.</div>
+<button class="wd-success-btn" onclick="wdCloseSuccess()">Got it</button>
+</div>
+</div>
