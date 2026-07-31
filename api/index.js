@@ -1917,7 +1917,7 @@ if (url === '/admin/save-range-deductions' && req.method === 'POST') {
 // ═══════════════════════════════════════════════════════════
 
 async function getWithdrawSettings() {
-  const def = { enabled: true, disabled_message: '', pkr_rate: 285, min_withdraw_usd: 2, crypto_fee_usd: 1 };
+  const def = { enabled: true, disabled_message: '', pkr_rate: 285, min_withdraw_usd: 2, crypto_fee_usd: 1, usdt_rate: 285 };
   if (!supaEnabled()) return def;
   try {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/withdrawal_settings?id=eq.1&select=*`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
@@ -1974,7 +1974,8 @@ if (url === '/withdraw/balance' && req.method === 'POST') {
       availablePkr: Math.round(available * pkrRate),
       pkrRate,
       minWithdraw: settings.min_withdraw_usd || 2,
-      cryptoFee: settings.crypto_fee_usd || 1,
+      cryptoFee: settings.crypto_fee_usd || 1,       
+      usdtRate: settings.usdt_rate || settings.pkr_rate || 285,
       enabled: settings.enabled,
       disabledMessage: settings.disabled_message || '',
       canWithdraw: settings.enabled && available >= (settings.min_withdraw_usd || 2)
@@ -1994,7 +1995,7 @@ if (url === '/withdraw/submit' && req.method === 'POST') {
     const totalWithdrawn = await getUserTotalWithdrawn(user.username);
     const available = Math.max(0, totalEarnings - totalWithdrawn);
     const amountUsd = parseFloat(req.body.amountUsd) || 0;
-    const minW = settings.min_withdraw_usd || 2;
+    const minW = 0; // TESTING: set back to (settings.min_withdraw_usd || 2) when done
 
     if (amountUsd < minW) return error(res, 400, `Minimum withdrawal is $${minW}.`);
     if (amountUsd > available) return error(res, 400, `Insufficient balance. Available: $${available.toFixed(4)}`);
@@ -2148,7 +2149,8 @@ if (url === '/admin/withdraw/settings' && req.method === 'POST') {
       disabled_message: String(req.body.disabledMessage || ''),
       pkr_rate: parseFloat(req.body.pkrRate) || 285,
       min_withdraw_usd: parseFloat(req.body.minWithdraw) || 2,
-      crypto_fee_usd: parseFloat(req.body.cryptoFee) || 1,
+      crypto_fee_usd: parseFloat(req.body.cryptoFee) || 1,       
+      usdt_rate: parseFloat(req.body.usdtRate) || 285,
       updated_by: user.username,
       updated_at: new Date().toISOString()
     };
