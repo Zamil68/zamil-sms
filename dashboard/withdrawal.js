@@ -48,6 +48,7 @@ function loadBalance(){
     _balance=d;
     var el=document.getElementById('wdBalance'); if(el) el.textContent='$'+d.available.toFixed(4);
     var pk=document.getElementById('wdBalancePkr'); if(pk) pk.textContent='≈ Rs '+d.availablePkr.toLocaleString();
+    var ur=document.getElementById('wdUsdtRate'); if(ur) ur.textContent=(d.usdtRate||d.pkrRate||285)+' PKR';
     var te=document.getElementById('wdTotalEarned'); if(te) te.textContent='$'+d.totalEarnings.toFixed(2);
     var tw=document.getElementById('wdTotalWithdrawn'); if(tw) tw.textContent='$'+d.totalWithdrawn.toFixed(2);
     var min=d.minWithdraw||2;
@@ -117,13 +118,20 @@ window.wdMethodChange=function(){
   var bank=document.getElementById('wdBankSection');
   var crypto=document.getElementById('wdCryptoSection');
   var bankNameField=document.getElementById('wdBankNameField');
-  if(m==='crypto'){ if(bank)bank.classList.add('hide'); if(crypto)crypto.classList.add('show'); }
-  else { if(bank)bank.classList.remove('hide'); if(crypto)crypto.classList.remove('show'); }
+  var feeChip=document.getElementById('wdFeeChip');
+  if(m==='crypto'){
+    if(bank)bank.classList.add('hide');
+    if(crypto)crypto.classList.add('show');
+    if(feeChip)feeChip.style.display='inline-flex';
+  } else {
+    if(bank)bank.classList.remove('hide');
+    if(crypto)crypto.classList.remove('show');
+    if(feeChip)feeChip.style.display='none';
+  }
   if(m==='bank'||m==='other'){ if(bankNameField)bankNameField.style.display='block'; }
   else { if(bankNameField)bankNameField.style.display='none'; }
   checkForm();
 };
-
 window.wdCalcPkr=function(){
   var amt=parseFloat(document.getElementById('wdAmount').value)||0;
   var rate=(_balance&&_balance.pkrRate)||285;
