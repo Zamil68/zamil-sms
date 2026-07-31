@@ -1,4 +1,4 @@
-/* ═══ withdrawal.js — Withdrawal module (Zamil SMS) ═══ */
+/* ═══ withdrawal.js — Withdrawal module (Zamil SMS) — FIXED ═══ */
 (function(){
 'use strict';
 function sess(){ return localStorage.getItem('app_session'); }
@@ -10,17 +10,27 @@ function post(url, body, cb){
     .catch(function(e){ cb({ok:false, error:'Network: '+e.message}); });
 }
 
-var _injected=false, _balance=null, _settings=null;
+var _injected=false, _balance=null, _role='none';
 
 function inject(){
   if(_injected) return; _injected=true;
   fetch('/dashboard/withdrawal.html').then(function(r){return r.text();}).then(function(h){
     var d=document.createElement('div'); d.innerHTML=h;
     while(d.firstElementChild) document.body.appendChild(d.firstElementChild);
+    loadRole();
     loadBalance();
     loadHistory();
     loadRecent();
     loadSavedMethods();
+  });
+}
+
+function loadRole(){
+  post('/api/auth/role',{},function(r){
+    _role=(r&&r.ok)?r.role:'none';
+    var adminSection=document.getElementById('wdAdminSection');
+    if(adminSection) adminSection.style.display=(_role==='super'||_role==='admin')?'block':'none';
+    if(_role==='super'||_role==='admin') loadAdminRequests();
   });
 }
 
@@ -33,7 +43,7 @@ window.openWdPage=function(){
 window.closeWdPage=function(){ var p=document.getElementById('wdPage'); if(p) p.style.display='none'; };
 
 function loadBalance(){
-  post('/withdraw/balance',{},function(d){
+  post('/api/withdraw/balance',{},function(d){
     if(!d||!d.ok) return;
     _balance=d;
     var el=document.getElementById('wdBalance'); if(el) el.textContent='$'+d.available.toFixed(4);
@@ -54,7 +64,7 @@ function loadBalance(){
 }
 
 function loadHistory(){
-  post('/withdraw/history',{},function(d){
+  post('/api/withdraw/history',{},function(d){
     var el=document.getElementById('wdHistory'); if(!el) return;
     if(!d||!d.ok||!d.withdrawals||!d.withdrawals.length){ el.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted);font-size:.8rem">No withdrawals yet</div>'; return; }
     el.innerHTML=d.withdrawals.map(function(w){
@@ -71,7 +81,7 @@ function loadHistory(){
 }
 
 function loadRecent(){
-  post('/withdraw/recent',{},function(d){
+  post('/api/withdraw/recent',{},function(d){
     var el=document.getElementById('wdRecentList'); if(!el) return;
     if(!d||!d.ok||!d.recent||!d.recent.length){ el.innerHTML='<div style="text-align:center;padding:14px;color:var(--muted);font-size:.76rem">No recent withdrawals</div>'; return; }
     el.innerHTML=d.recent.map(function(w){
@@ -82,7 +92,7 @@ function loadRecent(){
 }
 
 function loadSavedMethods(){
-  post('/withdraw/methods',{},function(d){
+  post('/api/withdraw/methods',{},function(d){
     if(!d||!d.ok||!d.methods||!d.methods.length) return;
     var m=d.methods[0];
     if(m.method && m.method!=='crypto'){
@@ -158,10 +168,10 @@ window.wdSubmit=function(){
   var btn=document.getElementById('wdSubmitBtn');
   btn.disabled=true; btn.textContent='Submitting…';
 
-  post('/withdraw/submit',body,function(d){
+  post('/api/withdraw/submit',body,function(d){
     btn.disabled=false; btn.textContent='💸 Request Withdrawal';
     if(d&&d.ok){
-      wdShowSuccess('Withdrawal Submitted! ✅','Your request for $'+amt.toFixed(2)+' is pending. You will be notified once processed. Expected: 3 hours on business days.');
+      wdShowSuccess('Withdrawal Submitted! ✅','Your request for $'+amt.toFixed(2)+' is pending. Expected: 3 hours on business days.');
       document.getElementById('wdAmount').value='';
       document.getElementById('wdNote').value='';
       loadBalance();
@@ -178,6 +188,95 @@ function wdShowSuccess(title,body){
   var ov=document.getElementById('wdSuccessOverlay'); if(ov)ov.classList.add('show');
 }
 window.wdCloseSuccess=function(){ var ov=document.getElementById('wdSuccessOverlay'); if(ov)ov.classList.remove('show'); };
+
+/* ═══ ADMIN: Withdrawal Requests Management ═══ */
+function loadAdminRequests(){
+  post('/api/admin/withdraw/requests',{status:'pending'},function(d){
+    var el=document.getElementById('wdAdminRequests'); if(!el) return;
+    if(!d||!d.ok||!d.requests||!d.requests.length){
+      el.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted);font-size:.8rem">✅ No pending requests</div>';
+      return;
+    }
+    el.innerHTML=d.requests.map(function(w){
+      var dt=w.created_at?new Date(w.created_at).toLocaleString('en-PK',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'';
+      var isCrypto=w.method==='crypto';
+      var detailHtml='';
+      if(isCrypto){
+        detailHtml='<div class="wd-admin-detail">'
+          +'<div><b>Platform:</b> '+esc(w.crypto_platform)+'</div>'
+          +'<div><b>UID:</b> '+esc(w.crypto_uid)+'</div>'
+          +'<div><b>Address:</b> <code style="font-size:.7rem;word-break:break-all">'+esc(w.crypto_address)+'</code></div>'
+          +'<div><b>Chain:</b> '+esc(w.crypto_chain)+'</div>'
+          +'<div><b>Fee:</b> $'+(w.crypto_fee_usd||0).toFixed(2)+'</div>'
+          +'</div>';
+      } else {
+        detailHtml='<div class="wd-admin-detail">'
+          +'<div><b>Method:</b> '+esc(w.method)+'</div>'
+          +(w.bank_name?'<div><b>Bank:</b> '+esc(w.bank_name)+'</div>':'')
+          +'<div><b>Account:</b> '+esc(w.account_number)+'</div>'
+          +'<div><b>Holder:</b> '+esc(w.account_holder)+'</div>'
+          +'</div>';
+      }
+      return '<div class="wd-admin-card">'
+        +'<div class="wd-admin-top">'
+        +'<div class="wd-admin-user">'+esc(w.username)+'</div>'
+        +'<div class="wd-admin-amt">$'+(w.amount_usd||0).toFixed(4)+' <span style="color:var(--muted);font-size:.7rem">≈ Rs '+(w.amount_pkr||0).toLocaleString()+'</span></div>'
+        +'<div class="wd-admin-time">'+dt+'</div>'
+        +'</div>'
+        +detailHtml
+        +(w.note?'<div style="font-size:.72rem;color:var(--muted);margin-top:6px;font-style:italic">📝 '+esc(w.note)+'</div>':'')
+        +'<div class="wd-admin-actions">'
+        +'<button class="wd-admin-btn approve" onclick="wdAdminAction('+w.id+',\'approve\',this)">✅ Approve</button>'
+        +'<button class="wd-admin-btn reject" onclick="wdAdminAction('+w.id+',\'reject\',this)">❌ Reject</button>'
+        +'<button class="wd-admin-btn copy" onclick="wdAdminCopy('+w.id+')">📋 Copy</button>'
+        +'</div>'
+        +'<div class="wd-admin-msg-row" id="wdAdminMsg_'+w.id+'" style="display:none">'
+        +'<input type="text" class="wd-admin-msg-input" id="wdAdminMsgInput_'+w.id+'" placeholder="Message to user (optional)…">'
+        +'</div>'
+        +'</div>';
+    }).join('');
+    // Store requests for copy
+    window._wdAdminReqs=d.requests;
+  });
+}
+
+window.wdAdminAction=function(id, action, btn){
+  var msgInput=document.getElementById('wdAdminMsgInput_'+id);
+  var msgRow=document.getElementById('wdAdminMsg_'+id);
+  // Show message input on first click
+  if(msgRow && msgRow.style.display==='none'){
+    msgRow.style.display='block';
+    if(msgInput) msgInput.focus();
+    return;
+  }
+  var message=(msgInput&&msgInput.value)||'';
+  if(action==='reject'&&!message){ message='Withdrawal rejected.'; }
+
+  btn.disabled=true; btn.textContent='…';
+  var url=action==='approve'?'/api/admin/withdraw/approve':'/api/admin/withdraw/reject';
+  post(url,{id:id, message:message},function(d){
+    if(d&&d.ok){
+      btn.textContent=action==='approve'?'✅ Done':'❌ Done';
+      btn.style.opacity='.5';
+      setTimeout(loadAdminRequests,1000);
+    } else {
+      alert('Failed: '+((d&&d.error)||'?'));
+      btn.disabled=false; btn.textContent=action==='approve'?'✅ Approve':'❌ Reject';
+    }
+  });
+};
+
+window.wdAdminCopy=function(id){
+  var req=(window._wdAdminReqs||[]).find(function(r){return r.id===id;});
+  if(!req) return;
+  var text='User: '+req.username+'\nAmount: $'+req.amount_usd+' (Rs '+req.amount_pkr+')\n';
+  if(req.method==='crypto'){
+    text+='Platform: '+req.crypto_platform+'\nUID: '+req.crypto_uid+'\nAddress: '+req.crypto_address+'\nChain: '+req.crypto_chain;
+  } else {
+    text+='Method: '+req.method+'\n'+(req.bank_name?'Bank: '+req.bank_name+'\n':'')+'Account: '+req.account_number+'\nHolder: '+req.account_holder;
+  }
+  if(navigator.clipboard) navigator.clipboard.writeText(text).then(function(){ alert('📋 Copied!'); });
+};
 
 // Auto-refresh balance every 30s while page is open
 setInterval(function(){
