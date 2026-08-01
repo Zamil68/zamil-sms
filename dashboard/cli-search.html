@@ -1,4 +1,4 @@
-<!-- cli-search.html — v3 clean layout -->
+<!-- cli-search.html — card-based CLI Search UI -->
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
 #cliSearchPage{--cs:#60a5fa;--csg:#34d399;--csgold:#fbbf24;--csmag:#f472b6;--csred:#f87171;
@@ -21,7 +21,7 @@
 .cs-rbtn.spinning svg{animation:csSpin .8s linear infinite}
 @keyframes csSpin{to{transform:rotate(360deg)}}
 .cs-rbtn svg{width:17px;height:17px}
-/* top progress bar */
+/* top bar */
 .cs-topbar{position:sticky;top:0;left:0;right:0;height:3px;z-index:5;overflow:hidden;opacity:0;transition:opacity .2s}
 .cs-topbar.on{opacity:1}
 .cs-topbar i{display:block;height:100%;width:40%;border-radius:3px;background:linear-gradient(90deg,transparent,var(--cs),var(--csg),transparent);animation:csSlide 1s linear infinite}
@@ -38,47 +38,47 @@
 .cs-mode{flex:1;border:0;background:transparent;color:var(--muted,#9aa3b2);font:inherit;font-size:.72rem;font-weight:700;padding:9px 6px;border-radius:9px;cursor:pointer;transition:all .18s;display:flex;align-items:center;justify-content:center;gap:5px}
 .cs-mode svg{width:13px;height:13px}
 .cs-mode.on{color:#06080f;background:linear-gradient(135deg,var(--cs),#3b82f6);box-shadow:0 3px 12px -4px color-mix(in srgb,var(--cs) 60%,transparent)}
-/* stats line */
+/* stats */
 .cs-stats{font-size:.7rem;color:var(--muted,#9aa3b2);font-weight:600;margin:0 2px 14px;min-height:1.2em}
 .cs-stats b{color:var(--text,#e8ecf4);font-family:'Space Grotesk',monospace}
-/* feed */
+/* ═══ CARD FEED ═══ */
 .cs-feed{display:flex;flex-direction:column;gap:10px}
-.cs-feed-item{background:var(--card,#14161d);border:1px solid var(--border,#262a35);border-radius:16px;padding:14px 16px;position:relative;overflow:hidden;transition:border-color .15s,transform .14s;animation:csIn .3s ease both}
-.cs-feed-item:hover{border-color:color-mix(in srgb,var(--cs) 40%,var(--border,#262a35));transform:translateX(2px)}
-.cs-feed-item::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--cs);border-radius:0 4px 4px 0}
-.cs-feed-item.first::before{background:linear-gradient(180deg,var(--csgold),var(--csg))}
-@keyframes csIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-/* row 1: app + time */
-.cs-fi-top{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-.cs-fi-cli{font-size:.68rem;font-weight:800;letter-spacing:.03em;color:var(--cs);background:color-mix(in srgb,var(--cs) 12%,transparent);border:1px solid color-mix(in srgb,var(--cs) 22%,transparent);border-radius:7px;padding:3px 9px;max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cs-fi-new{font-size:.54rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#06080f;background:linear-gradient(135deg,var(--csgold),var(--csg));border-radius:20px;padding:2px 8px}
+.cs-card{background:var(--card,#14161d);border:1px solid var(--border,#262a35);border-radius:16px;padding:14px 16px;position:relative;overflow:hidden;
+  transition:border-color .15s,transform .14s,box-shadow .15s;animation:csCardIn .35s ease both}
+.cs-card:hover{border-color:color-mix(in srgb,var(--cs) 40%,var(--border,#262a35));transform:translateX(2px);box-shadow:0 8px 24px -12px rgba(0,0,0,.4)}
+.cs-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--cs);border-radius:0 4px 4px 0;opacity:.7}
+.cs-card.first::before{background:linear-gradient(180deg,var(--csgold),var(--csg));opacity:1}
+@keyframes csCardIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+/* card head */
+.cs-card-head{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.cs-app-chip{font-size:.68rem;font-weight:800;letter-spacing:.03em;color:var(--cs);background:color-mix(in srgb,var(--cs) 12%,transparent);border:1px solid color-mix(in srgb,var(--cs) 22%,transparent);border-radius:8px;padding:3px 10px;max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cs-new-tag{font-size:.52rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#06080f;background:linear-gradient(135deg,var(--csgold),var(--csg));border-radius:20px;padding:2px 8px}
 .cs-fi-time{margin-left:auto;font-family:'Space Grotesk',monospace;font-size:.62rem;font-weight:700;color:var(--muted,#9aa3b2);white-space:nowrap}
-/* row 2: range + number */
-.cs-fi-meta{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;margin-bottom:8px}
-.cs-fi-range{font-size:.78rem;font-weight:700;color:var(--text,#e8ecf4);display:flex;align-items:center;gap:5px}
-.cs-fi-num{font-family:'Space Grotesk',monospace;font-size:.72rem;font-weight:700;color:var(--csgold);letter-spacing:.02em}
-/* row 3: message */
-.cs-fi-msg{font-size:.78rem;line-height:1.55;color:var(--muted,#9aa3b2);word-break:break-word;background:var(--surface,#1b1e27);border-radius:10px;padding:10px 12px;border:1px solid var(--border,#262a35)}
-/* summary chips (number mode) */
+/* card meta */
+.cs-card-meta{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;margin-bottom:9px}
+.cs-flag{font-size:1rem;line-height:1}
+.cs-range{font-size:.78rem;font-weight:700;color:var(--text,#e8ecf4)}
+.cs-num{font-family:'Space Grotesk',monospace;font-size:.72rem;font-weight:700;color:var(--csgold);letter-spacing:.02em;background:color-mix(in srgb,var(--csgold) 10%,transparent);border-radius:6px;padding:2px 8px}
+/* message bubble */
+.cs-msg-bubble{font-size:.78rem;line-height:1.55;color:var(--muted,#9aa3b2);word-break:break-word;background:var(--surface,#1b1e27);border:1px solid var(--border,#262a35);border-radius:11px;padding:10px 13px}
+/* summary chips */
 .cs-sum{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-bottom:14px}
 .cs-sum-lbl{font-size:.6rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#9aa3b2)}
 .cs-sum-chip{display:inline-flex;align-items:center;gap:5px;font-size:.7rem;font-weight:700;color:var(--text,#e8ecf4);background:var(--surface,#1b1e27);border:1px solid var(--border,#262a35);border-radius:20px;padding:4px 11px}
 .cs-sum-chip b{color:var(--cs);font-family:'Space Grotesk',monospace}
 /* skeleton */
-.cs-sk-item{background:var(--card,#14161d);border:1px solid var(--border,#262a35);border-radius:16px;padding:16px;margin-bottom:10px}
+.cs-sk-card{background:var(--card,#14161d);border:1px solid var(--border,#262a35);border-radius:16px;padding:16px;margin-bottom:10px}
 .cs-sk{height:11px;border-radius:7px;background:linear-gradient(90deg,var(--surface,#1b1e27) 25%,color-mix(in srgb,var(--border,#262a35) 60%,var(--surface,#1b1e27)) 50%,var(--surface,#1b1e27) 75%);background-size:200% 100%;animation:csShim 1.3s infinite}
 @keyframes csShim{0%{background-position:200% 0}100%{background-position:-200% 0}}
 /* empty / tips */
 .cs-empty{text-align:center;padding:36px 20px;color:var(--muted,#9aa3b2);font-size:.84rem;line-height:1.6}
-.cs-empty svg{width:42px;height:42px;color:var(--border,#262a35);margin-bottom:12px}
-.cs-empty b{color:var(--text,#e8ecf4)}
-.cs-tips{text-align:left;max-width:320px;margin:16px auto 0;font-size:.76rem;color:var(--muted,#9aa3b2);line-height:1.8}
+.cs-tips{text-align:left;max-width:320px;margin:14px auto 0;font-size:.76rem;color:var(--muted,#9aa3b2);line-height:1.8}
 .cs-tips b{color:var(--text,#e8ecf4)}
 .cs-chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:16px;justify-content:center}
 .cs-chip{border:1px solid var(--border,#262a35);background:var(--surface,#1b1e27);color:var(--text,#e8ecf4);border-radius:20px;padding:7px 13px;font:inherit;font-size:.74rem;font-weight:600;cursor:pointer;transition:all .14s}
 .cs-chip:hover{border-color:var(--cs);color:var(--cs)}
 .cs-chip:active{transform:scale(.95)}
-@media(max-width:400px){.cs-fi-cli{max-width:42%}.cs-fi-msg{font-size:.74rem}}
+@media(max-width:400px){.cs-app-chip{max-width:42%}.cs-msg-bubble{font-size:.74rem}}
 </style>
 
 <div id="cliSearchPage" style="display:none">
@@ -100,24 +100,6 @@
     <button class="cs-mode" data-mode="number" onclick="csSetMode('number')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>Number</button>
   </div>
   <div class="cs-stats" id="csStats"></div>
-  <div id="csResults">
-    <div class="cs-empty">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
-      <div>Search the live analysis feed</div>
-      <div class="cs-tips">
-        <b>Phone number</b> → every OTP it received today<br>
-        <b>App name</b> (GitLab, Talabat…) → its messages, newest first<br>
-        <b>Country</b> (Oman, Sri Lanka…) → all messages there<br>
-        <b>Keyword</b> (verification, expire…) → matching bodies
-      </div>
-      <div class="cs-chips">
-        <button class="cs-chip" onclick="csQuick('GitLab')">GitLab</button>
-        <button class="cs-chip" onclick="csQuick('Sri Lanka')">🇱🇰 Sri Lanka</button>
-        <button class="cs-chip" onclick="csQuick('Talabat')">Talabat</button>
-        <button class="cs-chip" onclick="csQuick('verification')">"verification"</button>
-        <button class="cs-chip" onclick="csQuick('NETELLER')">NETELLER</button>
-      </div>
-    </div>
-  </div>
+  <div id="csResults"></div>
 </div>
 </div>
