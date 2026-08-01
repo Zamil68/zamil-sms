@@ -257,7 +257,5 @@ window.wdCopy=function(id){
   else t+='Method: '+r.method+(r.bank_name?'\nBank: '+r.bank_name:'')+'\nAccount: '+r.account_number+'\nHolder: '+r.account_holder;
   if(navigator.clipboard)navigator.clipboard.writeText(t).then(function(){alert('Copied');});
 };
-// Only refresh when user manually clicks refresh or re-opens page (no background polling) 
-  if(p&&p.style.display!=='none'&&!document.hidden&&!_loading)loadBalance();},30000);
+// No background polling — refresh only on manual click or page re-open
 })();
-setInterval(function(){var p=document.getElementById('wdPage');
