@@ -2179,12 +2179,43 @@ async function getUserWithdrawn(username){
   if(!supaEnabled())return 0;
   try{const r=await fetch(`${SUPABASE_URL}/rest/v1/withdrawals?username=eq.${encodeURIComponent(username)}&status=in.(approved,pending)&select=amount_usd`,{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY}});const rows=await r.json();return Array.isArray(rows)?rows.reduce((s,x)=>s+(parseFloat(x.amount_usd)||0),0):0;}catch(e){return 0;}
 }
+    
 if(url==='/withdraw/balance'&&req.method==='POST'){try{
   const user=getUserFromSession(req.body.session);if(!user)return error(res,401,'Unauthorized');
-  const s=await getWdSettings();const earned=await getUserEarnings(user.username);const withdrawn=await getUserWithdrawn(user.username);
-  const avail=Math.max(0,Math.round((earned-withdrawn)*10000)/10000);const rate=s.pkr_rate||285;
-  return ok(res,{totalEarnings:earned,totalWithdrawn:withdrawn,available:avail,availablePkr:Math.round(avail*rate),pkrRate:rate,minWithdraw:s.min_withdraw_usd||2,cryptoFee:s.crypto_fee_usd||1,enabled:s.enabled,disabledMessage:s.disabled_message||'',canWithdraw:s.enabled&&avail>=(s.min_withdraw_usd||2)});
+  const s=await getWdSettings();
+  // Fast: get total withdrawn from DB (single query, no CDR scrape)
+  let totalWithdrawn=0;
+  if(supaEnabled()){
+    try{
+      const r=await fetch(`${SUPABASE_URL}/rest/v1/withdrawals?username=eq.${encodeURIComponent(user.username)}&status=in.(approved,pending)&select=amount_usd`,{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY}});
+      const rows=await r.json();
+      if(Array.isArray(rows))totalWithdrawn=rows.reduce((a,x)=>a+(parseFloat(x.amount_usd)||0),0);
+    }catch(e){}
+  }
+  // Fast: get earnings from cache (updated by /earn/compute) or estimate
+  let totalEarnings=0;
+  try{
+    const rc=await loadRateMap(false);
+    const cfg=await getEarnSettings();
+    const win=_earnWindow(cfg);
+    const rows=await getCachedCDR(win.from,win.to,CDR_TTL_WIDE);
+    const t1=(user.clientName||user.username||'').toLowerCase().trim();
+    (rows||[]).forEach(r=>{
+      const c=(r.client||'').toLowerCase().trim();
+      if(!c||(c!==t1&&!c.includes(t1)&&!t1.includes(c)))return;
+      const rt=rc.map?rc.map.get(norm(r.range)):null;
+      if(rt)totalEarnings+=rt*0.7;
+    });
+    totalEarnings=Math.round(totalEarnings*10000)/10000;
+  }catch(e){
+    // Fallback: if CDR times out, use withdrawn + available estimate
+    totalEarnings=totalWithdrawn;
+  }
+  const avail=Math.max(0,Math.round((totalEarnings-totalWithdrawn)*10000)/10000);
+  const rate=s.pkr_rate||285;
+  return ok(res,{totalEarnings,totalWithdrawn,available,availablePkr:Math.round(avail*rate),pkrRate:rate,minWithdraw:s.min_withdraw_usd||2,cryptoFee:s.crypto_fee_usd||1,enabled:s.enabled,disabledMessage:s.disabled_message||'',canWithdraw:s.enabled&&avail>=(s.min_withdraw_usd||2)});
 }catch(e){return error(res,500,'balance: '+e.message);}}
+    
 if(url==='/withdraw/submit'&&req.method==='POST'){try{
   const user=getUserFromSession(req.body.session);if(!user)return error(res,401,'Unauthorized');
   const s=await getWdSettings();if(!s.enabled)return error(res,400,s.disabled_message||'Withdrawals disabled.');
