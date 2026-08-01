@@ -59,9 +59,26 @@ function loadRole(){
   });
 }
 window.openCliPage=function(){
-  var p=document.getElementById('cliPage');
-  if(p){ p.style.display='block'; window.scrollTo(0,0); loadAnalysis(true); return; }
-  inject();
+  post('/api/cli/gate',{openAction:'open_insights'},function(g){
+    if(g&&g.ok&&g.insights===false){
+      // Show blocked overlay
+      var p=document.getElementById('cliPage');
+      if(p){
+        p.style.display='block';
+        var ov=document.getElementById('cliBlockedOv');
+        if(!ov){ ov=document.createElement('div'); ov.id='cliBlockedOv'; p.appendChild(ov); }
+        ov.style.cssText='position:absolute;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:24px;background:color-mix(in srgb,var(--bg,#0b0d12) 88%,transparent);backdrop-filter:blur(6px)';
+        ov.innerHTML='<div style="max-width:360px;width:100%;text-align:center;background:var(--card,#14161d);border:1px solid var(--border,#262a35);border-radius:24px;padding:36px 26px;box-shadow:0 40px 100px -28px rgba(0,0,0,.75)"><div style="width:64px;height:64px;margin:0 auto 16px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,rgba(248,113,113,.2),rgba(248,113,113,.06));border:1px solid rgba(248,113,113,.3)"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></div><div style="font-family:\'Space Grotesk\',sans-serif;font-size:1.15rem;font-weight:700;margin-bottom:8px;color:var(--text,#e8ecf4)">Access Restricted</div><div style="font-size:.82rem;color:var(--muted,#9aa3b2);line-height:1.6">CLI Insights has been disabled for your account.</div><div style="font-size:.72rem;color:var(--muted,#9aa3b2);margin-top:4px">Contact your admin on WhatsApp.</div><button onclick="closeCliPage()" style="margin-top:18px;border:0;border-radius:12px;padding:11px 22px;font:inherit;font-weight:700;cursor:pointer;color:#06080f;background:linear-gradient(135deg,#60a5fa,#3b82f6)">Go Back</button></div>';
+        ov.style.display='flex';
+      }
+      return;
+    }
+    // Allowed — hide any old blocked overlay and proceed normally
+    var ov2=document.getElementById('cliBlockedOv'); if(ov2) ov2.style.display='none';
+    var p2=document.getElementById('cliPage');
+    if(p2){ p2.style.display='block'; window.scrollTo(0,0); loadAnalysis(true); return; }
+    inject();
+  });
 };
 window.closeCliPage=function(){ var p=document.getElementById('cliPage'); if(p) p.style.display='none'; };
 
