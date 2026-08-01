@@ -1,1 +1,127 @@
+<!-- cli.html — injected by cli.js -->
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap');
+#cliPage{--cg:#34d399;--cgold:#fbbf24;--cmag:#f472b6;--cblue:#60a5fa;font-family:inherit;
+background:radial-gradient(900px 380px at 50% -8%,color-mix(in srgb,var(--cblue) 14%,transparent),transparent 70%),
+radial-gradient(700px 320px at 100% 100%,color-mix(in srgb,var(--cmag) 10%,transparent),transparent 72%),var(--bg);
+background-attachment:fixed;position:fixed;inset:0;z-index:600;overflow-y:auto}
+#cliPage::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+background-image:radial-gradient(rgba(255,255,255,.05) 1px,transparent 1.4px);background-size:22px 22px;opacity:.5}
+[data-theme="light"] #cliPage::before{background-image:radial-gradient(rgba(15,23,42,.05) 1px,transparent 1.4px)}
+#cliPage>*{position:relative;z-index:1}
+.cli-display{font-family:'Space Grotesk',ui-monospace,monospace;letter-spacing:-.02em}
+.cli-head{display:flex;align-items:center;gap:10px;padding:14px 2px 6px}
+.cli-back{width:38px;height:38px;flex-shrink:0;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:1.05rem;display:flex;align-items:center;justify-content:center;transition:transform .12s}
+.cli-back:active{transform:scale(.9)}
+.cli-head h1{font-family:'Space Grotesk',sans-serif;font-size:1.18rem;font-weight:700;margin:0;letter-spacing:-.02em;flex:1;min-width:0}
+.cli-live{display:inline-flex;align-items:center;gap:5px;font-size:.6rem;font-weight:700;color:var(--cg);letter-spacing:.06em;text-transform:uppercase}
+.cli-live i{width:6px;height:6px;border-radius:50%;background:var(--cg);animation:cliPulse 1.8s infinite}
+@keyframes cliPulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,.5)}70%{box-shadow:0 0 0 6px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
+.cli-rbtn{width:38px;height:38px;flex-shrink:0;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.cli-rbtn:hover{border-color:var(--cg);color:var(--cg)}
+.cli-rbtn:active{transform:scale(.9)}
+.cli-rbtn.spinning svg{animation:cliSpin .8s linear infinite}
+@keyframes cliSpin{to{transform:rotate(360deg)}}
+/* hero stats */
+.cli-hero{border-radius:22px;padding:16px 16px 14px;margin:12px 0;
+background:linear-gradient(150deg,color-mix(in srgb,var(--cblue) 18%,var(--card)),var(--card) 60%,color-mix(in srgb,var(--cmag) 10%,var(--card)));
+border:1px solid color-mix(in srgb,var(--cblue) 26%,var(--border));
+box-shadow:0 18px 50px -28px color-mix(in srgb,var(--cblue) 60%,transparent);animation:cliIn .45s ease both}
+@keyframes cliIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.cli-hero-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.cli-stat{text-align:center}
+.cli-stat .v{font-family:'Space Grotesk',monospace;font-size:1.5rem;font-weight:700;line-height:1}
+.cli-stat .v.green{color:var(--cg)}
+.cli-stat .v.blue{color:var(--cblue)}
+.cli-stat .k{font-size:.56rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-top:4px}
+.cli-stat .flag{font-size:1.4rem}
+.cli-toprow{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:12px}
+.cli-chip{display:inline-flex;align-items:center;gap:5px;font-size:.66rem;font-weight:700;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:3px 10px}
+.cli-chip .n{color:var(--muted);font-family:'Space Grotesk',monospace}
+/* search */
+.cli-search{position:relative;margin:0 0 12px}
+.cli-search svg{position:absolute;left:13px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:var(--muted)}
+.cli-search input{width:100%;box-sizing:border-box;padding:12px 14px 12px 38px;border-radius:13px;border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;font-size:.86rem;outline:none;transition:border-color .15s,box-shadow .15s}
+.cli-search input:focus{border-color:var(--cblue);box-shadow:0 0 0 3px color-mix(in srgb,var(--cblue) 12%,transparent)}
+/* list */
+.cli-list{display:flex;flex-direction:column;gap:8px}
+.cli-row{background:var(--card);border:1px solid var(--border);border-radius:15px;overflow:hidden;transition:border-color .15s,box-shadow .15s;animation:cliIn .35s ease both}
+.cli-row:hover{border-color:color-mix(in srgb,var(--cblue) 40%,var(--border));box-shadow:0 10px 26px -16px rgba(0,0,0,.35)}
+.cli-row.open{border-color:color-mix(in srgb,var(--cblue) 55%,var(--border))}
+.cli-row-top{display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:11px;padding:13px 14px;cursor:pointer}
+.cli-rank{width:24px;height:24px;flex-shrink:0;border-radius:8px;display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',monospace;font-size:.72rem;font-weight:700;color:var(--muted);background:var(--surface);border:1px solid var(--border)}
+.cli-row:nth-child(1) .cli-rank{color:#06080F;background:linear-gradient(135deg,var(--cgold),#f59e0b);border-color:transparent}
+.cli-row:nth-child(2) .cli-rank{color:#06080F;background:linear-gradient(135deg,#cbd5e1,#94a3b8);border-color:transparent}
+.cli-row:nth-child(3) .cli-rank{color:#fff;background:linear-gradient(135deg,#d97706,#b45309);border-color:transparent}
+.cli-main{min-width:0}
+.cli-name{font-size:.9rem;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cli-meta{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:4px}
+.cli-flags{display:inline-flex;gap:2px;font-size:.95rem;line-height:1}
+.cli-flag-more{font-size:.6rem;font-weight:700;color:var(--muted)}
+.cli-dot{color:var(--muted)}
+.cli-time{font-size:.62rem;font-weight:700;color:var(--cg);white-space:nowrap}
+.cli-count-box{text-align:right;flex-shrink:0}
+.cli-count{font-family:'Space Grotesk',monospace;font-size:1.15rem;font-weight:700;color:var(--cg);line-height:1}
+.cli-count-lbl{font-size:.52rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-top:2px}
+.cli-chev{color:var(--muted);font-size:.8rem;transition:transform .2s;flex-shrink:0}
+.cli-row.open .cli-chev{transform:rotate(180deg);color:var(--cblue)}
+.cli-expand{display:none;padding:0 14px 13px;border-top:1px solid var(--border);background:color-mix(in srgb,var(--cblue) 4%,var(--card))}
+.cli-row.open .cli-expand{display:block;animation:cliExp .25s ease both}
+@keyframes cliExp{from{opacity:0}to{opacity:1}}
+.cli-sample{position:relative;padding:9px 11px 9px 13px;margin-top:9px;border-radius:10px;background:var(--surface);border:1px solid var(--border);font-size:.74rem;line-height:1.5;color:var(--text);word-break:break-word}
+.cli-sample::before{content:'';position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:3px;background:var(--cblue)}
+.cli-sample-t{display:inline-block;font-family:'Space Grotesk',monospace;font-size:.6rem;font-weight:700;color:var(--cblue);background:color-mix(in srgb,var(--cblue) 12%,transparent);border-radius:6px;padding:1px 7px;margin-right:7px}
+.cli-empty{text-align:center;padding:34px 18px;color:var(--muted);font-size:.84rem;line-height:1.6}
+/* admin creds */
+.cli-admin{margin-top:16px;border:1px dashed color-mix(in srgb,var(--cmag) 40%,var(--border));border-radius:18px;padding:16px;background:color-mix(in srgb,var(--cmag) 5%,var(--card))}
+.cli-admin h2{font-family:'Space Grotesk',sans-serif;font-size:.92rem;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+.cli-field{margin-bottom:10px}
+.cli-field label{display:block;font-size:.6rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+.cli-field input{width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;font-size:.84rem;outline:none}
+.cli-field input:focus{border-color:var(--cmag)}
+.cli-savebtn{width:100%;border:0;border-radius:11px;padding:12px;font:inherit;font-size:.84rem;font-weight:700;cursor:pointer;color:#06080F;background:linear-gradient(135deg,var(--cmag),#a855f7);transition:transform .12s}
+.cli-savebtn:active{transform:scale(.97)}
+.cli-msg{font-size:.72rem;font-weight:700;margin-top:8px;text-align:center}
+.cli-note{font-size:.62rem;color:var(--muted);line-height:1.5;margin-top:8px;text-align:center}
+@media(max-width:380px){.cli-stat .v{font-size:1.25rem}.cli-name{font-size:.84rem}}
+</style>
 
+<div id="cliPage" style="display:none">
+<div style="max-width:620px;margin:0 auto;padding:0 14px 90px">
+
+  <div class="cli-head">
+    <button class="cli-back" onclick="closeCliPage()">←</button>
+    <h1>CLI Insights</h1>
+    <span class="cli-live"><i></i>Live</span>
+    <button class="cli-rbtn" id="cliRefreshBtn" onclick="cliDoRefresh()" title="Refresh now">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="width:16px;height:16px"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+    </button>
+  </div>
+
+  <div class="cli-hero">
+    <div class="cli-hero-grid">
+      <div class="cli-stat"><div class="v green cli-display" id="cliStatSms">0</div><div class="k">SMS today</div></div>
+      <div class="cli-stat"><div class="v blue cli-display" id="cliStatApps">0</div><div class="k">Apps (CLI)</div></div>
+      <div class="cli-stat"><div class="v"><span class="flag" id="cliStatTopFlag">—</span></div><div class="k" id="cliStatTopName">Top country</div></div>
+    </div>
+    <div class="cli-toprow" id="cliTopCountries"></div>
+  </div>
+
+  <div class="cli-search">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
+    <input type="text" id="cliSearch" placeholder="Search app / CLI / country…" oninput="cliRenderList()" autocomplete="off">
+  </div>
+
+  <div class="cli-list" id="cliList"><div class="cli-empty">Loading CLI data…</div></div>
+
+  <div class="cli-admin" id="cliAdminCreds" style="display:none">
+    <h2>⚙️ Analysis panel login (super admin)</h2>
+    <div class="cli-field"><label>Panel username</label><input type="text" id="cliCredUser" placeholder="e.g. Haider786"></div>
+    <div class="cli-field"><label>Panel password</label><input type="password" id="cliCredPass" placeholder="••••••••  leave blank to keep current"></div>
+    <button class="cli-savebtn" onclick="cliSaveCreds()">Save credentials</button>
+    <div class="cli-msg" id="cliCredMsg" style="display:none"></div>
+    <div class="cli-note">These credentials are for the SECOND high‑volume LaMix panel only. They are used server‑side to read CDR Statistics. Password is stored so the server can log in — keep this page super‑admin only.</div>
+  </div>
+
+</div>
+</div>
