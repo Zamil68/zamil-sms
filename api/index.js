@@ -2163,6 +2163,89 @@ if (url === '/admin/withdraw/settings' && req.method === 'POST') {
   } catch (e) { return error(res, 500, 'settings: ' + e.message); }
 }
 
+    // ═══ WITHDRAWAL SYSTEM ═══
+async function getWdSettings(){
+  const def={enabled:true,disabled_message:'',pkr_rate:285,min_withdraw_usd:2,crypto_fee_usd:1};
+  if(!supaEnabled())return def;
+  try{const r=await fetch(`${SUPABASE_URL}/rest/v1/withdrawal_settings?id=eq.1&select=*`,{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY}});const rows=await r.json();return(Array.isArray(rows)&&rows[0])?Object.assign(def,rows[0]):def;}catch(e){return def;}
+}
+async function getUserEarnings(username){
+  const cfg=await getEarnSettings();const win=_earnWindow(cfg);const rows=await getCachedCDR(win.from,win.to,CDR_TTL_WIDE);
+  const rc=await loadRateMap(false);const t1=(username||'').toLowerCase().trim();let total=0;
+  (rows||[]).forEach(r=>{const c=(r.client||'').toLowerCase().trim();if(!c||(c!==t1&&!c.includes(t1)&&!t1.includes(c)))return;const rt=rc.map.get(norm(r.range));if(!rt)return;total+=rt*0.7;});
+  return Math.round(total*10000)/10000;
+}
+async function getUserWithdrawn(username){
+  if(!supaEnabled())return 0;
+  try{const r=await fetch(`${SUPABASE_URL}/rest/v1/withdrawals?username=eq.${encodeURIComponent(username)}&status=in.(approved,pending)&select=amount_usd`,{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY}});const rows=await r.json();return Array.isArray(rows)?rows.reduce((s,x)=>s+(parseFloat(x.amount_usd)||0),0):0;}catch(e){return 0;}
+}
+if(url==='/withdraw/balance'&&req.method==='POST'){try{
+  const user=getUserFromSession(req.body.session);if(!user)return error(res,401,'Unauthorized');
+  const s=await getWdSettings();const earned=await getUserEarnings(user.username);const withdrawn=await getUserWithdrawn(user.username);
+  const avail=Math.max(0,Math.round((earned-withdrawn)*10000)/10000);const rate=s.pkr_rate||285;
+  return ok(res,{totalEarnings:earned,totalWithdrawn:withdrawn,available:avail,availablePkr:Math.round(avail*rate),pkrRate:rate,minWithdraw:s.min_withdraw_usd||2,cryptoFee:s.crypto_fee_usd||1,enabled:s.enabled,disabledMessage:s.disabled_message||'',canWithdraw:s.enabled&&avail>=(s.min_withdraw_usd||2)});
+}catch(e){return error(res,500,'balance: '+e.message);}}
+if(url==='/withdraw/submit'&&req.method==='POST'){try{
+  const user=getUserFromSession(req.body.session);if(!user)return error(res,401,'Unauthorized');
+  const s=await getWdSettings();if(!s.enabled)return error(res,400,s.disabled_message||'Withdrawals disabled.');
+  const earned=await getUserEarnings(user.username);const withdrawn=await getUserWithdrawn(user.username);
+  const avail=Math.max(0,earned-withdrawn);const amt=parseFloat(req.body.amountUsd)||0;const minW=s.min_withdraw_usd||2;
+  if(amt<minW)return error(res,400,'Minimum $'+minW+'.');if(amt>avail)return error(res,400,'Insufficient. Available: $'+avail.toFixed(4));
+  const method=String(req.body.method||'');const isCrypto=method==='crypto';let fee=0;
+  if(isCrypto){fee=s.crypto_fee_usd||1;if((amt+fee)>avail)return error(res,400,'Amount+fee exceeds balance. Max: $'+(avail-fee).toFixed(4));}
+  const rate=s.pkr_rate||285;
+  const row={username:user.username,amount_usd:amt,amount_pkr:Math.round(amt*rate),method,bank_name:String(req.body.bankName||''),account_number:String(req.body.accountNumber||''),account_holder:String(req.body.accountHolder||''),note:String(req.body.note||''),crypto_platform:String(req.body.cryptoPlatform||''),crypto_uid:String(req.body.cryptoUid||''),crypto_address:String(req.body.cryptoAddress||''),crypto_chain:String(req.body.cryptoChain||''),crypto_fee_usd:fee,status:'pending'};
+  if(!supaEnabled())return error(res,400,'Storage not configured.');
+  await fetch(`${SUPABASE_URL}/rest/v1/withdrawals`,{method:'POST',headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify(row)});
+  if(req.body.saveMethod)await fetch(`${SUPABASE_URL}/rest/v1/user_payment_methods`,{method:'POST',headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({username:user.username,method,bank_name:row.bank_name,account_number:row.account_number,account_holder:row.account_holder,crypto_platform:row.crypto_platform,crypto_uid:row.crypto_uid,crypto_address:row.crypto_address,crypto_chain:row.crypto_chain,is_default:true})});
+  return ok(res,{message:'Submitted!'});
+}catch(e){return error(res,500,'submit: '+e.message);}}
+if(url==='/withdraw/history'&&req.method==='POST'){try{
+  const user=getUserFromSession(req.body.session);if(!user)return error(res,401,'Unauthorized');
+  if(!supaEnabled())return ok(res,{withdrawals:[]});
+  const r=await fetch(`${SUPABASE_URL}/rest/v1/withdrawals?username=eq.${encodeURIComponent(user.username)}&order=created_at.desc&limit=50&select=*`,{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY}});
+  return ok(res,{withdrawals:Array.isArray(await r.json())?await r.json():[]});
+}catch(e){return ok(res,{withdrawals:[]});}}
+if(url==='/withdraw/recent'&&req.method==='POST'){try{
+  if(!supaEnabled())return ok(res,{recent:[]});
+  const r=await fetch(`${SUPABASE_URL}/rest/v1/withdrawals?status=eq.approved&order=processed_at.desc&limit=10&select=username,amount_usd,amount_pkr,method,processed_at`,{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY}});
+  return ok(res,{recent:Array.isArray(await r.json())?await r.json():[]});
+}catch(e){return ok(res,{recent:[]});}}
+if(url==='/withdraw/methods'&&req.method==='POST'){try{
+  const user=getUserFromSession(req.body.session);if(!user)return error(res,401,'Unauthorized');
+  if(!supaEnabled())return ok(res,{methods:[]});
+  const r=await fetch(`${SUPABASE_URL}/rest/v1/user_payment_methods?username=eq.${encodeURIComponent(user.username)}&order=created_at.desc&limit=5&select=*`,{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY}});
+  return ok(res,{methods:Array.isArray(await r.json())?await r.json():[]});
+}catch(e){return ok(res,{methods:[]});}}
+if(url==='/admin/withdraw/requests'&&req.method==='POST'){try{
+  const user=getUserFromSession(req.body.session);if(!user)return error(res,401,'Unauthorized');
+  if(!isAdminish(await getRole(user.username)))return error(res,403,'Admins only');
+  if(!supaEnabled())return ok(res,{requests:[]});
+  const r=await fetch(`${SUPABASE_URL}/rest/v1/withdrawals?status=eq.pending&order=created_at.desc&limit=100&select=*`,{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY}});
+  return ok(res,{requests:Array.isArray(await r.json())?await r.json():[]});
+}catch(e){return ok(res,{requests:[]});}}
+if(url==='/admin/withdraw/approve'&&req.method==='POST'){try{
+  const user=getUserFromSession(req.body.session);if(!user)return error(res,401,'Unauthorized');
+  if(!isAdminish(await getRole(user.username)))return error(res,403,'Admins only');
+  if(!supaEnabled())return error(res,400,'Supabase required.');
+  await fetch(`${SUPABASE_URL}/rest/v1/withdrawals`,{method:'PATCH',headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({id:req.body.id,status:'approved',admin_message:String(req.body.message||''),processed_by:user.username,processed_at:new Date().toISOString()})});
+  return ok(res,{message:'Approved!'});
+}catch(e){return error(res,500,'approve: '+e.message);}}
+if(url==='/admin/withdraw/reject'&&req.method==='POST'){try{
+  const user=getUserFromSession(req.body.session);if(!user)return error(res,401,'Unauthorized');
+  if(!isAdminish(await getRole(user.username)))return error(res,403,'Admins only');
+  if(!supaEnabled())return error(res,400,'Supabase required.');
+  await fetch(`${SUPABASE_URL}/rest/v1/withdrawals`,{method:'PATCH',headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({id:req.body.id,status:'rejected',admin_message:String(req.body.message||'Rejected'),processed_by:user.username,processed_at:new Date().toISOString()})});
+  return ok(res,{message:'Rejected.'});
+}catch(e){return error(res,500,'reject: '+e.message);}}
+if(url==='/admin/withdraw/settings'&&req.method==='POST'){try{
+  const user=getUserFromSession(req.body.session);if(!user)return error(res,401,'Unauthorized');
+  if((await getRole(user.username))!=='super')return error(res,403,'Super admin only');
+  if(!supaEnabled())return error(res,400,'Supabase required.');
+  await fetch(`${SUPABASE_URL}/rest/v1/withdrawal_settings`,{method:'POST',headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({id:1,enabled:req.body.enabled!==undefined?!!req.body.enabled:true,disabled_message:String(req.body.disabledMessage||''),pkr_rate:parseFloat(req.body.pkrRate)||285,min_withdraw_usd:parseFloat(req.body.minWithdraw)||2,crypto_fee_usd:parseFloat(req.body.cryptoFee)||1,updated_by:user.username,updated_at:new Date().toISOString()})});
+  return ok(res,{message:'Settings saved'});
+}catch(e){return error(res,500,'settings: '+e.message);}}
+
     return error(res, 404, 'Route not found');
   } catch (err) {
     console.error('API Error:', err.message);
