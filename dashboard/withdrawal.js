@@ -61,7 +61,7 @@ function loadHistory(){
       var ml=w.method==='crypto'?'Crypto ('+esc(w.crypto_chain||'USDT')+')':esc(w.method);
       var h='<div class="wd-hist-card '+esc(w.status)+'"><div class="wd-hist-top"><span class="wd-hist-amt">$'+(w.amount_usd||0).toFixed(4)+'</span><span class="wd-hist-status '+esc(w.status)+'">'+esc(w.status)+'</span></div>';
       h+='<div class="wd-hist-meta">'+ml+' · Rs '+(w.amount_pkr||0).toLocaleString()+' · '+dt+'</div>';
-      if(w.admin_message) h+='<div class="wd-hist-msg '+esc(w.status)+'">'+(w.status==='approved'?'✅ ':'❌ ')+esc(w.admin_message)+'</div>';
+      if(w.admin_message) h+='<div class="wd-hist-msg '+esc(w.status)+'">'+esc(w.admin_message)+'</div>';
       return h+'</div>';
     }).join('');
   });
@@ -152,6 +152,14 @@ function wdShowSuccess(t,b){
   var bo=document.getElementById('wdSuccessBody');if(bo)bo.textContent=b;
   var ov=document.getElementById('wdSuccessOverlay');if(ov)ov.classList.add('show');
 }
+
+  window.wdRefreshBalance=function(){
+  var btn=document.querySelector('.wd-refresh-btn');
+  if(btn){btn.classList.add('spinning');setTimeout(function(){btn.classList.remove('spinning');},900);}
+  loadBalance();
+  loadHistory();
+  loadRecent();
+};
 window.wdCloseSuccess=function(){var ov=document.getElementById('wdSuccessOverlay');if(ov)ov.classList.remove('show');};
 
 /* ═══ ADMIN ═══ */
@@ -191,7 +199,7 @@ function loadAdminRequests(){
         :'<div class="wd-admin-detail"><b>Method:</b> '+esc(w.method)+(w.bank_name?'<br><b>Bank:</b> '+esc(w.bank_name):'')+'<br><b>Account:</b> '+esc(w.account_number)+'<br><b>Holder:</b> '+esc(w.account_holder)+'</div>';
       return '<div class="wd-admin-card"><div class="wd-admin-top"><div class="wd-admin-user">'+esc(w.username)+'</div><div class="wd-admin-amt">$'+(w.amount_usd||0).toFixed(4)+' <span style="color:var(--muted);font-size:.68rem">≈Rs '+(w.amount_pkr||0).toLocaleString()+'</span></div><div class="wd-admin-time">'+dt+'</div></div>'
         +det+(w.note?'<div style="font-size:.7rem;color:var(--muted);font-style:italic;margin-bottom:6px">📝 '+esc(w.note)+'</div>':'')
-        +'<div class="wd-admin-actions"><button class="wd-admin-btn approve" onclick="wdAction('+w.id+',\'approve\',this)">✅ Approve</button><button class="wd-admin-btn reject" onclick="wdAction('+w.id+',\'reject\',this)">❌ Reject</button><button class="wd-admin-btn copy" onclick="wdCopy('+w.id+')">📋 Copy</button></div>'
+        +'<div class="wd-admin-actions"><button class="wd-admin-btn approve" onclick="wdAction('+w.id+',\'approve\',this)">Approve</button><button class="wd-admin-btn reject" onclick="wdAction('+w.id+',\'reject\',this)">Reject</button><button class="wd-admin-btn copy" onclick="wdCopy('+w.id+')">Copy</button></div>'
         +'<div class="wd-admin-msg-row" id="wdMsg_'+w.id+'" style="display:none"><input class="wd-admin-msg-input" id="wdMsgInp_'+w.id+'" placeholder="Message to user…"></div></div>';
     }).join('');
   });
@@ -222,7 +230,7 @@ window.wdCopy=function(id){
   var t='User: '+r.username+'\nAmount: $'+r.amount_usd+' (Rs '+r.amount_pkr+')\n';
   if(r.method==='crypto')t+='Platform: '+r.crypto_platform+'\nUID: '+r.crypto_uid+'\nAddress: '+r.crypto_address+'\nChain: '+r.crypto_chain;
   else t+='Method: '+r.method+(r.bank_name?'\nBank: '+r.bank_name:'')+'\nAccount: '+r.account_number+'\nHolder: '+r.account_holder;
-  if(navigator.clipboard)navigator.clipboard.writeText(t).then(function(){alert('📋 Copied!');});
+  if(navigator.clipboard)navigator.clipboard.writeText(t).then(function(){alert('Copied to clipboard');});
 };
 setInterval(function(){var p=document.getElementById('wdPage');if(p&&p.style.display!=='none'&&!document.hidden)loadBalance();},30000);
 })();
