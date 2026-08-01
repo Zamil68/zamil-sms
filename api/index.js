@@ -1922,7 +1922,7 @@ if (url === '/admin/save-range-deductions' && req.method === 'POST') {
 }
     
 // ═══════════════════════════════════════════════════════════
-// 💸 WITHDRAWAL SYSTEM (CLEAN & FINAL)
+// 💸 WITHDRAWAL SYSTEM (CLEAN & FINAL — v2 PATCH FIX)
 // ═══════════════════════════════════════════════════════════
 async function getWdSettings() {
   const def = { enabled: true, disabled_message: '', pkr_rate: 285, min_withdraw_usd: 2, crypto_fee_usd: 1, usdt_rate: 285 };
@@ -1959,6 +1959,7 @@ async function getUserWithdrawn(username) {
   } catch (e) { return 0; }
 }
 
+// ── USER: Balance ──
 if (url === '/withdraw/balance' && req.method === 'POST') {
   try {
     const user = getUserFromSession(req.body.session);
@@ -1993,6 +1994,7 @@ if (url === '/withdraw/balance' && req.method === 'POST') {
   } catch (e) { return error(res, 500, 'balance: ' + e.message); }
 }
 
+// ── USER: Submit withdrawal ──
 if (url === '/withdraw/submit' && req.method === 'POST') {
   try {
     const user = getUserFromSession(req.body.session);
@@ -2041,6 +2043,7 @@ if (url === '/withdraw/submit' && req.method === 'POST') {
   } catch (e) { return error(res, 500, 'submit: ' + e.message); }
 }
 
+// ── USER: History ──
 if (url === '/withdraw/history' && req.method === 'POST') {
   try {
     const user = getUserFromSession(req.body.session);
@@ -2052,6 +2055,7 @@ if (url === '/withdraw/history' && req.method === 'POST') {
   } catch (e) { return ok(res, { withdrawals: [] }); }
 }
 
+// ── PUBLIC: Recent approved ──
 if (url === '/withdraw/recent' && req.method === 'POST') {
   try {
     if (!supaEnabled()) return ok(res, { recent: [] });
@@ -2061,6 +2065,7 @@ if (url === '/withdraw/recent' && req.method === 'POST') {
   } catch (e) { return ok(res, { recent: [] }); }
 }
 
+// ── USER: Saved payment methods ──
 if (url === '/withdraw/methods' && req.method === 'POST') {
   try {
     const user = getUserFromSession(req.body.session);
@@ -2072,6 +2077,7 @@ if (url === '/withdraw/methods' && req.method === 'POST') {
   } catch (e) { return ok(res, { methods: [] }); }
 }
 
+// ── ADMIN: List requests by status ──
 if (url === '/admin/withdraw/requests' && req.method === 'POST') {
   try {
     const user = getUserFromSession(req.body.session);
@@ -2085,40 +2091,49 @@ if (url === '/admin/withdraw/requests' && req.method === 'POST') {
   } catch (e) { return ok(res, { requests: [] }); }
 }
 
+// ── ADMIN: Approve ── (🔥 FIXED: id goes in URL filter, NOT body)
 if (url === '/admin/withdraw/approve' && req.method === 'POST') {
   try {
     const user = getUserFromSession(req.body.session);
     if (!user) return error(res, 401, 'Unauthorized');
     if (!isAdminish(await getRole(user.username))) return error(res, 403, 'Admins only');
     if (!supaEnabled()) return error(res, 400, 'Supabase required.');
-    const id = req.body.id;
-    if (!id) return error(res, 400, 'ID required.');
-    await fetch(`${SUPABASE_URL}/rest/v1/withdrawals`, {
+    const id = parseInt(req.body.id);
+    if (!id || isNaN(id)) return error(res, 400, 'Valid numeric ID required.');
+    const cr = await fetch(`${SUPABASE_URL}/rest/v1/withdrawals?id=eq.${id}`, {
       method: 'PATCH',
-      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ id: parseInt(id), status: 'approved', admin_message: String(req.body.message || 'Payment sent. Thank you!'), processed_by: user.username, processed_at: new Date().toISOString() })
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+      body: JSON.stringify({ status: 'approved', admin_message: String(req.body.message || 'Payment sent. Thank you!'), processed_by: user.username, processed_at: new Date().toISOString() })
     });
-    return ok(res, { message: 'Approved!' });
+    const updated = await cr.json();
+    if (!cr.ok) return error(res, 500, 'DB update failed: HTTP ' + cr.status + ' ' + JSON.stringify(updated).slice(0, 200));
+    if (!Array.isArray(updated) || updated.length === 0) return error(res, 404, 'Withdrawal #' + id + ' not found.');
+    return ok(res, { message: 'Approved!', updated: updated.length });
   } catch (e) { return error(res, 500, 'approve: ' + e.message); }
 }
 
+// ── ADMIN: Reject ── (🔥 FIXED: same URL filter fix)
 if (url === '/admin/withdraw/reject' && req.method === 'POST') {
   try {
     const user = getUserFromSession(req.body.session);
     if (!user) return error(res, 401, 'Unauthorized');
     if (!isAdminish(await getRole(user.username))) return error(res, 403, 'Admins only');
     if (!supaEnabled()) return error(res, 400, 'Supabase required.');
-    const id = req.body.id;
-    if (!id) return error(res, 400, 'ID required.');
-    await fetch(`${SUPABASE_URL}/rest/v1/withdrawals`, {
+    const id = parseInt(req.body.id);
+    if (!id || isNaN(id)) return error(res, 400, 'Valid numeric ID required.');
+    const cr = await fetch(`${SUPABASE_URL}/rest/v1/withdrawals?id=eq.${id}`, {
       method: 'PATCH',
-      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ id: parseInt(id), status: 'rejected', admin_message: String(req.body.message || 'Rejected'), processed_by: user.username, processed_at: new Date().toISOString() })
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+      body: JSON.stringify({ status: 'rejected', admin_message: String(req.body.message || 'Rejected'), processed_by: user.username, processed_at: new Date().toISOString() })
     });
-    return ok(res, { message: 'Rejected.' });
+    const updated = await cr.json();
+    if (!cr.ok) return error(res, 500, 'DB update failed: HTTP ' + cr.status + ' ' + JSON.stringify(updated).slice(0, 200));
+    if (!Array.isArray(updated) || updated.length === 0) return error(res, 404, 'Withdrawal #' + id + ' not found.');
+    return ok(res, { message: 'Rejected.', updated: updated.length });
   } catch (e) { return error(res, 500, 'reject: ' + e.message); }
 }
 
+// ── SUPER: Withdrawal settings ──
 if (url === '/admin/withdraw/settings' && req.method === 'POST') {
   try {
     const user = getUserFromSession(req.body.session);
