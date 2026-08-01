@@ -22,11 +22,18 @@ background-image:radial-gradient(rgba(255,255,255,.05) 1px,transparent 1.4px);ba
 background:linear-gradient(150deg,color-mix(in srgb,var(--wg) 22%,var(--card)) 0%,var(--card) 55%,color-mix(in srgb,var(--wgold) 12%,var(--card)) 100%);
 border:1px solid color-mix(in srgb,var(--wg) 28%,var(--border));
 box-shadow:0 22px 60px -28px color-mix(in srgb,var(--wg) 60%,transparent);
-transition:transform .18s,box-shadow .18s}
+transition:transform .18s,box-shadow .18s
+animation:wdHeroIn .5s cubic-bezier(.2,.8,.2,1) both}
 .wd-hero:hover{transform:translateY(-2px);box-shadow:0 28px 70px -26px color-mix(in srgb,var(--wg) 70%,transparent)}
 .wd-hero-glow{position:absolute;inset:-40% -10% auto auto;width:220px;height:220px;border-radius:50%;
 background:radial-gradient(circle,color-mix(in srgb,var(--wgold) 30%,transparent),transparent 65%);filter:blur(6px);opacity:.5;pointer-events:none;animation:wdGlow 7s ease-in-out infinite}
+@keyframes wdHeroIn{from{opacity:0;transform:translateY(16px) scale(.98)}to{opacity:1;transform:none}}
 @keyframes wdGlow{0%,100%{transform:translate(0,0) scale(1);opacity:.4}50%{transform:translate(-10px,8px) scale(1.1);opacity:.65}}
+.wd-refresh-btn{width:28px;height:28px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.wd-refresh-btn:hover{border-color:var(--wg);color:var(--wg);transform:rotate(90deg)}
+.wd-refresh-btn:active{transform:rotate(90deg) scale(.9)}
+.wd-refresh-btn.spinning svg{animation:wdSpin .8s linear infinite}
+@keyframes wdSpin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
 .wd-hero-label{font-size:.6rem;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
 .wd-hero-amount{font-family:'Space Grotesk',monospace;font-size:3rem;font-weight:700;letter-spacing:-.03em;line-height:1;
 background:linear-gradient(120deg,var(--wg),var(--wgold));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
@@ -42,10 +49,13 @@ background:linear-gradient(120deg,var(--wg),var(--wgold));-webkit-background-cli
 /* Disabled */
 .wd-disabled{background:color-mix(in srgb,var(--wred) 8%,transparent);border:1px solid color-mix(in srgb,var(--wred) 25%,transparent);border-radius:14px;padding:14px 18px;text-align:center;margin:12px 0;color:var(--wred);font-weight:700;font-size:.82rem}
 /* Cards */
-.wd-card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:20px;margin-bottom:14px;transition:transform .14s,box-shadow .14s}
+.wd-card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:20px;margin-bottom:14px;
+transition:transform .14s,box-shadow .14s;animation:wdCardIn .4s ease both}
+.wd-card:nth-child(2){animation-delay:.05s}
+.wd-card:nth-child(3){animation-delay:.1s}
+.wd-card:nth-child(4){animation-delay:.15s}
+@keyframes wdCardIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
 .wd-card:hover{box-shadow:0 12px 30px -16px rgba(0,0,0,.3)}
-.wd-card-title{font-family:'Space Grotesk',sans-serif;font-size:.92rem;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px}
-.wd-card-title .pill{margin-left:auto;font-size:.62rem;font-weight:700;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:3px 10px}
 /* Fields */
 .wd-field{margin-bottom:12px}
 .wd-field label{display:block;font-size:.62rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
@@ -115,13 +125,19 @@ transition:transform .12s,box-shadow .2s,opacity .15s}
 /* Success overlay */
 .wd-overlay{position:fixed;inset:0;z-index:950;background:rgba(6,8,15,.66);backdrop-filter:blur(10px);display:none;align-items:center;justify-content:center;padding:18px}
 .wd-overlay.show{display:flex}
-.wd-overlay-card{width:100%;max-width:360px;border-radius:24px;padding:28px 24px;text-align:center;position:relative;
-background:linear-gradient(160deg,color-mix(in srgb,var(--wg) 18%,var(--card)),var(--card));
+.wd-overlay-card{width:100%;max-width:360px;border-radius:24px;padding:36px 28px;text-align:center;position:relative;
+background:var(--card);
 border:1px solid color-mix(in srgb,var(--wg) 30%,var(--border));
-box-shadow:0 30px 80px -20px rgba(0,0,0,.6);animation:wdPop .35s cubic-bezier(.2,1.2,.3,1) both}
+box-shadow:0 32px 80px -20px rgba(0,0,0,.7),0 0 60px -20px color-mix(in srgb,var(--wg) 30%,transparent);
+animation:wdPop .4s cubic-bezier(.2,1.2,.3,1) both}
 @keyframes wdPop{from{opacity:0;transform:scale(.9) translateY(12px)}to{opacity:1;transform:none}}
-.wd-overlay-logo{height:30px;margin:0 auto 14px;display:block}
-.wd-overlay-icon{font-size:2.6rem;margin-bottom:10px}
+.wd-overlay-icon{width:60px;height:60px;margin:0 auto 16px;border-radius:50%;
+background:color-mix(in srgb,var(--wg) 15%,var(--surface));
+border:2px solid color-mix(in srgb,var(--wg) 30%,transparent);
+display:flex;align-items:center;justify-content:center;
+animation:wdIconPop .5s cubic-bezier(.2,1.4,.3,1) .15s both}
+@keyframes wdIconPop{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
+.wd-overlay-icon svg{width:28px;height:28px;color:var(--wg)}
 .wd-overlay-title{font-family:'Space Grotesk',sans-serif;font-size:1.05rem;font-weight:700;margin-bottom:8px}
 .wd-overlay-body{font-size:.8rem;color:var(--muted);line-height:1.5;margin-bottom:18px}
 .wd-overlay-btn{border:0;border-radius:12px;padding:11px 22px;font:inherit;font-weight:700;cursor:pointer;color:#06080F;background:linear-gradient(135deg,var(--wg),#059669)}
@@ -145,7 +161,7 @@ box-shadow:0 30px 80px -20px rgba(0,0,0,.6);animation:wdPop .35s cubic-bezier(.2
 <!-- Hero -->
 <div class="wd-hero">
 <div class="wd-hero-glow"></div>
-<div class="wd-hero-label">Available Balance</div>
+<div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:8px"> <div class="wd-hero-label" style="margin-bottom:0">Available Balance</div> <button class="wd-refresh-btn" onclick="wdRefreshBalance()" title="Refresh balance"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="width:14px;height:14px"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg></button> </div>
 <div class="wd-hero-amount wd-display" id="wdBalance">$0.00</div>
 <div class="wd-hero-pkr" id="wdBalancePkr">≈ Rs 0</div>
 <div class="wd-hero-stats">
@@ -158,7 +174,7 @@ box-shadow:0 30px 80px -20px rgba(0,0,0,.6);animation:wdPop .35s cubic-bezier(.2
 
 <!-- Form -->
 <div class="wd-card">
-<div class="wd-card-title">📤 New Withdrawal</div>
+<div class="wd-card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:18px;height:18px;color:var(--wg)"><path d="M12 19V5m-7 7l7-7 7 7"/></svg> New Withdrawal</div>
 <div class="wd-field">
 <label>Amount (USD)</label>
 <input type="number" id="wdAmount" step="0.01" min="0" placeholder="0.00" oninput="wdCalcPkr()">
@@ -214,19 +230,19 @@ box-shadow:0 30px 80px -20px rgba(0,0,0,.6);animation:wdPop .35s cubic-bezier(.2
 
 <!-- History -->
 <div class="wd-card">
-<div class="wd-card-title">📋 History <span class="pill" id="wdHistCount">0</span></div>
+<div class="wd-card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:18px;height:18px;color:var(--wgold)"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> History <span class="pill" id="wdHistCount">0</span></div>
 <div id="wdHistory"><div style="text-align:center;padding:20px;color:var(--muted);font-size:.8rem">No withdrawals yet</div></div>
 </div>
 
 <!-- Recent -->
 <div class="wd-card">
-<div class="wd-card-title">🌐 Recent Withdrawals</div>
+<div class="wd-card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:18px;height:18px;color:var(--wblue)"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg> Recent Withdrawals</div>
 <div id="wdRecentList"><div style="text-align:center;padding:14px;color:var(--muted);font-size:.76rem">Loading…</div></div>
 </div>
 
 <!-- Admin -->
 <div class="wd-admin" id="wdAdminSection" style="display:none">
-<h2>⚙️ Withdrawal Settings</h2>
+<h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:16px;height:16px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg> Withdrawal Settings</h2>
 <div class="wd-set-row">
 <label>USDT/PKR Rate</label><input class="wd-set-inp" id="wdSetRate" type="number" step="1" placeholder="285">
 <label>Min $</label><input class="wd-set-inp" id="wdSetMin" type="number" step="0.5" placeholder="2" style="width:70px">
@@ -239,7 +255,7 @@ box-shadow:0 30px 80px -20px rgba(0,0,0,.6);animation:wdPop .35s cubic-bezier(.2
 </div>
 <div class="ea-msg" id="wdSetMsg" style="display:none;font-size:.74rem;font-weight:700;margin-top:6px"></div>
 
-<h2 style="margin-top:18px">🛡️ Pending Requests</h2>
+<h2 style="margin-top:18px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:16px;height:16px"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Pending Requests</h2>
 <div id="wdAdminRequests"><div style="text-align:center;padding:20px;color:var(--muted);font-size:.8rem">Loading…</div></div>
 </div>
 
@@ -250,7 +266,7 @@ box-shadow:0 30px 80px -20px rgba(0,0,0,.6);animation:wdPop .35s cubic-bezier(.2
 <div class="wd-overlay" id="wdSuccessOverlay">
 <div class="wd-overlay-card">
 <img class="wd-overlay-logo" src="/branding/logo-dark.png" alt="Zamil SMS" onerror="this.style.display='none'">
-<div class="wd-overlay-icon">✅</div>
+<div class="wd-overlay-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
 <div class="wd-overlay-title" id="wdSuccessTitle">Submitted!</div>
 <div class="wd-overlay-body" id="wdSuccessBody">Your request is pending.</div>
 <button class="wd-overlay-btn" onclick="wdCloseSuccess()">Done</button>
