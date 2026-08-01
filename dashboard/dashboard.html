@@ -467,9 +467,13 @@
   </div>
   <div class="zdrawer-sec">
     <div class="zdrawer-sec-title">⚡ Tools</div>
-    <button type="button" class="drop-item" onclick="openCliPage()">📡 CLI Insights</button>
-      <span>🔍</span><span>CLI Search</span><span class="drw-soon">soon</span>
-    </button>
+   <!-- ✅ FIXED -->
+<button class="drw-item" onclick="closeDrawer();openCliPage()">
+  <span>📡</span><span>CLI Insights</span>
+</button>
+<button class="drw-item" disabled style="opacity:.45;cursor:default">
+  <span>🔍</span><span>CLI Search</span><span class="drw-soon">soon</span>
+</button>
     <button class="drw-item" id="drawerStatsBtn" style="display:none" onclick="closeDrawer();openStatsPage()">
       <span>📊</span><span>Statistics</span>
     </button>
