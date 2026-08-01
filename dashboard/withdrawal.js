@@ -18,6 +18,8 @@ function inject(){
   fetch('/dashboard/withdrawal.html').then(function(r){return r.text();}).then(function(h){
     var d=document.createElement('div'); d.innerHTML=h;
     while(d.firstElementChild) document.body.appendChild(d.firstElementChild);
+    var p=document.getElementById('wdPage'); if(p)p.style.display='block';
+    window.scrollTo(0,0);
     loadRole(); loadBalance(); loadHistory(); loadRecent(); loadSavedMethods();
   });
 }
@@ -33,19 +35,8 @@ function loadRole(){
 // SINGLE-CLICK FIX: show page immediately with skeleton, inject in background
 window.openWdPage=function(){
   var p=document.getElementById('wdPage');
-  if(p){ p.style.display='block'; window.scrollTo(0,0); if(_balance) loadBalance(); return; }
-  // First click: show skeleton immediately
-  var sk=document.createElement('div');
-  sk.id='wdPage'; sk.style.cssText='display:block;position:fixed;inset:0;z-index:600;overflow-y:auto;background:var(--bg)';
-  sk.innerHTML='<div style="max-width:560px;margin:0 auto;padding:60px 20px;text-align:center">'
-    +'<div class="wd-skeleton-pulse" style="width:200px;height:24px;margin:0 auto 20px;border-radius:8px"></div>'
-    +'<div class="wd-skeleton-pulse" style="width:280px;height:80px;margin:0 auto 16px;border-radius:20px"></div>'
-    +'<div class="wd-skeleton-pulse" style="width:100%;height:200px;margin:0 auto 16px;border-radius:18px"></div>'
-    +'<div class="wd-skeleton-pulse" style="width:100%;height:140px;margin:0 auto;border-radius:18px"></div>'
-    +'<div style="margin-top:24px;font-size:.78rem;color:var(--muted);animation:wdFade 1.5s ease infinite">Calculating your balance…</div>'
-    +'</div>';
-  document.body.appendChild(sk);
-  // Now inject real content
+  if(p){p.style.display='block';window.scrollTo(0,0);_loading=false;loadBalance();loadHistory();loadRecent();return;}
+  // First open: inject HTML, show page immediately (no skeleton wait)
   inject();
 };
 window.closeWdPage=function(){ var p=document.getElementById('wdPage'); if(p)p.style.display='none'; };
@@ -59,16 +50,11 @@ function showLoading(el, msg){
 function loadBalance(){
   if(_loading) return;
   _loading=true;
-  var el=document.getElementById('wdBalance');
-  if(el&&!_balance) el.textContent='…';
   post('/api/withdraw/balance',{},function(d){
     _loading=false;
-    if(!d||!d.ok){
-      if(el) el.textContent='$0.00';
-      return;
-    }
+    if(!d||!d.ok) return;
     _balance=d;
-    if(el) el.textContent='$'+d.available.toFixed(4);
+    var el=document.getElementById('wdBalance'); if(el) el.textContent='$'+d.available.toFixed(4);
     var pk=document.getElementById('wdBalancePkr'); if(pk) pk.textContent='≈ Rs '+d.availablePkr.toLocaleString();
     var te=document.getElementById('wdTotalEarned'); if(te) te.textContent='$'+d.totalEarnings.toFixed(2);
     var tw=document.getElementById('wdTotalWithdrawn'); if(tw) tw.textContent='$'+d.totalWithdrawn.toFixed(2);
@@ -271,5 +257,7 @@ window.wdCopy=function(id){
   else t+='Method: '+r.method+(r.bank_name?'\nBank: '+r.bank_name:'')+'\nAccount: '+r.account_number+'\nHolder: '+r.account_holder;
   if(navigator.clipboard)navigator.clipboard.writeText(t).then(function(){alert('Copied');});
 };
-setInterval(function(){var p=document.getElementById('wdPage');if(p&&p.style.display!=='none'&&!document.hidden&&!_loading)loadBalance();},30000);
+// Only refresh when user manually clicks refresh or re-opens page (no background polling) 
+  if(p&&p.style.display!=='none'&&!document.hidden&&!_loading)loadBalance();},30000);
 })();
+setInterval(function(){var p=document.getElementById('wdPage');
