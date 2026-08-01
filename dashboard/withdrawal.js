@@ -1,15 +1,17 @@
-/* ═══ withdrawal.js — Zamil SMS ═══ */
+/* ═══ withdrawal.js — Zamil SMS — FIXED ═══ */
 (function(){
 'use strict';
 function sess(){ return localStorage.getItem('app_session'); }
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function post(url, body, cb){
-  fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(Object.assign({session:sess()}, body||{}))})
-    .then(function(r){ return r.json().catch(function(){ return {ok:false, error:'HTTP '+r.status}; }); })
+  var ctrl=new AbortController();
+  var timer=setTimeout(function(){ctrl.abort();},15000);
+  fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, signal:ctrl.signal, body:JSON.stringify(Object.assign({session:sess()}, body||{}))})
+    .then(function(r){ clearTimeout(timer); return r.json().catch(function(){ return {ok:false, error:'HTTP '+r.status}; }); })
     .then(cb)
-    .catch(function(e){ cb({ok:false, error:'Network: '+e.message}); });
+    .catch(function(e){ clearTimeout(timer); cb({ok:false, error:e.name==='AbortError'?'Request timed out — server busy. Try again.':'Network: '+e.message}); });
 }
-var _injected=false, _balance=null, _role='none';
+var _injected=false, _balance=null, _role='none', _loading=false;
 
 function inject(){
   if(_injected) return; _injected=true;
@@ -27,14 +29,46 @@ function loadRole(){
     if(_role==='super'||_role==='admin'){ loadAdminRequests(); loadAdminSettings(); }
   });
 }
-window.openWdPage=function(){ inject(); var p=document.getElementById('wdPage'); if(p)p.style.display='block'; window.scrollTo(0,0); loadBalance(); };
+
+// SINGLE-CLICK FIX: show page immediately with skeleton, inject in background
+window.openWdPage=function(){
+  var p=document.getElementById('wdPage');
+  if(p){ p.style.display='block'; window.scrollTo(0,0); if(_balance) loadBalance(); return; }
+  // First click: show skeleton immediately
+  var sk=document.createElement('div');
+  sk.id='wdPage'; sk.style.cssText='display:block;position:fixed;inset:0;z-index:600;overflow-y:auto;background:var(--bg)';
+  sk.innerHTML='<div style="max-width:560px;margin:0 auto;padding:60px 20px;text-align:center">'
+    +'<div class="wd-skeleton-pulse" style="width:200px;height:24px;margin:0 auto 20px;border-radius:8px"></div>'
+    +'<div class="wd-skeleton-pulse" style="width:280px;height:80px;margin:0 auto 16px;border-radius:20px"></div>'
+    +'<div class="wd-skeleton-pulse" style="width:100%;height:200px;margin:0 auto 16px;border-radius:18px"></div>'
+    +'<div class="wd-skeleton-pulse" style="width:100%;height:140px;margin:0 auto;border-radius:18px"></div>'
+    +'<div style="margin-top:24px;font-size:.78rem;color:var(--muted);animation:wdFade 1.5s ease infinite">Calculating your balance…</div>'
+    +'</div>';
+  document.body.appendChild(sk);
+  // Now inject real content
+  inject();
+};
 window.closeWdPage=function(){ var p=document.getElementById('wdPage'); if(p)p.style.display='none'; };
 
+function showLoading(el, msg){
+  if(!el)return;
+  el.innerHTML='<div style="text-align:center;padding:24px;color:var(--muted);font-size:.8rem">'
+    +'<div class="wd-spinner"></div><div style="margin-top:10px;animation:wdFade 1.5s ease infinite">'+(msg||'Loading…')+'</div></div>';
+}
+
 function loadBalance(){
+  if(_loading) return;
+  _loading=true;
+  var el=document.getElementById('wdBalance');
+  if(el&&!_balance) el.textContent='…';
   post('/api/withdraw/balance',{},function(d){
-    if(!d||!d.ok) return;
+    _loading=false;
+    if(!d||!d.ok){
+      if(el) el.textContent='$0.00';
+      return;
+    }
     _balance=d;
-    var el=document.getElementById('wdBalance'); if(el) el.textContent='$'+d.available.toFixed(4);
+    if(el) el.textContent='$'+d.available.toFixed(4);
     var pk=document.getElementById('wdBalancePkr'); if(pk) pk.textContent='≈ Rs '+d.availablePkr.toLocaleString();
     var te=document.getElementById('wdTotalEarned'); if(te) te.textContent='$'+d.totalEarnings.toFixed(2);
     var tw=document.getElementById('wdTotalWithdrawn'); if(tw) tw.textContent='$'+d.totalWithdrawn.toFixed(2);
@@ -45,14 +79,16 @@ function loadBalance(){
     var pp=document.getElementById('wdProgressPct'); if(pp) pp.textContent=Math.round(pct)+'%';
     var btn=document.getElementById('wdSubmitBtn'); if(btn) btn.disabled=!d.canWithdraw;
     var banner=document.getElementById('wdDisabledBanner');
-    if(banner){ if(!d.enabled){ banner.style.display='block'; banner.textContent='🚫 '+(d.disabledMessage||'Withdrawals temporarily disabled.'); } else banner.style.display='none'; }
+    if(banner){ if(!d.enabled){ banner.style.display='block'; banner.textContent=(d.disabledMessage||'Withdrawals temporarily disabled.'); } else banner.style.display='none'; }
     var fl=document.getElementById('wdFeeLabel'); if(fl) fl.textContent=(d.cryptoFee||0).toFixed(2);
     checkForm();
   });
 }
 function loadHistory(){
+  var el=document.getElementById('wdHistory');
+  showLoading(el,'Fetching history…');
   post('/api/withdraw/history',{},function(d){
-    var el=document.getElementById('wdHistory'); if(!el) return;
+    if(!el) return;
     var cnt=document.getElementById('wdHistCount');
     if(!d||!d.ok||!d.withdrawals||!d.withdrawals.length){ el.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted);font-size:.8rem">No withdrawals yet</div>'; if(cnt)cnt.textContent='0'; return; }
     if(cnt)cnt.textContent=d.withdrawals.length;
@@ -67,8 +103,10 @@ function loadHistory(){
   });
 }
 function loadRecent(){
+  var el=document.getElementById('wdRecentList');
+  showLoading(el,'Loading…');
   post('/api/withdraw/recent',{},function(d){
-    var el=document.getElementById('wdRecentList'); if(!el) return;
+    if(!el) return;
     if(!d||!d.ok||!d.recent||!d.recent.length){ el.innerHTML='<div style="text-align:center;padding:14px;color:var(--muted);font-size:.76rem">No recent withdrawals</div>'; return; }
     el.innerHTML=d.recent.map(function(w,i){
       var ini=String(w.username||'?').slice(0,2).toUpperCase();
@@ -122,7 +160,7 @@ window.wdSubmit=function(){
   var body={method:method,amountUsd:amt,saveMethod:document.getElementById('wdSaveMethod').checked,note:document.getElementById('wdNote').value};
   if(method==='crypto'){
     var a1=document.getElementById('wdCryptoAddr').value.trim(),a2=document.getElementById('wdCryptoAddr2').value.trim();
-    if(a1!==a2){alert('⚠ Addresses do not match!');return;}
+    if(a1!==a2){alert('Addresses do not match!');return;}
     body.cryptoPlatform=document.getElementById('wdCryptoPlatform').value;
     body.cryptoUid=document.getElementById('wdCryptoUid').value.trim();
     body.cryptoAddress=a1;
@@ -130,7 +168,7 @@ window.wdSubmit=function(){
     if(!body.cryptoPlatform||!body.cryptoUid||!a1||!body.cryptoChain){alert('Fill all crypto fields.');return;}
   } else {
     var n1=document.getElementById('wdAccNum').value.trim(),n2=document.getElementById('wdAccNum2').value.trim();
-    if(n1!==n2){alert('⚠ Account numbers do not match!');return;}
+    if(n1!==n2){alert('Account numbers do not match!');return;}
     body.bankName=document.getElementById('wdBankName').value.trim();
     body.accountNumber=n1;
     body.accountHolder=document.getElementById('wdAccHolder').value.trim();
@@ -144,7 +182,7 @@ window.wdSubmit=function(){
       wdShowSuccess('Withdrawal Submitted!','Your request for $'+amt.toFixed(2)+' is pending. Expected: 3 hours on business days.');
       document.getElementById('wdAmount').value=''; document.getElementById('wdNote').value='';
       loadBalance(); setTimeout(loadHistory,1500);
-    } else alert('❌ '+((d&&d.error)||'Failed'));
+    } else alert((d&&d.error)||'Failed');
   });
 };
 function wdShowSuccess(t,b){
@@ -152,10 +190,10 @@ function wdShowSuccess(t,b){
   var bo=document.getElementById('wdSuccessBody');if(bo)bo.textContent=b;
   var ov=document.getElementById('wdSuccessOverlay');if(ov)ov.classList.add('show');
 }
-
-  window.wdRefreshBalance=function(){
+window.wdRefreshBalance=function(){
   var btn=document.querySelector('.wd-refresh-btn');
-  if(btn){btn.classList.add('spinning');setTimeout(function(){btn.classList.remove('spinning');},900);}
+  if(btn){btn.classList.add('spinning');setTimeout(function(){btn.classList.remove('spinning');},1200);}
+  _loading=false;
   loadBalance();
   loadHistory();
   loadRecent();
@@ -182,14 +220,16 @@ window.wdSaveSettings=function(){
     enabled:!document.getElementById('wdSetDisabled').checked,
     disabledMessage:document.getElementById('wdSetDisMsg').value.trim()
   },function(d){
-    if(msg){msg.style.display='block';msg.style.color=(d&&d.ok)?'var(--wg)':'var(--wred)';msg.textContent=(d&&d.ok)?'✅ Saved':((d&&d.error)||'Failed');}
-    if(d&&d.ok) loadBalance();
+    if(msg){msg.style.display='block';msg.style.color=(d&&d.ok)?'var(--wg)':'var(--wred)';msg.textContent=(d&&d.ok)?'Saved':((d&&d.error)||'Failed');}
+    if(d&&d.ok){ _loading=false; loadBalance(); }
   });
 };
 function loadAdminRequests(){
+  var el=document.getElementById('wdAdminRequests');
+  showLoading(el,'Loading requests…');
   post('/api/admin/withdraw/requests',{status:'pending'},function(d){
-    var el=document.getElementById('wdAdminRequests');if(!el)return;
-    if(!d||!d.ok||!d.requests||!d.requests.length){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted);font-size:.8rem">✅ No pending requests</div>';return;}
+    if(!el)return;
+    if(!d||!d.ok||!d.requests||!d.requests.length){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted);font-size:.8rem">No pending requests</div>';return;}
     window._wdReqs=d.requests;
     el.innerHTML=d.requests.map(function(w){
       var dt=w.created_at?new Date(w.created_at).toLocaleString('en-PK',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'';
@@ -197,8 +237,8 @@ function loadAdminRequests(){
       var det=isC
         ?'<div class="wd-admin-detail"><b>Platform:</b> '+esc(w.crypto_platform)+'<br><b>UID:</b> '+esc(w.crypto_uid)+'<br><b>Address:</b> <code style="word-break:break-all;font-size:.68rem">'+esc(w.crypto_address)+'</code><br><b>Chain:</b> '+esc(w.crypto_chain)+'<br><b>Fee:</b> $'+(w.crypto_fee_usd||0).toFixed(2)+'</div>'
         :'<div class="wd-admin-detail"><b>Method:</b> '+esc(w.method)+(w.bank_name?'<br><b>Bank:</b> '+esc(w.bank_name):'')+'<br><b>Account:</b> '+esc(w.account_number)+'<br><b>Holder:</b> '+esc(w.account_holder)+'</div>';
-      return '<div class="wd-admin-card"><div class="wd-admin-top"><div class="wd-admin-user">'+esc(w.username)+'</div><div class="wd-admin-amt">$'+(w.amount_usd||0).toFixed(4)+' <span style="color:var(--muted);font-size:.68rem">≈Rs '+(w.amount_pkr||0).toLocaleString()+'</span></div><div class="wd-admin-time">'+dt+'</div></div>'
-        +det+(w.note?'<div style="font-size:.7rem;color:var(--muted);font-style:italic;margin-bottom:6px">📝 '+esc(w.note)+'</div>':'')
+      return '<div class="wd-admin-card"><div class="wd-admin-top"><div class="wd-admin-user">'+esc(w.username)+'</div><div class="wd-admin-amt">$'+(w.amount_usd||0).toFixed(4)+' <span style="color:var(--muted);font-size:.68rem">Rs '+(w.amount_pkr||0).toLocaleString()+'</span></div><div class="wd-admin-time">'+dt+'</div></div>'
+        +det+(w.note?'<div style="font-size:.7rem;color:var(--muted);font-style:italic;margin-bottom:6px">'+esc(w.note)+'</div>':'')
         +'<div class="wd-admin-actions"><button class="wd-admin-btn approve" onclick="wdAction('+w.id+',\'approve\',this)">Approve</button><button class="wd-admin-btn reject" onclick="wdAction('+w.id+',\'reject\',this)">Reject</button><button class="wd-admin-btn copy" onclick="wdCopy('+w.id+')">Copy</button></div>'
         +'<div class="wd-admin-msg-row" id="wdMsg_'+w.id+'" style="display:none"><input class="wd-admin-msg-input" id="wdMsgInp_'+w.id+'" placeholder="Message to user…"></div></div>';
     }).join('');
@@ -209,14 +249,13 @@ window.wdAction=function(id,action,btn){
   var message=(mi&&mi.value)||'';
   if(action==='reject'&&!message){
     var mr=document.getElementById('wdMsg_'+id);
-    if(mr&&mr.style.display==='none'){mr.style.display='block';if(mi){mi.focus();mi.placeholder='Reason required for rejection…';}return;}
-    if(!message){alert('Please enter a rejection reason.');if(mi)mi.focus();return;}
+    if(mr&&mr.style.display==='none'){mr.style.display='block';if(mi){mi.focus();mi.placeholder='Reason required…';}return;}
+    if(!message){alert('Enter a rejection reason.');if(mi)mi.focus();return;}
   }
   btn.disabled=true;btn.textContent='…';
   post(action==='approve'?'/api/admin/withdraw/approve':'/api/admin/withdraw/reject',{id:id,message:message},function(d){
     if(d&&d.ok){
-      btn.textContent=action==='approve'?'Done':'Done';
-      btn.style.opacity='.4';btn.style.pointerEvents='none';
+      btn.textContent='Done';btn.style.opacity='.4';btn.style.pointerEvents='none';
       var card=btn.closest('.wd-admin-card');if(card)card.style.opacity='.5';
       setTimeout(loadAdminRequests,1200);
     } else {
@@ -230,7 +269,7 @@ window.wdCopy=function(id){
   var t='User: '+r.username+'\nAmount: $'+r.amount_usd+' (Rs '+r.amount_pkr+')\n';
   if(r.method==='crypto')t+='Platform: '+r.crypto_platform+'\nUID: '+r.crypto_uid+'\nAddress: '+r.crypto_address+'\nChain: '+r.crypto_chain;
   else t+='Method: '+r.method+(r.bank_name?'\nBank: '+r.bank_name:'')+'\nAccount: '+r.account_number+'\nHolder: '+r.account_holder;
-  if(navigator.clipboard)navigator.clipboard.writeText(t).then(function(){alert('Copied to clipboard');});
+  if(navigator.clipboard)navigator.clipboard.writeText(t).then(function(){alert('Copied');});
 };
-setInterval(function(){var p=document.getElementById('wdPage');if(p&&p.style.display!=='none'&&!document.hidden)loadBalance();},30000);
+setInterval(function(){var p=document.getElementById('wdPage');if(p&&p.style.display!=='none'&&!document.hidden&&!_loading)loadBalance();},30000);
 })();
