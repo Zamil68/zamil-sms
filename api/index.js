@@ -1711,7 +1711,16 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
 
     const perRange = Object.values(me.perRange).sort((a, b) => b.userNet - a.userNet);
     const leaderboard = Object.values(board).sort((a, b) => b.userNet - a.userNet).slice(0, 50);
-
+// Cache user's earnings for fast withdrawal balance lookup
+     if (supaEnabled()) {
+       try {
+         await fetch(`${SUPABASE_URL}/rest/v1/user_balance_cache`, {
+           method: 'POST',
+           headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+           body: JSON.stringify({ username: user.username.toLowerCase(), total_earnings: me.userNet, updated_at: new Date().toISOString() })
+         });
+       } catch(e) {}
+     }
     return ok(res, {
       window: win, mode: cfg.mode, goal: Number(cfg.goal_usd) || 50, ratesLoaded: rc.count,
       me: { userNet: me.userNet, gross: me.gross, perRange },
@@ -1960,29 +1969,32 @@ async function getUserTotalWithdrawn(username) {
 }
 
 // GET balance
-if (url === '/withdraw/balance' && req.method === 'POST') {
-  try {
-    const user = getUserFromSession(req.body.session);
-    if (!user) return error(res, 401, 'Unauthorized');
-    const settings = await getWithdrawSettings();
-    const totalEarnings = await getUserTotalEarnings(user.username);
-    const totalWithdrawn = await getUserTotalWithdrawn(user.username);
-    const available = Math.max(0, Math.round((totalEarnings - totalWithdrawn) * 10000) / 10000);
-    const pkrRate = settings.pkr_rate || 285;
-    return ok(res, {
-      totalEarnings, totalWithdrawn, available,
-      availablePkr: Math.round(available * pkrRate),
-      pkrRate,
-      minWithdraw: settings.min_withdraw_usd || 2,
-      cryptoFee: settings.crypto_fee_usd || 1,       
-      usdtRate: settings.usdt_rate || settings.pkr_rate || 285,
-      enabled: settings.enabled,
-      disabledMessage: settings.disabled_message || '',
-      canWithdraw: settings.enabled && available >= (settings.min_withdraw_usd || 2)
-    });
-  } catch (e) { return error(res, 500, 'withdraw/balance: ' + e.message); }
-}
-
+if(url==='/withdraw/balance'&&req.method==='POST'){try{
+  const user=getUserFromSession(req.body.session);if(!user)return error(res,401,'Unauthorized');
+  const s=await getWdSettings();
+  // FAST: read cached earnings (written by /earn/compute) — no CDR scrape
+  let totalEarnings=0;
+  if(supaEnabled()){
+    try{
+      const r=await fetch(`${SUPABASE_URL}/rest/v1/user_balance_cache?username=eq.${encodeURIComponent(user.username.toLowerCase())}&select=total_earnings`,{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY}});
+      const rows=await r.json();
+      if(Array.isArray(rows)&&rows[0])totalEarnings=parseFloat(rows[0].total_earnings)||0;
+    }catch(e){}
+  }
+  // FAST: sum withdrawals (single query)
+  let totalWithdrawn=0;
+  if(supaEnabled()){
+    try{
+      const r=await fetch(`${SUPABASE_URL}/rest/v1/withdrawals?username=eq.${encodeURIComponent(user.username)}&status=in.(approved,pending)&select=amount_usd`,{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY}});
+      const rows=await r.json();
+      if(Array.isArray(rows))totalWithdrawn=rows.reduce((a,x)=>a+(parseFloat(x.amount_usd)||0),0);
+    }catch(e){}
+  }
+  const avail=Math.max(0,Math.round((totalEarnings-totalWithdrawn)*10000)/10000);
+  const rate=s.pkr_rate||285;
+  return ok(res,{totalEarnings,totalWithdrawn,available:avail,availablePkr:Math.round(avail*rate),pkrRate:rate,minWithdraw:s.min_withdraw_usd||2,cryptoFee:s.crypto_fee_usd||1,enabled:s.enabled,disabledMessage:s.disabled_message||'',canWithdraw:s.enabled&&avail>=(s.min_withdraw_usd||2)});
+}catch(e){return error(res,500,'balance: '+e.message);}}
+    
 // SUBMIT withdrawal
 if (url === '/withdraw/submit' && req.method === 'POST') {
   try {
