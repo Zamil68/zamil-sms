@@ -142,6 +142,12 @@ animation:wdIconPop .5s cubic-bezier(.2,1.4,.3,1) .15s both}
 .wd-overlay-body{font-size:.8rem;color:var(--muted);line-height:1.5;margin-bottom:18px}
 .wd-overlay-btn{border:0;border-radius:12px;padding:11px 22px;font:inherit;font-weight:700;cursor:pointer;color:#06080F;background:linear-gradient(135deg,var(--wg),#059669)}
 /* Crypto/Bank toggle */
+/* Loading skeleton + spinner */
+.wd-skeleton-pulse{background:linear-gradient(90deg,var(--surface) 25%,color-mix(in srgb,var(--border) 50%,var(--surface)) 50%,var(--surface) 75%);background-size:200% 100%;animation:wdShimmer 1.5s infinite}
+@keyframes wdShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+@keyframes wdFade{0%,100%{opacity:.5}50%{opacity:1}}
+.wd-spinner{width:24px;height:24px;border:3px solid var(--border);border-top-color:var(--wg);border-radius:50%;animation:wdSpin .7s linear infinite;margin:0 auto}
+@keyframes wdSpin{to{transform:rotate(360deg)}}
 .wd-crypto{display:none}.wd-crypto.show{display:block}
 .wd-bank{display:block}.wd-bank.hide{display:none}
 .wd-fee-chip{display:inline-flex;align-items:center;gap:4px;font-size:.6rem;font-weight:700;padding:2px 8px;border-radius:7px;background:color-mix(in srgb,var(--wmag) 10%,transparent);color:var(--wmag);border:1px solid color-mix(in srgb,var(--wmag) 20%,transparent)}
