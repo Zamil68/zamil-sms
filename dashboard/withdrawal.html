@@ -1,83 +1,78 @@
-<!-- withdrawal.html — Zamil SMS branded withdrawal -->
+<!-- withdrawal.html — injected by withdrawal.js -->
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
-#wdPage{--wg:#34d399;--wgold:#fbbf24;--wblue:#60a5fa;--wred:#f87171;--wpurple:#a78bfa;
-font-family:'Space Grotesk',system-ui,sans-serif;
-background:radial-gradient(1000px 400px at 50% -10%,color-mix(in srgb,var(--wg) 10%,transparent),transparent 70%),
-radial-gradient(600px 300px at 100% 100%,color-mix(in srgb,var(--wpurple) 8%,transparent),transparent 70%),var(--bg);
-position:fixed;inset:0;z-index:600;overflow-y:auto}
-#wdPage *{box-sizing:border-box}
-.wd-wrap{max-width:540px;margin:0 auto;padding:0 16px 100px}
-/* Head */
-.wd-head{display:flex;align-items:center;gap:12px;padding:18px 0 8px}
-.wd-back{width:40px;height:40px;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s}
-.wd-back:hover{border-color:var(--wg);color:var(--wg)}
-.wd-back svg{width:18px;height:18px}
-.wd-head h1{font-size:1.2rem;font-weight:700;margin:0;flex:1;letter-spacing:-.02em}
-.wd-head-badge{font-size:.6rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:4px 10px;border-radius:20px;background:color-mix(in srgb,var(--wg) 12%,transparent);color:var(--wg);border:1px solid color-mix(in srgb,var(--wg) 25%,transparent)}
-/* Hero balance */
-.wd-hero{position:relative;overflow:hidden;border-radius:22px;padding:30px 24px 24px;margin:16px 0;text-align:center;
-background:linear-gradient(155deg,color-mix(in srgb,var(--wg) 18%,var(--card)) 0%,var(--card) 50%,color-mix(in srgb,var(--wpurple) 10%,var(--card)) 100%);
-border:1px solid color-mix(in srgb,var(--wg) 22%,var(--border));
-box-shadow:0 24px 64px -30px color-mix(in srgb,var(--wg) 50%,transparent)}
-.wd-hero::before{content:'';position:absolute;top:-80px;right:-60px;width:220px;height:220px;border-radius:50%;
-background:radial-gradient(circle,color-mix(in srgb,var(--wgold) 25%,transparent),transparent 65%);filter:blur(10px);opacity:.4;animation:wdPulse 5s ease-in-out infinite}
-@keyframes wdPulse{0%,100%{transform:scale(1);opacity:.35}50%{transform:scale(1.12);opacity:.6}}
-.wd-hero-label{font-size:.6rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
-.wd-hero-amount{font-size:3rem;font-weight:700;letter-spacing:-.03em;line-height:1;
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap');
+#wdPage{--wg:#34d399;--wgold:#fbbf24;--wmag:#f472b6;--wblue:#60a5fa;--wred:#f87171;font-family:inherit;
+background:radial-gradient(900px 380px at 50% -8%,color-mix(in srgb,var(--wg) 14%,transparent),transparent 70%),
+radial-gradient(700px 320px at 100% 100%,color-mix(in srgb,var(--wmag) 10%,transparent),transparent 72%),var(--bg);
+background-attachment:fixed;position:fixed;inset:0;z-index:600;overflow-y:auto}
+#wdPage::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+background-image:radial-gradient(rgba(255,255,255,.05) 1px,transparent 1.4px);background-size:22px 22px;opacity:.5}
+[data-theme="light"] #wdPage::before{background-image:radial-gradient(rgba(15,23,42,.05) 1px,transparent 1.4px)}
+#wdPage>*{position:relative;z-index:1}
+.wd-display{font-family:'Space Grotesk',ui-monospace,monospace;letter-spacing:-.02em}
+.wd-head{display:flex;align-items:center;gap:10px;padding:14px 2px 6px}
+.wd-back{width:38px;height:38px;flex-shrink:0;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:1.05rem;display:flex;align-items:center;justify-content:center;transition:transform .12s}
+.wd-back:active{transform:scale(.9)}
+.wd-head h1{font-family:'Space Grotesk',sans-serif;font-size:1.18rem;font-weight:700;margin:0;letter-spacing:-.02em;flex:1}
+.wd-live{display:inline-flex;align-items:center;gap:5px;font-size:.6rem;font-weight:700;color:var(--wg);letter-spacing:.06em;text-transform:uppercase}
+.wd-live i{width:6px;height:6px;border-radius:50%;background:var(--wg);animation:wdPulse 1.8s infinite}
+@keyframes wdPulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,.5)}70%{box-shadow:0 0 0 6px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
+/* Hero */
+.wd-hero{position:relative;overflow:hidden;border-radius:24px;padding:24px 22px 18px;margin:14px 0;text-align:center;
+background:linear-gradient(150deg,color-mix(in srgb,var(--wg) 22%,var(--card)) 0%,var(--card) 55%,color-mix(in srgb,var(--wgold) 12%,var(--card)) 100%);
+border:1px solid color-mix(in srgb,var(--wg) 28%,var(--border));
+box-shadow:0 22px 60px -28px color-mix(in srgb,var(--wg) 60%,transparent);
+transition:transform .18s,box-shadow .18s}
+.wd-hero:hover{transform:translateY(-2px);box-shadow:0 28px 70px -26px color-mix(in srgb,var(--wg) 70%,transparent)}
+.wd-hero-glow{position:absolute;inset:-40% -10% auto auto;width:220px;height:220px;border-radius:50%;
+background:radial-gradient(circle,color-mix(in srgb,var(--wgold) 30%,transparent),transparent 65%);filter:blur(6px);opacity:.5;pointer-events:none;animation:wdGlow 7s ease-in-out infinite}
+@keyframes wdGlow{0%,100%{transform:translate(0,0) scale(1);opacity:.4}50%{transform:translate(-10px,8px) scale(1.1);opacity:.65}}
+.wd-hero-label{font-size:.6rem;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.wd-hero-amount{font-family:'Space Grotesk',monospace;font-size:3rem;font-weight:700;letter-spacing:-.03em;line-height:1;
 background:linear-gradient(120deg,var(--wg),var(--wgold));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
 .wd-hero-pkr{font-size:.8rem;color:var(--muted);font-weight:600;margin-top:6px}
-.wd-hero-stats{display:flex;justify-content:center;gap:20px;margin-top:16px}
+.wd-hero-stats{display:flex;justify-content:center;gap:18px;margin-top:14px}
 .wd-hero-stat{text-align:center}
 .wd-hero-stat .k{font-size:.56rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-.wd-hero-stat .v{font-size:.88rem;font-weight:700;color:var(--text);margin-top:2px}
-.wd-progress{margin:18px 0 0;height:7px;background:var(--border);border-radius:5px;overflow:hidden}
-.wd-progress>i{display:block;height:100%;width:0;border-radius:5px;background:linear-gradient(90deg,var(--wg),var(--wgold));transition:width 1.2s cubic-bezier(.2,.8,.2,1)}
-.wd-progress-lbl{display:flex;justify-content:space-between;font-size:.58rem;color:var(--muted);margin-top:5px;font-weight:700}
-/* Disabled banner */
-.wd-disabled{background:color-mix(in srgb,var(--wred) 8%,transparent);border:1px solid color-mix(in srgb,var(--wred) 25%,transparent);border-radius:14px;padding:14px 18px;text-align:center;margin:12px 0;color:var(--wred);font-weight:600;font-size:.82rem;display:flex;align-items:center;justify-content:center;gap:8px}
-.wd-disabled svg{width:18px;height:18px;flex-shrink:0}
+.wd-hero-stat .v{font-family:'Space Grotesk',monospace;font-size:.86rem;font-weight:700;color:var(--text);margin-top:2px}
+.wd-progress{margin:16px 0 0;height:6px;background:var(--border);border-radius:4px;overflow:hidden}
+.wd-progress>i{display:block;height:100%;width:0;border-radius:4px;background:linear-gradient(90deg,var(--wg),var(--wgold),var(--wmag));transition:width 1.1s cubic-bezier(.2,.8,.2,1)}
+.wd-progress-lbl{display:flex;justify-content:space-between;font-size:.58rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-top:5px}
+.wd-progress-lbl b{color:var(--text);font-family:'Space Grotesk',monospace}
+/* Disabled */
+.wd-disabled{background:color-mix(in srgb,var(--wred) 8%,transparent);border:1px solid color-mix(in srgb,var(--wred) 25%,transparent);border-radius:14px;padding:14px 18px;text-align:center;margin:12px 0;color:var(--wred);font-weight:700;font-size:.82rem}
 /* Cards */
-.wd-card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:22px;margin-bottom:16px;transition:box-shadow .2s}
-.wd-card:hover{box-shadow:0 8px 32px -16px rgba(0,0,0,.3)}
-.wd-card-title{font-size:.9rem;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:10px}
-.wd-card-title svg{width:20px;height:20px;color:var(--wg)}
-/* Form fields */
-.wd-field{margin-bottom:14px}
-.wd-field label{display:block;font-size:.62rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
-.wd-field input,.wd-field textarea{width:100%;padding:12px 14px;border-radius:11px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);font:inherit;font-size:.84rem;outline:none;transition:border-color .2s,box-shadow .2s}
-.wd-field input:focus,.wd-field textarea:focus{border-color:var(--wg);box-shadow:0 0 0 3px color-mix(in srgb,var(--wg) 12%,transparent)}
+.wd-card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:20px;margin-bottom:14px;transition:transform .14s,box-shadow .14s}
+.wd-card:hover{box-shadow:0 12px 30px -16px rgba(0,0,0,.3)}
+.wd-card-title{font-family:'Space Grotesk',sans-serif;font-size:.92rem;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.wd-card-title .pill{margin-left:auto;font-size:.62rem;font-weight:700;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:3px 10px}
+/* Fields */
+.wd-field{margin-bottom:12px}
+.wd-field label{display:block;font-size:.62rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+.wd-field input,.wd-field select,.wd-field textarea{width:100%;box-sizing:border-box;padding:11px 13px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;font-size:.84rem;outline:none;transition:border-color .15s}
+.wd-field input:focus,.wd-field select:focus,.wd-field textarea:focus{border-color:var(--wg)}
 .wd-field textarea{min-height:56px;resize:vertical}
-.wd-field .hint{font-size:.6rem;color:var(--muted);margin-top:4px}
-.wd-field .warn{font-size:.6rem;color:var(--wred);margin-top:4px;font-weight:700;display:flex;align-items:center;gap:4px}
-.wd-field .warn svg{width:12px;height:12px}
-/* Custom select (modern) */
-.wd-select-wrap{position:relative}
-.wd-select-wrap select{width:100%;padding:12px 38px 12px 14px;border-radius:11px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);font:inherit;font-size:.84rem;outline:none;appearance:none;-webkit-appearance:none;cursor:pointer;transition:border-color .2s}
-.wd-select-wrap select:focus{border-color:var(--wg)}
-.wd-select-wrap::after{content:'';position:absolute;right:14px;top:50%;transform:translateY(-50%);width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid var(--muted);pointer-events:none}
-/* Submit button */
-.wd-btn{width:100%;padding:15px;border:0;border-radius:13px;font:inherit;font-size:.9rem;font-weight:700;cursor:pointer;
+.wd-field .hint{font-size:.6rem;color:var(--muted);margin-top:3px}
+.wd-field .warn{font-size:.6rem;color:var(--wred);margin-top:3px;font-weight:700}
+/* Button */
+.wd-btn{width:100%;padding:14px;border:0;border-radius:12px;font:inherit;font-size:.88rem;font-weight:700;cursor:pointer;
 background:linear-gradient(135deg,var(--wg),#059669);color:#06080F;
 box-shadow:0 8px 24px -8px color-mix(in srgb,var(--wg) 50%,transparent);
-transition:transform .12s,box-shadow .2s,opacity .15s;display:flex;align-items:center;justify-content:center;gap:8px}
-.wd-btn svg{width:18px;height:18px}
+transition:transform .12s,box-shadow .2s,opacity .15s}
 .wd-btn:disabled{opacity:.35;cursor:not-allowed;transform:none;box-shadow:none}
-.wd-btn:not(:disabled):hover{transform:translateY(-1px);box-shadow:0 12px 32px -8px color-mix(in srgb,var(--wg) 60%,transparent)}
-.wd-btn:not(:disabled):active{transform:scale(.98)}
-.wd-notice{font-size:.66rem;color:var(--muted);text-align:center;margin-top:12px;line-height:1.6}
-.wd-save-row{display:flex;align-items:center;gap:8px;margin:12px 0;font-size:.74rem;color:var(--muted)}
-.wd-save-row input[type="checkbox"]{width:16px;height:16px;accent-color:var(--wg)}
+.wd-btn:not(:disabled):active{transform:scale(.97)}
+.wd-notice{font-size:.66rem;color:var(--muted);text-align:center;margin-top:10px;line-height:1.5}
+.wd-save-row{display:flex;align-items:center;gap:8px;margin:10px 0;font-size:.74rem;color:var(--muted)}
+.wd-save-row input{width:16px;height:16px;accent-color:var(--wg)}
 /* History */
-.wd-hist{display:flex;flex-direction:column;gap:10px}
-.wd-hist-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;position:relative;overflow:hidden;transition:transform .12s}
+.wd-hist-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:8px;position:relative;overflow:hidden;transition:transform .12s}
 .wd-hist-card:hover{transform:translateX(2px)}
 .wd-hist-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:0 4px 4px 0}
 .wd-hist-card.pending::before{background:var(--wgold)}
 .wd-hist-card.approved::before{background:var(--wg)}
 .wd-hist-card.rejected::before{background:var(--wred)}
-.wd-hist-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
-.wd-hist-amt{font-weight:700;font-size:1rem}
+.wd-hist-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
+.wd-hist-amt{font-family:'Space Grotesk',monospace;font-weight:700;font-size:1rem}
 .wd-hist-status{font-size:.58rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:3px 10px;border-radius:20px}
 .wd-hist-status.pending{background:color-mix(in srgb,var(--wgold) 12%,transparent);color:var(--wgold)}
 .wd-hist-status.approved{background:color-mix(in srgb,var(--wg) 12%,transparent);color:var(--wg)}
@@ -89,92 +84,88 @@ transition:transform .12s,box-shadow .2s,opacity .15s;display:flex;align-items:c
 /* Recent */
 .wd-recent-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);font-size:.76rem}
 .wd-recent-item:last-child{border-bottom:0}
-.wd-recent-av{width:30px;height:30px;border-radius:10px;background:linear-gradient(135deg,var(--wg),var(--wblue));display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:800;color:#06080F;flex-shrink:0}
-.wd-recent-name{flex:1;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.wd-recent-amt{font-weight:700;color:var(--wg)}
+.wd-recent-av{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',monospace;font-size:.6rem;font-weight:700;flex-shrink:0;color:#06080F;background:hsl(var(--hue,160),70%,55%)}
+.wd-recent-name{flex:1;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wd-recent-amt{font-family:'Space Grotesk',monospace;font-weight:700;color:var(--wg)}
 /* Admin */
-.wd-admin-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px}
-.wd-admin-top{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
-.wd-admin-user{font-weight:700;font-size:.88rem}
-.wd-admin-amt{font-weight:700;color:var(--wg);margin-left:auto}
+.wd-admin{margin-top:14px;border:1px dashed color-mix(in srgb,var(--wmag) 40%,var(--border));border-radius:18px;padding:16px;background:color-mix(in srgb,var(--wmag) 5%,var(--card))}
+.wd-admin h2{font-family:'Space Grotesk',sans-serif;font-size:.92rem;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+.wd-admin-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:10px}
+.wd-admin-top{display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap}
+.wd-admin-user{font-weight:700;font-size:.86rem}
+.wd-admin-amt{font-family:'Space Grotesk',monospace;font-weight:700;color:var(--wg);margin-left:auto}
 .wd-admin-time{font-size:.6rem;color:var(--muted);width:100%}
 .wd-admin-detail{font-size:.72rem;color:var(--muted);line-height:1.8;background:var(--bg);border-radius:9px;padding:10px 12px;margin-bottom:8px}
 .wd-admin-detail b{color:var(--text)}
-.wd-admin-detail code{background:var(--card);padding:2px 6px;border-radius:4px;font-size:.66rem;word-break:break-all}
 .wd-admin-actions{display:flex;gap:8px;margin-top:10px}
-.wd-admin-btn{padding:9px 14px;border:0;border-radius:9px;font:inherit;font-size:.72rem;font-weight:700;cursor:pointer;transition:transform .1s;display:flex;align-items:center;gap:5px}
+.wd-admin-btn{padding:9px 14px;border:0;border-radius:10px;font:inherit;font-size:.74rem;font-weight:700;cursor:pointer;transition:transform .1s}
 .wd-admin-btn:active{transform:scale(.95)}
 .wd-admin-btn.approve{background:var(--wg);color:#06080F}
 .wd-admin-btn.reject{background:var(--wred);color:#fff}
 .wd-admin-btn.copy{background:var(--surface);color:var(--text);border:1px solid var(--border)}
-.wd-admin-btn svg{width:14px;height:14px}
 .wd-admin-msg-row{margin-top:8px}
-.wd-admin-msg-input{width:100%;padding:9px 12px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--text);font:inherit;font-size:.76rem;outline:none}
+.wd-admin-msg-input{width:100%;box-sizing:border-box;padding:9px 12px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--text);font:inherit;font-size:.76rem;outline:none}
+/* Admin settings row */
+.wd-set-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+.wd-set-row label{font-size:.62rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.wd-set-inp{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:9px 11px;color:var(--text);font:inherit;font-size:.82rem;outline:none;width:100px}
+.wd-set-inp:focus{border-color:var(--wg)}
+.wd-set-btn{border:0;border-radius:10px;padding:9px 14px;font:inherit;font-size:.78rem;font-weight:700;cursor:pointer;color:#06080F;background:linear-gradient(135deg,var(--wmag),#a855f7);transition:transform .12s}
+.wd-set-btn:active{transform:scale(.95)}
 /* Success overlay */
-.wd-success-overlay{position:fixed;inset:0;z-index:999;background:rgba(6,8,15,.75);backdrop-filter:blur(12px);display:none;align-items:center;justify-content:center;padding:20px}
-.wd-success-overlay.show{display:flex}
-.wd-success-card{width:100%;max-width:340px;border-radius:24px;padding:36px 28px;text-align:center;
-background:linear-gradient(160deg,color-mix(in srgb,var(--wg) 12%,var(--card)),var(--card));
-border:1px solid color-mix(in srgb,var(--wg) 25%,var(--border));
-box-shadow:0 32px 80px -20px rgba(0,0,0,.6);animation:wdPop .35s cubic-bezier(.2,1.2,.3,1) both}
+.wd-overlay{position:fixed;inset:0;z-index:950;background:rgba(6,8,15,.66);backdrop-filter:blur(10px);display:none;align-items:center;justify-content:center;padding:18px}
+.wd-overlay.show{display:flex}
+.wd-overlay-card{width:100%;max-width:360px;border-radius:24px;padding:28px 24px;text-align:center;position:relative;
+background:linear-gradient(160deg,color-mix(in srgb,var(--wg) 18%,var(--card)),var(--card));
+border:1px solid color-mix(in srgb,var(--wg) 30%,var(--border));
+box-shadow:0 30px 80px -20px rgba(0,0,0,.6);animation:wdPop .35s cubic-bezier(.2,1.2,.3,1) both}
 @keyframes wdPop{from{opacity:0;transform:scale(.9) translateY(12px)}to{opacity:1;transform:none}}
-.wd-success-logo{height:30px;margin:0 auto 16px;display:block}
-.wd-success-icon{width:56px;height:56px;margin:0 auto 14px;border-radius:50%;background:color-mix(in srgb,var(--wg) 15%,transparent);display:flex;align-items:center;justify-content:center}
-.wd-success-icon svg{width:28px;height:28px;color:var(--wg)}
-.wd-success-title{font-size:1.1rem;font-weight:700;margin-bottom:8px}
-.wd-success-body{font-size:.8rem;color:var(--muted);line-height:1.5;margin-bottom:20px}
-.wd-success-btn{border:0;border-radius:12px;padding:12px 28px;font:inherit;font-weight:700;cursor:pointer;color:#06080F;background:linear-gradient(135deg,var(--wg),#059669)}
-/* Crypto / Bank toggle */
+.wd-overlay-logo{height:30px;margin:0 auto 14px;display:block}
+.wd-overlay-icon{font-size:2.6rem;margin-bottom:10px}
+.wd-overlay-title{font-family:'Space Grotesk',sans-serif;font-size:1.05rem;font-weight:700;margin-bottom:8px}
+.wd-overlay-body{font-size:.8rem;color:var(--muted);line-height:1.5;margin-bottom:18px}
+.wd-overlay-btn{border:0;border-radius:12px;padding:11px 22px;font:inherit;font-weight:700;cursor:pointer;color:#06080F;background:linear-gradient(135deg,var(--wg),#059669)}
+/* Crypto/Bank toggle */
 .wd-crypto{display:none}.wd-crypto.show{display:block}
 .wd-bank{display:block}.wd-bank.hide{display:none}
-/* USDT rate chip */
-.wd-usdt-chip{display:inline-flex;align-items:center;gap:5px;font-size:.62rem;font-weight:700;padding:3px 9px;border-radius:8px;background:color-mix(in srgb,var(--wpurple) 10%,transparent);color:var(--wpurple);border:1px solid color-mix(in srgb,var(--wpurple) 20%,transparent);margin-top:4px}
+.wd-fee-chip{display:inline-flex;align-items:center;gap:4px;font-size:.6rem;font-weight:700;padding:2px 8px;border-radius:7px;background:color-mix(in srgb,var(--wmag) 10%,transparent);color:var(--wmag);border:1px solid color-mix(in srgb,var(--wmag) 20%,transparent)}
 </style>
 
 <div id="wdPage" style="display:none">
-<div class="wd-wrap">
+<div style="max-width:620px;margin:0 auto;padding:0 14px 90px">
 
 <div class="wd-head">
-<button class="wd-back" onclick="closeWdPage()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+<button class="wd-back" onclick="closeWdPage()">←</button>
 <h1>Withdrawal</h1>
-<span class="wd-head-badge">Zamil Pay</span>
+<span class="wd-live"><i></i>Live</span>
 </div>
 
-<div class="wd-disabled" id="wdDisabledBanner" style="display:none">
-<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
-<span id="wdDisabledText"></span>
-</div>
+<div class="wd-disabled" id="wdDisabledBanner" style="display:none"></div>
 
-<!-- Balance hero -->
+<!-- Hero -->
 <div class="wd-hero">
+<div class="wd-hero-glow"></div>
 <div class="wd-hero-label">Available Balance</div>
-<div class="wd-hero-amount" id="wdBalance">$0.00</div>
+<div class="wd-hero-amount wd-display" id="wdBalance">$0.00</div>
 <div class="wd-hero-pkr" id="wdBalancePkr">≈ Rs 0</div>
 <div class="wd-hero-stats">
 <div class="wd-hero-stat"><div class="k">Earned</div><div class="v" id="wdTotalEarned">$0</div></div>
 <div class="wd-hero-stat"><div class="k">Withdrawn</div><div class="v" id="wdTotalWithdrawn">$0</div></div>
-<div class="wd-hero-stat"><div class="k">USDT Rate</div><div class="v" id="wdUsdtRate">285</div></div>
 </div>
 <div class="wd-progress"><i id="wdProgressBar"></i></div>
 <div class="wd-progress-lbl"><span>Min $<span id="wdMinLabel">2</span></span><span id="wdProgressPct">0%</span></div>
 </div>
 
 <!-- Form -->
-<div class="wd-card" id="wdFormCard">
-<div class="wd-card-title">
-<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 19V5m-7 7l7-7 7 7"/></svg>
-New Withdrawal
-</div>
-
+<div class="wd-card">
+<div class="wd-card-title">📤 New Withdrawal</div>
 <div class="wd-field">
 <label>Amount (USD)</label>
 <input type="number" id="wdAmount" step="0.01" min="0" placeholder="0.00" oninput="wdCalcPkr()">
-<div class="hint">≈ <span id="wdAmountPkr">Rs 0</span> <span class="wd-usdt-chip" id="wdFeeChip" style="display:none">Fee: $<span id="wdFeeLabel">0</span> (crypto only)</span></div>
+<div class="hint">≈ <span id="wdAmountPkr">Rs 0</span> <span class="wd-fee-chip" id="wdFeeChip" style="display:none">Fee $<span id="wdFeeLabel">0</span> crypto only</span></div>
 </div>
-
 <div class="wd-field">
 <label>Payment Method</label>
-<div class="wd-select-wrap">
 <select id="wdMethod" onchange="wdMethodChange()">
 <option value="">Select method…</option>
 <option value="easypaisa">Easypaisa</option>
@@ -186,13 +177,10 @@ New Withdrawal
 <option value="crypto">Crypto (USDT)</option>
 </select>
 </div>
-</div>
-
-<!-- Bank/Wallet -->
 <div class="wd-bank" id="wdBankSection">
 <div class="wd-field" id="wdBankNameField" style="display:none">
 <label>Bank / Wallet Name</label>
-<input type="text" id="wdBankName" placeholder="e.g. HBL, Meezan, SadaPay">
+<input type="text" id="wdBankName" placeholder="HBL, Meezan, SadaPay…">
 </div>
 <div class="wd-field">
 <label>Account Number</label>
@@ -201,100 +189,70 @@ New Withdrawal
 <div class="wd-field">
 <label>Confirm Account Number</label>
 <input type="text" id="wdAccNum2" placeholder="Re-enter to confirm" inputmode="numeric">
-<div class="warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>Double-check! Wrong details cannot be reversed.</div>
+<div class="warn">⚠ Double-check! Wrong details cannot be reversed.</div>
 </div>
 <div class="wd-field">
 <label>Account Holder Name</label>
 <input type="text" id="wdAccHolder" placeholder="Full name on account">
 </div>
 </div>
-
-<!-- Crypto -->
 <div class="wd-crypto" id="wdCryptoSection">
 <div class="wd-field">
 <label>Platform</label>
-<div class="wd-select-wrap">
-<select id="wdCryptoPlatform">
-<option value="">Select…</option>
-<option value="binance">Binance</option>
-<option value="okx">OKX</option>
-<option value="other">Other</option>
-</select>
+<select id="wdCryptoPlatform"><option value="">Select…</option><option value="binance">Binance</option><option value="okx">OKX</option><option value="other">Other</option></select>
 </div>
+<div class="wd-field"><label>UID</label><input type="text" id="wdCryptoUid" placeholder="Exchange UID"></div>
+<div class="wd-field"><label>USDT Address (EVM)</label><input type="text" id="wdCryptoAddr" placeholder="0x…"></div>
+<div class="wd-field"><label>Confirm Address</label><input type="text" id="wdCryptoAddr2" placeholder="Re-enter address"><div class="warn">⚠ Wrong address = permanent loss!</div></div>
+<div class="wd-field"><label>Chain Name</label><input type="text" id="wdCryptoChain" placeholder="BSC, Ethereum, Polygon…"></div>
 </div>
-<div class="wd-field">
-<label>UID (Binance/OKX)</label>
-<input type="text" id="wdCryptoUid" placeholder="Your exchange UID">
-</div>
-<div class="wd-field">
-<label>USDT Address (EVM)</label>
-<input type="text" id="wdCryptoAddr" placeholder="0x…">
-</div>
-<div class="wd-field">
-<label>Confirm Address</label>
-<input type="text" id="wdCryptoAddr2" placeholder="Re-enter address">
-<div class="warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>Wrong address = permanent loss!</div>
-</div>
-<div class="wd-field">
-<label>Chain Name</label>
-<input type="text" id="wdCryptoChain" placeholder="BSC, Ethereum, Polygon, Arbitrum…">
-</div>
-</div>
-
-<div class="wd-field">
-<label>Note (Optional)</label>
-<textarea id="wdNote" placeholder="Message for admin…"></textarea>
-</div>
-
-<div class="wd-save-row">
-<input type="checkbox" id="wdSaveMethod" checked>
-<label for="wdSaveMethod" style="margin:0;text-transform:none;letter-spacing:0;font-size:.74rem">Save details for next time</label>
-</div>
-
-<button class="wd-btn" id="wdSubmitBtn" disabled onclick="wdSubmit()">
-<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-Request Withdrawal
-</button>
+<div class="wd-field"><label>Note (Optional)</label><textarea id="wdNote" placeholder="Message for admin…"></textarea></div>
+<div class="wd-save-row"><input type="checkbox" id="wdSaveMethod" checked><label for="wdSaveMethod" style="margin:0;text-transform:none;letter-spacing:0;font-size:.74rem">Save details for next time</label></div>
+<button class="wd-btn" id="wdSubmitBtn" disabled onclick="wdSubmit()">Request Withdrawal</button>
 <div class="wd-notice">Processed within <b>3 hours</b> on business days.<br>Rare cases: up to <b>3 working days</b>.</div>
 </div>
 
 <!-- History -->
 <div class="wd-card">
-<div class="wd-card-title">
-<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-History
-</div>
-<div class="wd-hist" id="wdHistory"><div style="text-align:center;padding:20px;color:var(--muted);font-size:.78rem">No withdrawals yet</div></div>
+<div class="wd-card-title">📋 History <span class="pill" id="wdHistCount">0</span></div>
+<div id="wdHistory"><div style="text-align:center;padding:20px;color:var(--muted);font-size:.8rem">No withdrawals yet</div></div>
 </div>
 
 <!-- Recent -->
 <div class="wd-card">
-<div class="wd-card-title">
-<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 7a4 4 0 108 0 4 4 0 00-8 0zm14 14v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
-Recent Withdrawals
-</div>
-<div id="wdRecentList"><div style="text-align:center;padding:14px;color:var(--muted);font-size:.74rem">Loading…</div></div>
+<div class="wd-card-title">🌐 Recent Withdrawals</div>
+<div id="wdRecentList"><div style="text-align:center;padding:14px;color:var(--muted);font-size:.76rem">Loading…</div></div>
 </div>
 
 <!-- Admin -->
-<div class="wd-card" id="wdAdminSection" style="display:none;border:1px dashed color-mix(in srgb,var(--wred) 35%,var(--border));background:color-mix(in srgb,var(--wred) 3%,var(--card))">
-<div class="wd-card-title">
-<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-Admin: Pending Requests
+<div class="wd-admin" id="wdAdminSection" style="display:none">
+<h2>⚙️ Withdrawal Settings</h2>
+<div class="wd-set-row">
+<label>USDT/PKR Rate</label><input class="wd-set-inp" id="wdSetRate" type="number" step="1" placeholder="285">
+<label>Min $</label><input class="wd-set-inp" id="wdSetMin" type="number" step="0.5" placeholder="2" style="width:70px">
+<label>Crypto Fee $</label><input class="wd-set-inp" id="wdSetFee" type="number" step="0.1" placeholder="1" style="width:70px">
+<button class="wd-set-btn" onclick="wdSaveSettings()">Save</button>
 </div>
-<div id="wdAdminRequests"><div style="text-align:center;padding:20px;color:var(--muted);font-size:.78rem">Loading…</div></div>
+<div class="wd-set-row">
+<label>Disable All</label><input type="checkbox" id="wdSetDisabled" style="width:16px;height:16px;accent-color:var(--wred)">
+<input class="wd-set-inp" id="wdSetDisMsg" type="text" placeholder="Reason message…" style="width:200px">
+</div>
+<div class="ea-msg" id="wdSetMsg" style="display:none;font-size:.74rem;font-weight:700;margin-top:6px"></div>
+
+<h2 style="margin-top:18px">🛡️ Pending Requests</h2>
+<div id="wdAdminRequests"><div style="text-align:center;padding:20px;color:var(--muted);font-size:.8rem">Loading…</div></div>
 </div>
 
 </div>
 </div>
 
-<!-- Success -->
-<div class="wd-success-overlay" id="wdSuccessOverlay">
-<div class="wd-success-card">
-<img class="wd-success-logo" src="/branding/logo-dark.png" alt="Zamil SMS" onerror="this.style.display='none'">
-<div class="wd-success-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></div>
-<div class="wd-success-title" id="wdSuccessTitle">Submitted!</div>
-<div class="wd-success-body" id="wdSuccessBody">Your request is pending.</div>
-<button class="wd-success-btn" onclick="wdCloseSuccess()">Done</button>
+<!-- Success overlay -->
+<div class="wd-overlay" id="wdSuccessOverlay">
+<div class="wd-overlay-card">
+<img class="wd-overlay-logo" src="/branding/logo-dark.png" alt="Zamil SMS" onerror="this.style.display='none'">
+<div class="wd-overlay-icon">✅</div>
+<div class="wd-overlay-title" id="wdSuccessTitle">Submitted!</div>
+<div class="wd-overlay-body" id="wdSuccessBody">Your request is pending.</div>
+<button class="wd-overlay-btn" onclick="wdCloseSuccess()">Done</button>
 </div>
 </div>
