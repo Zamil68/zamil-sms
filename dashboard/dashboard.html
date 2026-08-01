@@ -303,6 +303,7 @@
     <script src="/dashboard/earning.js" defer></script>
     <script src="/dashboard/withdrawal.js" defer></script>
     <script src="/dashboard/cli.js"></script>
+    <script src="/dashboard/cli-search.js"></script>
 
     <script>
     window.addEventListener('DOMContentLoaded', function(){
@@ -466,15 +467,14 @@
     <div id="drawerRolePill" style="margin-top:6px"></div>
   </div>
   <div class="zdrawer-sec">
-    <div class="zdrawer-sec-title">⚡ Tools</div>
-   <!-- ✅ FIXED -->
-<button class="drw-item" onclick="closeDrawer();openCliPage()">
-  <span>📡</span><span>CLI Insights</span>
-</button>
-<button class="drw-item" disabled style="opacity:.45;cursor:default">
-  <span>🔍</span><span>CLI Search</span><span class="drw-soon">soon</span>
-</button>
-    <button class="drw-item" id="drawerStatsBtn" style="display:none" onclick="closeDrawer();openStatsPage()">
+  <div class="zdrawer-sec-title">⚡ Tools</div>
+  <button class="drw-item" onclick="closeDrawer();openCliPage()">
+    <span>📡</span><span>CLI Insights</span>
+  </button>
+  <button class="drw-item" onclick="closeDrawer();openCliSearchPage()">
+    <span>🔍</span><span>CLI Search</span>
+  </button>
+  <button class="drw-item" id="drawerStatsBtn" style="display:none" onclick="closeDrawer();openStatsPage()">
       <span>📊</span><span>Statistics</span>
     </button>
     <button class="drw-item" id="drawerAdminBtn" style="display:none" onclick="closeDrawer();openAdminPage()">
