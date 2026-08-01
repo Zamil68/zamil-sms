@@ -620,6 +620,189 @@ function _earnWindow(cfg) {
   return { from: f + ' 00:00:00', to: t + ' 23:59:59', label: f + ' → ' + t };
 }
 
+// ═══════════════════════════════════════════════════════════
+// 📡 CLI INSIGHTS — second-panel CDR aggregation (global, all users)
+//    Scrapes a SEPARATE LaMix agent login (configured by super admin),
+//    groups every SMS row by CLI (app name), ranks by quantity → recency,
+//    and persists the result per business-day in Supabase (cli_daily).
+// ═══════════════════════════════════════════════════════════
+const CLI_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36';
+let _cliCookie = '', _cliCookieTs = 0, _cliLastLogin = 0;
+let _cliCredsCache = { ts: 0, user: null, pass: null };
+let _cliMem = null; // { day, ts, list, stats }
+
+function _parseUtc(s) {
+  if (!s) return 0;
+  const t = String(s).trim().replace(' ', 'T');
+  const d = new Date(t.endsWith('Z') ? t : t + 'Z');
+  const v = d.getTime();
+  return isFinite(v) ? v : 0;
+}
+// Canonical country (dedupes "Malaysia Celcom" / "Malaysia XOX" → malaysia)
+function _canonCountry(rangeText) {
+  const cn = _countryOfRange(rangeText || '');
+  const tryOn = (s) => {
+    s = ' ' + String(s || '').toLowerCase();
+    let best = '', bestLen = 0;
+    for (const k in COUNTRY_ISO) {
+      const re = new RegExp(' ' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![a-z])');
+      if (re.test(s) && k.length > bestLen) { best = k; bestLen = k.length; }
+    }
+    return best;
+  };
+  let key = tryOn(cn);
+  if (!key) key = tryOn(rangeText);
+  if (!key) return null;
+  const disp = key.replace(/\b\w/g, c => c.toUpperCase());
+  return { key, name: disp, flag: isoToFlag(COUNTRY_ISO[key]) };
+}
+async function getCliCreds() {
+  if (_cliCredsCache.user && (Date.now() - _cliCredsCache.ts) < 60000) {
+    return { username: _cliCredsCache.user, password: _cliCredsCache.pass };
+  }
+  let user = process.env.CLI_PANEL_USER || '', pass = process.env.CLI_PANEL_PASS || '';
+  if (supaEnabled()) {
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/cli_panel_creds?id=eq.1&select=username,password`,
+        { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+      const rows = await r.json();
+      if (Array.isArray(rows) && rows[0]) {
+        if (rows[0].username) user = rows[0].username;
+        if (rows[0].password) pass = rows[0].password;
+      }
+    } catch (e) { console.error('[cli] creds read', e.message); }
+  }
+  _cliCredsCache = { ts: Date.now(), user: pass ? user : null, pass: pass || null };
+  return _cliCredsCache.user ? { username: _cliCredsCache.user, password: _cliCredsCache.pass } : null;
+}
+async function ensureCliSession(force) {
+  const creds = await getCliCreds();
+  if (!creds) return null;
+  if (!force && _cliCookie && (Date.now() - _cliCookieTs) < 20 * 60 * 1000) return _cliCookie;
+  if (!force && (Date.now() - _cliLastLogin) < 60 * 1000) return _cliCookie || null;
+  _cliLastLogin = Date.now();
+  const urls = [`${AGENT_BASE_URL}signin`, 'http://51.210.208.26/ints/signin', `${AGENT_BASE_URL}login`, 'http://51.210.208.26/ints/agent/'];
+  for (const u of urls) {
+    try {
+      const res = await axios.post(u, new URLSearchParams({ username: creds.username, password: creds.password }).toString(), {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': CLI_UA, 'Referer': 'http://51.210.208.26/ints/agent/', 'Origin': 'http://51.210.208.26' },
+        maxRedirects: 0, validateStatus: () => true, timeout: 12000
+      });
+      const sc = res.headers['set-cookie'];
+      if (sc) {
+        const joined = Array.isArray(sc) ? sc.join('; ') : String(sc);
+        const m = joined.match(/PHPSESSID=([^;]+)/);
+        if (m) { _cliCookie = 'PHPSESSID=' + m[1]; _cliCookieTs = Date.now(); console.log('[cli] login OK via', u); return _cliCookie; }
+      }
+    } catch (e) { console.log('[cli] login err', u, e.message); }
+  }
+  return _cliCookie || null;
+}
+function cliHeaders() {
+  return {
+    'Accept': 'application/json, text/javascript, */*; q=0.01', 'Accept-Encoding': 'gzip, deflate',
+    'Accept-Language': 'en-US,en;q=0.9', 'Connection': 'keep-alive', 'Cookie': _cliCookie,
+    'Host': '51.210.208.26', 'Referer': 'http://51.210.208.26/ints/agent/SMSCDRReports',
+    'User-Agent': CLI_UA, 'X-Requested-With': 'XMLHttpRequest'
+  };
+}
+async function scrapeCliCDR(dateFrom, dateTo) {
+  const cookie = await ensureCliSession();
+  if (!cookie) return [];
+  const mp = {};
+  for (let i = 0; i < 9; i++) { mp['mDataProp_' + i] = i; mp['sSearch_' + i] = ''; mp['bRegex_' + i] = false; mp['bSearchable_' + i] = true; mp['bSortable_' + i] = (i !== 8); }
+  const params = Object.assign({
+    fdate1: dateFrom, fdate2: dateTo, frange: '', fclient: '', fnum: '', fcli: '',
+    fgdate: '', fgmonth: '', fgrange: '', fgclient: '', fgnumber: '', fgcli: '', fg: 0,
+    sEcho: 1, iColumns: 9, sColumns: ',,,,,,,,', iDisplayStart: 0, iDisplayLength: 100000, // ← ALL rows of the day
+    sSearch: '', bRegex: false, iSortCol_0: 0, sSortDir_0: 'desc', iSortingCols: 1
+  }, mp);
+  const doReq = async () => (await axios.get(`${AGENT_BASE_URL}res/data_smscdr.php`, { params, headers: cliHeaders(), timeout: 50000, maxRedirects: 5, validateStatus: () => true })).data;
+  try {
+    let d = await doReq();
+    if (looksLikeLogin(d)) { await ensureCliSession(true); d = await doReq(); }
+    if (!d || !d.aaData) return [];
+    const rows = [];
+    d.aaData.forEach(r => {
+      if (!Array.isArray(r)) return;
+      const dt = String(r[0] || '');
+      if (!/^\d{4}-\d{2}-\d{2}/.test(dt)) return; // skip totals row
+      rows.push({
+        datetime: dt,
+        range: String(r[1] || '').replace(/<[^>]*>/g, '').trim(),
+        cli: String(r[3] || '').replace(/<[^>]*>/g, '').trim(),
+        message: String(r[5] || '').replace(/<[^>]*>/g, '').trim()
+      });
+    });
+    return rows;
+  } catch (e) { console.error('[cli] scrape err', e.message); return []; }
+}
+function buildCliList(rows) {
+  const map = new Map(); const globalMap = new Map();
+  (rows || []).forEach(r => {
+    const cli = (r.cli || '').trim() || 'Unknown';
+    const key = cli.toLowerCase();
+    let e = map.get(key);
+    if (!e) { e = { cli, count: 0, countries: new Map(), lastSeen: 0, samples: [] }; map.set(key, e); }
+    e.count++;
+    const ci = _canonCountry(r.range);
+    if (ci) {
+      let o = e.countries.get(ci.key); if (!o) { o = { name: ci.name, flag: ci.flag, n: 0 }; e.countries.set(ci.key, o); } o.n++;
+      let g = globalMap.get(ci.key); if (!g) { g = { name: ci.name, flag: ci.flag, n: 0 }; globalMap.set(ci.key, g); } g.n++;
+    }
+    const ts = _parseUtc(r.datetime);
+    if (ts > e.lastSeen) e.lastSeen = ts;
+    if (e.samples.length < 2) {
+      const m = String(r.message || '').replace(/\s+/g, ' ').trim();
+      const sig = m.slice(0, 60);
+      if (m && !e.samples.some(s => s.sig === sig)) e.samples.push({ sig, text: m.slice(0, 180), t: ts });
+    }
+  });
+  const list = [];
+  map.forEach(e => {
+    const countries = Array.from(e.countries.values()).sort((a, b) => b.n - a.n);
+    list.push({
+      cli: e.cli, count: e.count,
+      countries: countries.slice(0, 6),
+      lastSeen: e.lastSeen ? new Date(e.lastSeen).toISOString() : null,
+      samples: e.samples.map(s => ({ text: s.text, t: s.t ? new Date(s.t).toISOString() : null }))
+    });
+  });
+  list.sort((a, b) => (b.count - a.count) || String(b.lastSeen || '').localeCompare(String(a.lastSeen || '')));
+  const topCountries = Array.from(globalMap.values()).sort((a, b) => b.n - a.n).slice(0, 5);
+  return {
+    list: list.slice(0, 800),
+    stats: { totalSms: (rows || []).length, totalCli: map.size, topCountry: topCountries[0] || null, topCountries }
+  };
+}
+async function cliRefreshInternal(label) {
+  const creds = await getCliCreds();
+  if (!creds) return { ok: false, reason: 'no_creds' };
+  const win = label ? { from: label + ' 00:00:00', to: label + ' 23:59:59', label } : businessDayPKT();
+  const rows = await scrapeCliCDR(win.from, win.to);
+  const { list, stats } = buildCliList(rows || []);
+  if (supaEnabled()) {
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/cli_daily`, {
+        method: 'POST',
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify({ day: win.label, payload: { list, stats }, total_rows: (rows || []).length, total_cli: stats.totalCli, panel_user: creds.username, updated_at: new Date().toISOString() })
+      });
+    } catch (e) { console.error('[cli] write err', e.message); }
+  }
+  _cliMem = { day: win.label, ts: Date.now(), list, stats };
+  console.log('[cli] refreshed', win.label, 'rows=' + (rows || []).length, 'clis=' + stats.totalCli);
+  return { ok: true, list, stats, total: (rows || []).length };
+}
+// Best-effort background refresh every 4 min (runs on warm instances)
+setInterval(() => {
+  getCliCreds().then(c => {
+    if (!c) return;
+    const label = businessDayPKT().label;
+    if (!_cliMem || _cliMem.day !== label || (Date.now() - _cliMem.ts) > 240000) cliRefreshInternal(label).catch(() => {});
+  }).catch(() => {});
+}, 4 * 60 * 1000);
+
 module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).json({ ...corsHeaders });
   const url = req.url.replace(/^\/api/, '');
@@ -2156,6 +2339,99 @@ if (url === '/admin/withdraw/settings' && req.method === 'POST') {
     return ok(res, { message: 'Settings saved' });
   } catch (e) { return error(res, 500, 'settings: ' + e.message); }
 }
+
+    // ═══════════════════════════════════════════════════════════
+    // 📡 CLI INSIGHTS — read = all users; creds config = super only
+    // ═══════════════════════════════════════════════════════════
+    if (url === '/cli/analysis' && req.method === 'POST') {
+      try {
+        const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+        const label = businessDayPKT().label;
+        // 1) in-memory cache (90s)
+        if (_cliMem && _cliMem.day === label && (Date.now() - _cliMem.ts) < 90000) {
+          return ok(res, { day: label, list: _cliMem.list, stats: _cliMem.stats, cached: true });
+        }
+        // 2) Supabase fresh row (6 min)
+        if (supaEnabled()) {
+          try {
+            const r = await fetch(`${SUPABASE_URL}/rest/v1/cli_daily?day=eq.${encodeURIComponent(label)}&select=payload,updated_at&limit=1`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+            const rows = await r.json();
+            if (Array.isArray(rows) && rows[0] && rows[0].payload) {
+              const upd = new Date(rows[0].updated_at).getTime();
+              if ((Date.now() - upd) < 360000) {
+                const p = rows[0].payload;
+                _cliMem = { day: label, ts: Date.now(), list: p.list || [], stats: p.stats || {} };
+                return ok(res, { day: label, list: p.list || [], stats: p.stats || {}, cached: true });
+              }
+            }
+          } catch (e) {}
+        }
+        // 3) scrape now
+        const res2 = await cliRefreshInternal(label);
+        if (res2.ok) return ok(res, { day: label, list: res2.list, stats: res2.stats, total: res2.total });
+        // 4) stale fallback so the page never breaks
+        if (supaEnabled()) {
+          try {
+            const r = await fetch(`${SUPABASE_URL}/rest/v1/cli_daily?day=eq.${encodeURIComponent(label)}&select=payload&limit=1`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+            const rows = await r.json();
+            if (Array.isArray(rows) && rows[0] && rows[0].payload) {
+              const p = rows[0].payload; _cliMem = { day: label, ts: Date.now(), list: p.list || [], stats: p.stats || {} };
+              return ok(res, { day: label, list: p.list || [], stats: p.stats || {}, stale: true, reason: res2.reason });
+            }
+          } catch (e) {}
+        }
+        return ok(res, { day: label, list: [], stats: { totalSms: 0, totalCli: 0 }, reason: res2.reason || 'no_data' });
+      } catch (e) { return error(res, 500, 'cli/analysis: ' + e.message); }
+    }
+
+    if (url === '/cli/refresh' && req.method === 'POST') {
+      try {
+        const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+        const role = await getRole(user.username);
+        const label = businessDayPKT().label;
+        // throttle non-super to once / 2 min (super bypasses)
+        if (role !== 'super' && supaEnabled()) {
+          try {
+            const r = await fetch(`${SUPABASE_URL}/rest/v1/cli_daily?day=eq.${encodeURIComponent(label)}&select=updated_at&limit=1`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+            const rows = await r.json();
+            if (Array.isArray(rows) && rows[0]) {
+              const upd = new Date(rows[0].updated_at).getTime();
+              if ((Date.now() - upd) < 120000 && _cliMem && _cliMem.day === label) {
+                return ok(res, { day: label, list: _cliMem.list, stats: _cliMem.stats, throttled: true });
+              }
+            }
+          } catch (e) {}
+        }
+        const res2 = await cliRefreshInternal(label);
+        if (res2.ok) return ok(res, { day: label, list: res2.list, stats: res2.stats, total: res2.total });
+        return error(res, 400, res2.reason === 'no_creds' ? 'Second panel credentials not configured yet.' : 'Refresh failed — try again.');
+      } catch (e) { return error(res, 500, 'cli/refresh: ' + e.message); }
+    }
+
+    if (url === '/admin/cli-creds' && req.method === 'POST') {
+      try {
+        const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+        if ((await getRole(user.username)) !== 'super') return error(res, 403, 'Super admin only');
+        if (!supaEnabled()) return error(res, 400, 'Supabase required.');
+        const username = String(req.body.username || '').trim();
+        const password = String(req.body.password || '');
+        if (!username) return error(res, 400, 'Username required.');
+        const body = { id: 1, username, updated_by: user.username, updated_at: new Date().toISOString() };
+        if (password) body.password = password; // blank = keep existing (merge-duplicates)
+        await fetch(`${SUPABASE_URL}/rest/v1/cli_panel_creds`, { method: 'POST', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(body) });
+        _cliCredsCache = { ts: 0, user: null, pass: null }; _cliCookie = ''; _cliCookieTs = 0;
+        return ok(res, { message: 'Saved. Tap Refresh to pull live data now.' });
+      } catch (e) { return error(res, 500, 'cli-creds: ' + e.message); }
+    }
+
+    if (url === '/admin/cli-creds-get' && req.method === 'POST') {
+      try {
+        const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+        if ((await getRole(user.username)) !== 'super') return error(res, 403, 'Super admin only');
+        const c = await getCliCreds();
+        return ok(res, { username: c ? c.username : '', hasPassword: !!(c && c.password) });
+      } catch (e) { return error(res, 500, 'cli-creds-get: ' + e.message); }
+    }
     
  return error(res, 404, 'Route not found');
   } catch (err) {
