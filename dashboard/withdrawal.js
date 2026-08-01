@@ -197,14 +197,24 @@ function loadAdminRequests(){
   });
 }
 window.wdAction=function(id,action,btn){
-  var mr=document.getElementById('wdMsg_'+id),mi=document.getElementById('wdMsgInp_'+id);
-  if(mr&&mr.style.display==='none'){mr.style.display='block';if(mi)mi.focus();return;}
+  var mi=document.getElementById('wdMsgInp_'+id);
   var message=(mi&&mi.value)||'';
-  if(action==='reject'&&!message)message='Withdrawal rejected.';
+  if(action==='reject'&&!message){
+    var mr=document.getElementById('wdMsg_'+id);
+    if(mr&&mr.style.display==='none'){mr.style.display='block';if(mi){mi.focus();mi.placeholder='Reason required for rejection…';}return;}
+    if(!message){alert('Please enter a rejection reason.');if(mi)mi.focus();return;}
+  }
   btn.disabled=true;btn.textContent='…';
   post(action==='approve'?'/api/admin/withdraw/approve':'/api/admin/withdraw/reject',{id:id,message:message},function(d){
-    if(d&&d.ok){btn.textContent=action==='approve'?'✅ Done':'❌ Done';btn.style.opacity='.5';setTimeout(loadAdminRequests,1000);}
-    else{alert('Failed: '+((d&&d.error)||'?'));btn.disabled=false;btn.textContent=action==='approve'?'✅ Approve':'❌ Reject';}
+    if(d&&d.ok){
+      btn.textContent=action==='approve'?'Done':'Done';
+      btn.style.opacity='.4';btn.style.pointerEvents='none';
+      var card=btn.closest('.wd-admin-card');if(card)card.style.opacity='.5';
+      setTimeout(loadAdminRequests,1200);
+    } else {
+      alert('Failed: '+((d&&d.error)||'?'));
+      btn.disabled=false;btn.textContent=action==='approve'?'Approve':'Reject';
+    }
   });
 };
 window.wdCopy=function(id){
