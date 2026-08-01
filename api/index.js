@@ -803,6 +803,70 @@ setInterval(() => {
   }).catch(() => {});
 }, 4 * 60 * 1000);
 
+// ═══ CLI TRACK + SEARCH + GATE helpers ═══
+let _cliRowsMem = null;
+async function getCliRows(label) {
+  const win = label ? { from: label + ' 00:00:00', to: label + ' 23:59:59', label } : businessDayPKT();
+  if (_cliRowsMem && _cliRowsMem.day === win.label && _cliRowsMem.rows && _cliRowsMem.rows.length && (Date.now() - _cliRowsMem.ts) < 480000) return _cliRowsMem.rows;
+  const rows = await scrapeCDR(win.from, win.to);
+  const stamped = (rows || []).map(r => { const ts = _parseUtc(r.datetime); r._ts = ts; r._iso = ts ? new Date(ts).toISOString() : null; return r; });
+  if (stamped.length) _cliRowsMem = { day: win.label, ts: Date.now(), rows: stamped };
+  return stamped.length ? stamped : (_cliRowsMem && _cliRowsMem.rows ? _cliRowsMem.rows : []);
+}
+function _parseUtc(s) {
+  if (!s) return 0;
+  const t = String(s).trim().replace(' ', 'T');
+  const d = new Date(t.endsWith('Z') ? t : t + 'Z');
+  return isFinite(d.getTime()) ? d.getTime() : 0;
+}
+function _canonCountry(rangeText) {
+  const cn = _countryOfRange(rangeText || '');
+  const tryOn = (s) => {
+    s = ' ' + String(s || '').toLowerCase();
+    let best = '', bestLen = 0;
+    for (const k in COUNTRY_ISO) {
+      const re = new RegExp(' ' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![a-z])');
+      if (re.test(s) && k.length > bestLen) { best = k; bestLen = k.length; }
+    }
+    return best;
+  };
+  let key = tryOn(cn);
+  if (!key) key = tryOn(rangeText);
+  if (!key) return null;
+  return { key, name: key.replace(/\b\w/g, c => c.toUpperCase()), flag: isoToFlag(COUNTRY_ISO[key]) };
+}
+async function cliIsRestricted(username) {
+  if (!supaEnabled()) return { insights: false, search: false };
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/cli_restrictions?username=eq.${encodeURIComponent(String(username).toLowerCase())}&select=block_insights,block_search&limit=1`,
+      { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+    const rows = await r.json();
+    if (Array.isArray(rows) && rows[0]) return { insights: !!rows[0].block_insights, search: !!rows[0].block_search };
+  } catch (e) {}
+  return { insights: false, search: false };
+}
+async function cliGateFor(user) {
+  const role = await getRole(user.username);
+  if (role === 'super') return { insights: true, search: true, role };
+  const rest = await cliIsRestricted(user.username);
+  return { insights: !rest.insights, search: !rest.search, role };
+}
+function logCliActivity(username, action, meta) {
+  if (!supaEnabled()) return;
+  const day = businessDayPKT().label;
+  fetch(`${SUPABASE_URL}/rest/v1/cli_activity`, {
+    method: 'POST',
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+    body: JSON.stringify({ username: String(username).toLowerCase(), action, day, meta: meta || null, created_at: new Date().toISOString() })
+  }).catch(() => {});
+}
+function _cliWindowDays(range) {
+  const today = businessDayPKT().label;
+  const back = range === 'week' ? 6 : range === 'month' ? 29 : 0;
+  const start = new Date(new Date(today + 'T00:00:00Z').getTime() - back * 86400000).toISOString().slice(0, 10);
+  return { start, today, label: range === 'week' ? 'Last 7 days' : range === 'month' ? 'Last 30 days' : 'Today' };
+}
+
 module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).json({ ...corsHeaders });
   const url = req.url.replace(/^\/api/, '');
@@ -2431,6 +2495,119 @@ if (url === '/admin/withdraw/settings' && req.method === 'POST') {
         const c = await getCliCreds();
         return ok(res, { username: c ? c.username : '', hasPassword: !!(c && c.password) });
       } catch (e) { return error(res, 500, 'cli-creds-get: ' + e.message); }
+    }
+
+    // ═══ CLI GATE (access check + logs opens) ═══
+    if (url === '/cli/gate' && req.method === 'POST') {
+      try {
+        const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+        const gate = await cliGateFor(user);
+        const oa = req.body.openAction;
+        if (oa === 'open_insights' && gate.insights) logCliActivity(user.username, 'open_insights');
+        if (oa === 'open_search' && gate.search) logCliActivity(user.username, 'open_search');
+        return ok(res, gate);
+      } catch (e) { return error(res, 500, 'cli/gate: ' + e.message); }
+    }
+
+    // ═══ CLI SEARCH ═══
+    if (url === '/cli/search' && req.method === 'POST') {
+      try {
+        const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+        const _g = await cliGateFor(user);
+        if (!_g.search) return error(res, 403, 'CLI Search is restricted for your account.');
+        const rawQ = String(req.body.q || '').trim();
+        let mode = String(req.body.mode || 'auto');
+        if (!rawQ) return ok(res, { q: '', mode: 'auto', clis: [], rows: [], summary: [], stats: { matched: 0 } });
+        const digits = rawQ.replace(/\D/g, '');
+        const noSpace = rawQ.replace(/\s+/g, '');
+        if (mode === 'auto') mode = (digits.length >= 8 && digits.length === noSpace.length) ? 'number' : 'text';
+        if (String(req.body.q || '').trim()) logCliActivity(user.username, 'search_query', { q: rawQ.slice(0, 80), mode });
+        const label = businessDayPKT().label;
+        const rows = await getCliRows(label);
+        if (!rows || !rows.length) return ok(res, { q: rawQ, mode, clis: [], rows: [], summary: [], stats: { matched: 0 }, reason: 'no_data' });
+        const toRow = (r) => {
+          const ci = _canonCountry(r.range);
+          return { cli: r.cli || 'Unknown', range: r.range || '', country: ci ? ci.name : '', flag: ci ? ci.flag : '', number: String(r.number || ''), t: r._iso || null, message: r.message || '' };
+        };
+        if (mode === 'number') {
+          const matched = rows.filter(r => { const n = String(r.number || '').replace(/\D/g, ''); return n && (n === digits || n.endsWith(digits) || digits.endsWith(n) || n.includes(digits)); });
+          matched.sort((a, b) => String(b._iso || '').localeCompare(String(a._iso || '')));
+          const out = matched.slice(0, 120).map(toRow);
+          const sm = {}; matched.forEach(r => { const k = r.cli || 'Unknown'; sm[k] = (sm[k] || 0) + 1; });
+          const summary = Object.entries(sm).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([cli, n]) => ({ cli, n }));
+          return ok(res, { q: rawQ, mode: 'number', number: digits, rows: out, summary, stats: { matched: matched.length, total: rows.length } });
+        }
+        const qL = rawQ.toLowerCase(), qNs = qL.replace(/\s+/g, '');
+        const matched = rows.filter(r => {
+          const hay = ((r.cli || '') + ' ' + (r.range || '') + ' ' + (r.message || '')).toLowerCase();
+          if (hay.includes(qL) || hay.replace(/\s+/g, '').includes(qNs)) return true;
+          const toks = qL.split(/\s+/).filter(Boolean);
+          return toks.length > 1 && toks.every(t => hay.includes(t));
+        });
+        matched.sort((a, b) => (b._ts || 0) - (a._ts || 0));
+        const rawOut = matched.slice(0, 200).map(toRow);
+        return ok(res, { q: rawQ, mode: 'text', clis: [], rows: rawOut, stats: { matched: matched.length, total: rows.length } });
+      } catch (e) { return error(res, 500, 'cli/search: ' + e.message); }
+    }
+
+    // ═══ ADMIN: CLI TRACK (super only) ═══
+    if (url === '/admin/cli/track' && req.method === 'POST') {
+      try {
+        const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+        if ((await getRole(user.username)) !== 'super') return error(res, 403, 'Super admin only');
+        if (!supaEnabled()) return ok(res, { range: 'day', window: { label: '—' }, perUser: [], topQueries: [], totals: { open_insights: 0, open_search: 0, search_query: 0, uniqueUsers: 0 } });
+        const range = req.body.range || 'day';
+        const w = _cliWindowDays(range);
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/cli_activity?day=gte.${w.start}&day=lte.${w.today}&select=username,action,meta,created_at&order=created_at.desc&limit=20000`,
+          { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+        const rows = (await r.json()) || [];
+        const byUser = {}, qmap = {}; let tI = 0, tS = 0, tQ = 0;
+        rows.forEach(x => {
+          const u = x.username || '?';
+          if (!byUser[u]) byUser[u] = { username: u, open_insights: 0, open_search: 0, search_query: 0, total: 0, lastSeen: null };
+          const o = byUser[u]; o.total++;
+          if (x.action === 'open_insights') { o.open_insights++; tI++; }
+          else if (x.action === 'open_search') { o.open_search++; tS++; }
+          else if (x.action === 'search_query') { o.search_query++; tQ++; if (x.meta && x.meta.q) qmap[x.meta.q] = (qmap[x.meta.q] || 0) + 1; }
+          if (!o.lastSeen) o.lastSeen = x.created_at;
+        });
+        const perUser = Object.values(byUser).sort((a, b) => b.total - a.total);
+        const topQueries = Object.entries(qmap).sort((a, b) => b[1] - a[1]).slice(0, 20).map(([q, n]) => ({ q, n }));
+        return ok(res, { range, window: w, perUser, topQueries, totals: { open_insights: tI, open_search: tS, search_query: tQ, uniqueUsers: perUser.length } });
+      } catch (e) { return error(res, 500, 'admin/cli/track: ' + e.message); }
+    }
+
+    // ═══ ADMIN: restrictions list (super only) ═══
+    if (url === '/admin/cli/restrict-list' && req.method === 'POST') {
+      try {
+        const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+        if ((await getRole(user.username)) !== 'super') return error(res, 403, 'Super admin only');
+        if (!supaEnabled()) return ok(res, { list: [] });
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/cli_restrictions?select=username,block_insights,block_search,note,updated_at&order=updated_at.desc&limit=1000`,
+          { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+        const rows = (await r.json()) || [];
+        return ok(res, { list: Array.isArray(rows) ? rows : [] });
+      } catch (e) { return error(res, 500, 'admin/cli/restrict-list: ' + e.message); }
+    }
+
+    // ═══ ADMIN: set/clear restriction (super only) ═══
+    if (url === '/admin/cli/restrict' && req.method === 'POST') {
+      try {
+        const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+        if ((await getRole(user.username)) !== 'super') return error(res, 403, 'Super admin only');
+        if (!supaEnabled()) return error(res, 400, 'Supabase required.');
+        const username = String(req.body.username || '').trim().toLowerCase();
+        if (!username) return error(res, 400, 'username required');
+        if (username === SUPER_ADMIN) return error(res, 400, 'Cannot restrict the super admin');
+        const bi = !!req.body.blockInsights, bs = !!req.body.blockSearch, note = String(req.body.note || '').slice(0, 200);
+        if (!bi && !bs) {
+          await fetch(`${SUPABASE_URL}/rest/v1/cli_restrictions?username=eq.${encodeURIComponent(username)}`, { method: 'DELETE', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+          return ok(res, { message: 'Restriction removed', username });
+        }
+        await fetch(`${SUPABASE_URL}/rest/v1/cli_restrictions`, { method: 'POST', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+          body: JSON.stringify({ username, block_insights: bi, block_search: bs, note, blocked_by: user.username, updated_at: new Date().toISOString() }) });
+        return ok(res, { message: 'Restriction saved', username });
+      } catch (e) { return error(res, 500, 'admin/cli/restrict: ' + e.message); }
     }
     
  return error(res, 404, 'Route not found');
