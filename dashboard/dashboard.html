@@ -302,6 +302,7 @@
     <script src="/dashboard/feature.js" defer></script>
     <script src="/dashboard/earning.js" defer></script>
     <script src="/dashboard/withdrawal.js" defer></script>
+    <script src="/dashboard/cli.js"></script>
 
     <script>
     window.addEventListener('DOMContentLoaded', function(){
@@ -466,7 +467,7 @@
   </div>
   <div class="zdrawer-sec">
     <div class="zdrawer-sec-title">⚡ Tools</div>
-    <button class="drw-item" onclick="closeDrawer();typeof showToast==='function'&&showToast('🔍 CLI Search coming soon','info')">
+    <button type="button" class="drop-item" onclick="openCliPage()">📡 CLI Insights</button>
       <span>🔍</span><span>CLI Search</span><span class="drw-soon">soon</span>
     </button>
     <button class="drw-item" id="drawerStatsBtn" style="display:none" onclick="closeDrawer();openStatsPage()">
