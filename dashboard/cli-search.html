@@ -1,128 +1,123 @@
-<!-- cli-search.html — injected by cli-search.js -->
+<!-- cli-search.html — v3 clean layout -->
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap');
-#cliSearchPage{--cs:#60a5fa;--csg:#34d399;--csgold:#fbbf24;--csmag:#f472b6;font-family:inherit;
-background:radial-gradient(900px 380px at 50% -8%,color-mix(in srgb,var(--cs) 14%,transparent),transparent 70%),
-radial-gradient(700px 320px at 100% 100%,color-mix(in srgb,var(--csmag) 10%,transparent),transparent 72%),var(--bg);
-background-attachment:fixed;position:fixed;inset:0;z-index:600;overflow-y:auto}
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+#cliSearchPage{--cs:#60a5fa;--csg:#34d399;--csgold:#fbbf24;--csmag:#f472b6;--csred:#f87171;
+  font-family:'Inter',system-ui,sans-serif;position:fixed;inset:0;z-index:600;overflow-y:auto;
+  background:radial-gradient(900px 400px at 50% -8%,color-mix(in srgb,var(--cs) 12%,transparent),transparent 70%),var(--bg,#0b0d12);
+  background-attachment:fixed}
 #cliSearchPage::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
-background-image:radial-gradient(rgba(255,255,255,.05) 1px,transparent 1.4px);background-size:22px 22px;opacity:.5}
-[data-theme="light"] #cliSearchPage::before{background-image:radial-gradient(rgba(15,23,42,.05) 1px,transparent 1.4px)}
+  background-image:radial-gradient(rgba(255,255,255,.04) 1px,transparent 1.4px);background-size:24px 24px;opacity:.5}
 #cliSearchPage>*{position:relative;z-index:1}
-.cs-head{display:flex;align-items:center;gap:10px;padding:14px 2px 6px}
-.cs-back{width:38px;height:38px;flex-shrink:0;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .12s}
+.cs-wrap{max-width:640px;margin:0 auto;padding:0 16px 96px}
+/* header */
+.cs-head{display:flex;align-items:center;gap:10px;padding:16px 0 10px}
+.cs-back{width:38px;height:38px;flex-shrink:0;border-radius:12px;border:1px solid var(--border,#262a35);background:var(--surface,#1b1e27);color:var(--text,#e8ecf4);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .12s}
 .cs-back:active{transform:scale(.9)}
 .cs-back svg{width:18px;height:18px}
-.cs-head h1{font-family:'Space Grotesk',sans-serif;font-size:1.18rem;font-weight:700;margin:0;letter-spacing:-.02em;flex:1;min-width:0}
-.cs-rbtn{width:38px;height:38px;flex-shrink:0;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.cs-head h1{font-family:'Space Grotesk',sans-serif;font-size:1.2rem;font-weight:700;margin:0;flex:1;letter-spacing:-.02em}
+.cs-rbtn{width:38px;height:38px;flex-shrink:0;border-radius:12px;border:1px solid var(--border,#262a35);background:var(--surface,#1b1e27);color:var(--muted,#9aa3b2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}
 .cs-rbtn:hover{border-color:var(--cs);color:var(--cs)}
 .cs-rbtn:active{transform:scale(.9)}
 .cs-rbtn.spinning svg{animation:csSpin .8s linear infinite}
 @keyframes csSpin{to{transform:rotate(360deg)}}
-/* non-destructive top progress bar (manual / typing refresh) */
+.cs-rbtn svg{width:17px;height:17px}
+/* top progress bar */
 .cs-topbar{position:sticky;top:0;left:0;right:0;height:3px;z-index:5;overflow:hidden;opacity:0;transition:opacity .2s}
 .cs-topbar.on{opacity:1}
 .cs-topbar i{display:block;height:100%;width:40%;border-radius:3px;background:linear-gradient(90deg,transparent,var(--cs),var(--csg),transparent);animation:csSlide 1s linear infinite}
 @keyframes csSlide{0%{transform:translateX(-120%)}100%{transform:translateX(320%)}}
 /* search box */
-.cs-searchwrap{position:relative;margin:12px 0 10px}
-.cs-searchwrap svg.cs-sicon{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:18px;height:18px;color:var(--muted);pointer-events:none}
-.cs-search{width:100%;box-sizing:border-box;padding:14px 84px 14px 42px;border-radius:15px;border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;font-size:.95rem;outline:none;transition:border-color .15s,box-shadow .15s}
+.cs-searchwrap{position:relative;margin:8px 0 12px}
+.cs-searchwrap .cs-sicon{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:18px;height:18px;color:var(--muted,#9aa3b2);pointer-events:none}
+.cs-search{width:100%;box-sizing:border-box;padding:14px 44px 14px 42px;border-radius:14px;border:1px solid var(--border,#262a35);background:var(--surface,#1b1e27);color:var(--text,#e8ecf4);font:inherit;font-size:.92rem;outline:none;transition:border-color .15s,box-shadow .15s}
 .cs-search:focus{border-color:var(--cs);box-shadow:0 0 0 3px color-mix(in srgb,var(--cs) 14%,transparent)}
-.cs-clear{position:absolute;right:48px;top:50%;transform:translateY(-50%);width:26px;height:26px;border:0;border-radius:8px;background:var(--border);color:var(--text);cursor:pointer;display:none;align-items:center;justify-content:center;font-size:.8rem;line-height:1}
+.cs-clear{position:absolute;right:12px;top:50%;transform:translateY(-50%);width:26px;height:26px;border:0;border-radius:8px;background:var(--border,#262a35);color:var(--text,#e8ecf4);cursor:pointer;display:none;align-items:center;justify-content:center;font-size:.75rem}
 .cs-clear.show{display:flex}
-.cs-go{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:32px;height:32px;border:0;border-radius:9px;background:linear-gradient(135deg,var(--cs),#3b82f6);color:#06080F;cursor:pointer;display:flex;align-items:center;justify-content:center}
-.cs-go svg{width:16px;height:16px}
 /* mode toggle */
-.cs-modes{display:flex;gap:6px;margin-bottom:12px}
-.cs-mode{flex:1;border:1px solid var(--border);background:var(--surface);color:var(--muted);border-radius:11px;padding:9px 6px;font:inherit;font-size:.7rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .15s}
-.cs-mode svg{width:14px;height:14px}
-.cs-mode.on{background:linear-gradient(135deg,var(--cs),#3b82f6);color:#06080F;border-color:transparent;box-shadow:0 4px 14px -6px color-mix(in srgb,var(--cs) 60%,transparent)}
-.cs-stats{font-size:.68rem;color:var(--muted);font-weight:600;margin:0 2px 12px;min-height:1em}
-.cs-stats b{color:var(--text);font-family:'Space Grotesk',monospace}
-/* number-mode "received from" chips */
-.cs-sum{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:12px}
-.cs-sum-lbl{font-size:.6rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-right:2px}
-.cs-sum-chip{display:inline-flex;align-items:center;gap:5px;font-size:.68rem;font-weight:700;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:3px 10px}
-.cs-sum-chip b{color:var(--cs);font-family:'Space Grotesk',monospace}
-/* ── the flat time-sorted feed ── */
-.cs-feed{display:flex;flex-direction:column;gap:9px}
-.cs-feed-item{position:relative;background:var(--card);border:1px solid var(--border);border-radius:15px;padding:12px 14px;overflow:hidden;transition:transform .14s,border-color .14s;animation:csIn .35s ease both}
-.cs-feed-item:hover{transform:translateX(2px);border-color:color-mix(in srgb,var(--cs) 40%,var(--border))}
-.cs-feed-item::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--cs)}
+.cs-modes{display:flex;gap:4px;padding:4px;border-radius:12px;background:var(--surface,#1b1e27);border:1px solid var(--border,#262a35);margin-bottom:14px}
+.cs-mode{flex:1;border:0;background:transparent;color:var(--muted,#9aa3b2);font:inherit;font-size:.72rem;font-weight:700;padding:9px 6px;border-radius:9px;cursor:pointer;transition:all .18s;display:flex;align-items:center;justify-content:center;gap:5px}
+.cs-mode svg{width:13px;height:13px}
+.cs-mode.on{color:#06080f;background:linear-gradient(135deg,var(--cs),#3b82f6);box-shadow:0 3px 12px -4px color-mix(in srgb,var(--cs) 60%,transparent)}
+/* stats line */
+.cs-stats{font-size:.7rem;color:var(--muted,#9aa3b2);font-weight:600;margin:0 2px 14px;min-height:1.2em}
+.cs-stats b{color:var(--text,#e8ecf4);font-family:'Space Grotesk',monospace}
+/* feed */
+.cs-feed{display:flex;flex-direction:column;gap:10px}
+.cs-feed-item{background:var(--card,#14161d);border:1px solid var(--border,#262a35);border-radius:16px;padding:14px 16px;position:relative;overflow:hidden;transition:border-color .15s,transform .14s;animation:csIn .3s ease both}
+.cs-feed-item:hover{border-color:color-mix(in srgb,var(--cs) 40%,var(--border,#262a35));transform:translateX(2px)}
+.cs-feed-item::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--cs);border-radius:0 4px 4px 0}
 .cs-feed-item.first::before{background:linear-gradient(180deg,var(--csgold),var(--csg))}
 @keyframes csIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-.cs-feed-top{display:flex;align-items:center;gap:8px;margin-bottom:6px}
-.cs-feed-cli{font-size:.66rem;font-weight:800;letter-spacing:.03em;color:var(--cs);background:color-mix(in srgb,var(--cs) 12%,transparent);border:1px solid color-mix(in srgb,var(--cs) 24%,transparent);border-radius:7px;padding:2px 8px;max-width:46%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cs-feed-new{font-size:.54rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#06080F;background:linear-gradient(135deg,var(--csgold),var(--csg));border-radius:20px;padding:2px 8px}
-.cs-feed-time{margin-left:auto;font-family:'Space Grotesk',monospace;font-size:.62rem;font-weight:700;color:var(--muted);white-space:nowrap}
-.cs-feed-range{font-size:.82rem;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px}
-.cs-feed-num{font-family:'Space Grotesk',monospace;font-size:.74rem;font-weight:700;color:var(--csgold);margin-top:3px;letter-spacing:.02em}
-.cs-feed-msg{font-size:.76rem;line-height:1.5;color:var(--muted);margin-top:6px;word-break:break-word}
-/* skeleton shimmer */
-.cs-sk-item{background:var(--card);border:1px solid var(--border);border-radius:15px;padding:13px 14px;margin-bottom:9px}
-.cs-sk{height:10px;border-radius:6px;margin:8px 0;background:linear-gradient(90deg,var(--surface) 25%,color-mix(in srgb,var(--border) 60%,var(--surface)) 50%,var(--surface) 75%);background-size:200% 100%;animation:csShimmer 1.3s infinite}
-.cs-sk:first-child{margin-top:0}.cs-sk:last-child{margin-bottom:0}
-.cs-sk.w30{width:30%}.cs-sk.w40{width:40%}.cs-sk.w55{width:55%}.cs-sk.w90{width:90%}
-@keyframes csShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+/* row 1: app + time */
+.cs-fi-top{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.cs-fi-cli{font-size:.68rem;font-weight:800;letter-spacing:.03em;color:var(--cs);background:color-mix(in srgb,var(--cs) 12%,transparent);border:1px solid color-mix(in srgb,var(--cs) 22%,transparent);border-radius:7px;padding:3px 9px;max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cs-fi-new{font-size:.54rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#06080f;background:linear-gradient(135deg,var(--csgold),var(--csg));border-radius:20px;padding:2px 8px}
+.cs-fi-time{margin-left:auto;font-family:'Space Grotesk',monospace;font-size:.62rem;font-weight:700;color:var(--muted,#9aa3b2);white-space:nowrap}
+/* row 2: range + number */
+.cs-fi-meta{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;margin-bottom:8px}
+.cs-fi-range{font-size:.78rem;font-weight:700;color:var(--text,#e8ecf4);display:flex;align-items:center;gap:5px}
+.cs-fi-num{font-family:'Space Grotesk',monospace;font-size:.72rem;font-weight:700;color:var(--csgold);letter-spacing:.02em}
+/* row 3: message */
+.cs-fi-msg{font-size:.78rem;line-height:1.55;color:var(--muted,#9aa3b2);word-break:break-word;background:var(--surface,#1b1e27);border-radius:10px;padding:10px 12px;border:1px solid var(--border,#262a35)}
+/* summary chips (number mode) */
+.cs-sum{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-bottom:14px}
+.cs-sum-lbl{font-size:.6rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#9aa3b2)}
+.cs-sum-chip{display:inline-flex;align-items:center;gap:5px;font-size:.7rem;font-weight:700;color:var(--text,#e8ecf4);background:var(--surface,#1b1e27);border:1px solid var(--border,#262a35);border-radius:20px;padding:4px 11px}
+.cs-sum-chip b{color:var(--cs);font-family:'Space Grotesk',monospace}
+/* skeleton */
+.cs-sk-item{background:var(--card,#14161d);border:1px solid var(--border,#262a35);border-radius:16px;padding:16px;margin-bottom:10px}
+.cs-sk{height:11px;border-radius:7px;background:linear-gradient(90deg,var(--surface,#1b1e27) 25%,color-mix(in srgb,var(--border,#262a35) 60%,var(--surface,#1b1e27)) 50%,var(--surface,#1b1e27) 75%);background-size:200% 100%;animation:csShim 1.3s infinite}
+@keyframes csShim{0%{background-position:200% 0}100%{background-position:-200% 0}}
 /* empty / tips */
-.cs-empty{text-align:center;padding:30px 18px;color:var(--muted);font-size:.84rem;line-height:1.6}
-.cs-empty svg{width:40px;height:40px;color:var(--border);margin-bottom:10px}
-.cs-empty b{color:var(--text)}
-.cs-tips{text-align:left;max-width:340px;margin:14px auto 0;font-size:.74rem;color:var(--muted);line-height:1.7}
-.cs-tips b{color:var(--text)}
-.cs-chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:14px;justify-content:center}
-.cs-chip{border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:20px;padding:6px 12px;font:inherit;font-size:.72rem;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:all .14s}
+.cs-empty{text-align:center;padding:36px 20px;color:var(--muted,#9aa3b2);font-size:.84rem;line-height:1.6}
+.cs-empty svg{width:42px;height:42px;color:var(--border,#262a35);margin-bottom:12px}
+.cs-empty b{color:var(--text,#e8ecf4)}
+.cs-tips{text-align:left;max-width:320px;margin:16px auto 0;font-size:.76rem;color:var(--muted,#9aa3b2);line-height:1.8}
+.cs-tips b{color:var(--text,#e8ecf4)}
+.cs-chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:16px;justify-content:center}
+.cs-chip{border:1px solid var(--border,#262a35);background:var(--surface,#1b1e27);color:var(--text,#e8ecf4);border-radius:20px;padding:7px 13px;font:inherit;font-size:.74rem;font-weight:600;cursor:pointer;transition:all .14s}
 .cs-chip:hover{border-color:var(--cs);color:var(--cs)}
 .cs-chip:active{transform:scale(.95)}
-@media(max-width:380px){.cs-feed-cli{max-width:40%}}
+@media(max-width:400px){.cs-fi-cli{max-width:42%}.cs-fi-msg{font-size:.74rem}}
 </style>
 
 <div id="cliSearchPage" style="display:none">
-<div style="max-width:620px;margin:0 auto;padding:0 14px 90px">
-
+<div class="cs-wrap">
   <div class="cs-head">
     <button class="cs-back" onclick="closeCliSearchPage()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
     <h1>CLI Search</h1>
     <button class="cs-rbtn" id="csRefreshBtn" onclick="csRefresh()" title="Refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg></button>
   </div>
-
   <div class="cs-topbar" id="csTopBar"><i></i></div>
-
   <div class="cs-searchwrap">
     <svg class="cs-sicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
     <input class="cs-search" id="csInput" type="text" autocomplete="off" placeholder="App, country, keyword or phone number…">
-    <button class="cs-clear" id="csClear" onclick="csClearInput()" title="Clear">✕</button>
-    <button class="cs-go" onclick="csRefresh()" title="Search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></button>
+    <button class="cs-clear" id="csClear" onclick="csClearInput()">✕</button>
   </div>
-
-  <div class="cs-modes">
+  <div class="cs-modes" id="csModes">
     <button class="cs-mode on" data-mode="auto" onclick="csSetMode('auto')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 7.4H22l-6 4.6 1.4 6.8L12 17.8 5.9 20.4l1.4-6.8L2 9.4h7.6z"/></svg>Auto</button>
     <button class="cs-mode" data-mode="text" onclick="csSetMode('text')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h10M7 13h6"/></svg>App · Country · Msg</button>
     <button class="cs-mode" data-mode="number" onclick="csSetMode('number')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>Number</button>
   </div>
-
   <div class="cs-stats" id="csStats"></div>
-
   <div id="csResults">
-    <div class="cs-empty" id="csEmpty">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
+    <div class="cs-empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
       <div>Search the live analysis feed</div>
       <div class="cs-tips">
-        <b>Phone number</b> → every OTP it received today.<br>
-        <b>App name</b> (GitLab, Talabat…) → its messages, newest first.<br>
-        <b>Country</b> (Oman, Sri Lanka…) → all messages there.<br>
-        <b>Keyword</b> (verification, expire…) → matching bodies.
+        <b>Phone number</b> → every OTP it received today<br>
+        <b>App name</b> (GitLab, Talabat…) → its messages, newest first<br>
+        <b>Country</b> (Oman, Sri Lanka…) → all messages there<br>
+        <b>Keyword</b> (verification, expire…) → matching bodies
       </div>
       <div class="cs-chips">
         <button class="cs-chip" onclick="csQuick('GitLab')">GitLab</button>
         <button class="cs-chip" onclick="csQuick('Sri Lanka')">🇱🇰 Sri Lanka</button>
         <button class="cs-chip" onclick="csQuick('Talabat')">Talabat</button>
-        <button class="cs-chip" onclick="csQuick('verification')">“verification”</button>
+        <button class="cs-chip" onclick="csQuick('verification')">"verification"</button>
         <button class="cs-chip" onclick="csQuick('NETELLER')">NETELLER</button>
       </div>
     </div>
   </div>
-
 </div>
 </div>
