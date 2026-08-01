@@ -1,4 +1,4 @@
-<!-- withdrawal.html — injected by withdrawal.js -->
+<!-- withdrawal.html — injected by withdrawal.js (v2 — Enhanced Popups & UX) -->
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap');
 #wdPage{--wg:#34d399;--wgold:#fbbf24;--wmag:#f472b6;--wblue:#60a5fa;--wred:#f87171;font-family:inherit;
@@ -22,8 +22,7 @@ background-image:radial-gradient(rgba(255,255,255,.05) 1px,transparent 1.4px);ba
 background:linear-gradient(150deg,color-mix(in srgb,var(--wg) 22%,var(--card)) 0%,var(--card) 55%,color-mix(in srgb,var(--wgold) 12%,var(--card)) 100%);
 border:1px solid color-mix(in srgb,var(--wg) 28%,var(--border));
 box-shadow:0 22px 60px -28px color-mix(in srgb,var(--wg) 60%,transparent);
-transition:transform .18s,box-shadow .18s;
-animation:wdHeroIn .5s cubic-bezier(.2,.8,.2,1) both}
+transition:transform .18s,box-shadow .18s;animation:wdHeroIn .5s cubic-bezier(.2,.8,.2,1) both}
 .wd-hero:hover{transform:translateY(-2px);box-shadow:0 28px 70px -26px color-mix(in srgb,var(--wg) 70%,transparent)}
 .wd-hero-glow{position:absolute;inset:-40% -10% auto auto;width:220px;height:220px;border-radius:50%;
 background:radial-gradient(circle,color-mix(in srgb,var(--wgold) 30%,transparent),transparent 65%);filter:blur(6px);opacity:.5;pointer-events:none;animation:wdGlow 7s ease-in-out infinite}
@@ -56,11 +55,13 @@ transition:transform .14s,box-shadow .14s;animation:wdCardIn .4s ease both}
 .wd-card:nth-child(4){animation-delay:.15s}
 @keyframes wdCardIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
 .wd-card:hover{box-shadow:0 12px 30px -16px rgba(0,0,0,.3)}
+.wd-card-title{display:flex;align-items:center;gap:8px;font-family:'Space Grotesk',sans-serif;font-size:.92rem;font-weight:700;margin-bottom:14px}
+.wd-card-title .pill{margin-left:auto;font-size:.62rem;font-weight:700;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:3px 10px}
 /* Fields */
 .wd-field{margin-bottom:12px}
 .wd-field label{display:block;font-size:.62rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
-.wd-field input,.wd-field select,.wd-field textarea{width:100%;box-sizing:border-box;padding:11px 13px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;font-size:.84rem;outline:none;transition:border-color .15s}
-.wd-field input:focus,.wd-field select:focus,.wd-field textarea:focus{border-color:var(--wg)}
+.wd-field input,.wd-field select,.wd-field textarea{width:100%;box-sizing:border-box;padding:11px 13px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;font-size:.84rem;outline:none;transition:border-color .15s,box-shadow .15s}
+.wd-field input:focus,.wd-field select:focus,.wd-field textarea:focus{border-color:var(--wg);box-shadow:0 0 0 3px color-mix(in srgb,var(--wg) 12%,transparent)}
 .wd-field textarea{min-height:56px;resize:vertical}
 .wd-field .hint{font-size:.6rem;color:var(--muted);margin-top:3px}
 .wd-field .warn{font-size:.6rem;color:var(--wred);margin-top:3px;font-weight:700}
@@ -70,13 +71,14 @@ background:linear-gradient(135deg,var(--wg),#059669);color:#06080F;
 box-shadow:0 8px 24px -8px color-mix(in srgb,var(--wg) 50%,transparent);
 transition:transform .12s,box-shadow .2s,opacity .15s}
 .wd-btn:disabled{opacity:.35;cursor:not-allowed;transform:none;box-shadow:none}
+.wd-btn:not(:disabled):hover{box-shadow:0 12px 32px -6px color-mix(in srgb,var(--wg) 60%,transparent);transform:translateY(-1px)}
 .wd-btn:not(:disabled):active{transform:scale(.97)}
 .wd-notice{font-size:.66rem;color:var(--muted);text-align:center;margin-top:10px;line-height:1.5}
 .wd-save-row{display:flex;align-items:center;gap:8px;margin:10px 0;font-size:.74rem;color:var(--muted)}
 .wd-save-row input{width:16px;height:16px;accent-color:var(--wg)}
 /* History */
-.wd-hist-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:8px;position:relative;overflow:hidden;transition:transform .12s}
-.wd-hist-card:hover{transform:translateX(2px)}
+.wd-hist-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:8px;position:relative;overflow:hidden;transition:transform .12s,box-shadow .15s;cursor:pointer}
+.wd-hist-card:hover{transform:translateX(2px);box-shadow:0 6px 20px -10px rgba(0,0,0,.3)}
 .wd-hist-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:0 4px 4px 0}
 .wd-hist-card.pending::before{background:var(--wgold)}
 .wd-hist-card.approved::before{background:var(--wg)}
@@ -91,6 +93,7 @@ transition:transform .12s,box-shadow .2s,opacity .15s}
 .wd-hist-msg{margin-top:8px;padding:8px 12px;border-radius:9px;font-size:.72rem;font-weight:600}
 .wd-hist-msg.approved{background:color-mix(in srgb,var(--wg) 8%,transparent);color:var(--wg)}
 .wd-hist-msg.rejected{background:color-mix(in srgb,var(--wred) 8%,transparent);color:var(--wred)}
+.wd-hist-tap{font-size:.56rem;color:var(--muted);text-align:center;margin-top:6px;opacity:.6}
 /* Recent */
 .wd-recent-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);font-size:.76rem}
 .wd-recent-item:last-child{border-bottom:0}
@@ -108,10 +111,10 @@ transition:transform .12s,box-shadow .2s,opacity .15s}
 .wd-admin-detail{font-size:.72rem;color:var(--muted);line-height:1.8;background:var(--bg);border-radius:9px;padding:10px 12px;margin-bottom:8px}
 .wd-admin-detail b{color:var(--text)}
 .wd-admin-actions{display:flex;gap:8px;margin-top:10px}
-.wd-admin-btn{padding:9px 14px;border:0;border-radius:10px;font:inherit;font-size:.74rem;font-weight:700;cursor:pointer;transition:transform .1s}
+.wd-admin-btn{padding:9px 14px;border:0;border-radius:10px;font:inherit;font-size:.74rem;font-weight:700;cursor:pointer;transition:transform .1s,box-shadow .15s}
 .wd-admin-btn:active{transform:scale(.95)}
-.wd-admin-btn.approve{background:var(--wg);color:#06080F}
-.wd-admin-btn.reject{background:var(--wred);color:#fff}
+.wd-admin-btn.approve{background:var(--wg);color:#06080F;box-shadow:0 4px 12px -4px color-mix(in srgb,var(--wg) 50%,transparent)}
+.wd-admin-btn.reject{background:var(--wred);color:#fff;box-shadow:0 4px 12px -4px color-mix(in srgb,var(--wred) 50%,transparent)}
 .wd-admin-btn.copy{background:var(--surface);color:var(--text);border:1px solid var(--border)}
 .wd-admin-msg-row{margin-top:8px}
 .wd-admin-msg-input{width:100%;box-sizing:border-box;padding:9px 12px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--text);font:inherit;font-size:.76rem;outline:none}
@@ -122,35 +125,76 @@ transition:transform .12s,box-shadow .2s,opacity .15s}
 .wd-set-inp:focus{border-color:var(--wg)}
 .wd-set-btn{border:0;border-radius:10px;padding:9px 14px;font:inherit;font-size:.78rem;font-weight:700;cursor:pointer;color:#06080F;background:linear-gradient(135deg,var(--wmag),#a855f7);transition:transform .12s}
 .wd-set-btn:active{transform:scale(.95)}
-/* Success overlay */
-.wd-overlay{position:fixed;inset:0;z-index:950;background:rgba(6,8,15,.66);backdrop-filter:blur(10px);display:none;align-items:center;justify-content:center;padding:18px}
+/* ═══ ENHANCED OVERLAY / POPUP SYSTEM ═══ */
+.wd-overlay{position:fixed;inset:0;z-index:950;background:rgba(6,8,15,.72);backdrop-filter:blur(12px);display:none;align-items:center;justify-content:center;padding:18px}
 .wd-overlay.show{display:flex}
-.wd-overlay-card{width:100%;max-width:360px;border-radius:24px;padding:36px 28px;text-align:center;position:relative;
+.wd-overlay-card{width:100%;max-width:380px;border-radius:28px;padding:0;text-align:center;position:relative;overflow:hidden;
 background:var(--card);
-border:1px solid color-mix(in srgb,var(--wg) 30%,var(--border));
-box-shadow:0 32px 80px -20px rgba(0,0,0,.7),0 0 60px -20px color-mix(in srgb,var(--wg) 30%,transparent);
-animation:wdPop .4s cubic-bezier(.2,1.2,.3,1) both}
-@keyframes wdPop{from{opacity:0;transform:scale(.9) translateY(12px)}to{opacity:1;transform:none}}
-.wd-overlay-icon{width:60px;height:60px;margin:0 auto 16px;border-radius:50%;
-background:color-mix(in srgb,var(--wg) 15%,var(--surface));
-border:2px solid color-mix(in srgb,var(--wg) 30%,transparent);
+border:1px solid color-mix(in srgb,var(--wg) 25%,var(--border));
+box-shadow:0 40px 100px -20px rgba(0,0,0,.8),0 0 80px -20px color-mix(in srgb,var(--wg) 25%,transparent);
+animation:wdPop .45s cubic-bezier(.2,1.2,.3,1) both}
+@keyframes wdPop{from{opacity:0;transform:scale(.88) translateY(16px)}to{opacity:1;transform:none}}
+/* Top gradient banner */
+.wd-overlay-banner{height:90px;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.wd-overlay-banner.success{background:linear-gradient(135deg,color-mix(in srgb,var(--wg) 30%,var(--card)),color-mix(in srgb,var(--wgold) 15%,var(--card)))}
+.wd-overlay-banner.error{background:linear-gradient(135deg,color-mix(in srgb,var(--wred) 25%,var(--card)),color-mix(in srgb,var(--wmag) 12%,var(--card)))}
+.wd-overlay-banner.info{background:linear-gradient(135deg,color-mix(in srgb,var(--wblue) 25%,var(--card)),color-mix(in srgb,var(--wg) 12%,var(--card)))}
+.wd-overlay-banner.approved{background:linear-gradient(135deg,color-mix(in srgb,var(--wg) 35%,var(--card)),color-mix(in srgb,var(--wgold) 20%,var(--card)))}
+.wd-overlay-banner.rejected{background:linear-gradient(135deg,color-mix(in srgb,var(--wred) 28%,var(--card)),color-mix(in srgb,var(--wgold) 8%,var(--card)))}
+.wd-overlay-banner::after{content:'';position:absolute;inset:0;background:radial-gradient(circle at 50% 120%,rgba(255,255,255,.08),transparent 60%)}
+/* Logo in banner */
+.wd-overlay-logo{height:26px;position:absolute;top:14px;left:50%;transform:translateX(-50%);opacity:.85;z-index:2}
+/* Icon circle */
+.wd-overlay-icon{width:64px;height:64px;margin:-32px auto 0;border-radius:50%;position:relative;z-index:3;
 display:flex;align-items:center;justify-content:center;
-animation:wdIconPop .5s cubic-bezier(.2,1.4,.3,1) .15s both}
-@keyframes wdIconPop{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
-.wd-overlay-icon svg{width:28px;height:28px;color:var(--wg)}
-.wd-overlay-title{font-family:'Space Grotesk',sans-serif;font-size:1.05rem;font-weight:700;margin-bottom:8px}
-.wd-overlay-body{font-size:.8rem;color:var(--muted);line-height:1.5;margin-bottom:18px}
-.wd-overlay-btn{border:0;border-radius:12px;padding:11px 22px;font:inherit;font-weight:700;cursor:pointer;color:#06080F;background:linear-gradient(135deg,var(--wg),#059669)}
+border:3px solid var(--card);
+animation:wdIconPop .5s cubic-bezier(.2,1.4,.3,1) .2s both}
+.wd-overlay-icon.success{background:linear-gradient(135deg,var(--wg),#059669);box-shadow:0 8px 24px -6px color-mix(in srgb,var(--wg) 60%,transparent)}
+.wd-overlay-icon.error{background:linear-gradient(135deg,var(--wred),#dc2626);box-shadow:0 8px 24px -6px color-mix(in srgb,var(--wred) 60%,transparent)}
+.wd-overlay-icon.info{background:linear-gradient(135deg,var(--wblue),#3b82f6);box-shadow:0 8px 24px -6px color-mix(in srgb,var(--wblue) 60%,transparent)}
+.wd-overlay-icon.approved{background:linear-gradient(135deg,var(--wg),#059669);box-shadow:0 8px 24px -6px color-mix(in srgb,var(--wg) 60%,transparent)}
+.wd-overlay-icon.rejected{background:linear-gradient(135deg,var(--wred),#dc2626);box-shadow:0 8px 24px -6px color-mix(in srgb,var(--wred) 60%,transparent)}
+@keyframes wdIconPop{from{transform:scale(0) rotate(-20deg);opacity:0}to{transform:scale(1) rotate(0);opacity:1}}
+.wd-overlay-icon svg{width:28px;height:28px;color:#fff}
+/* Body */
+.wd-overlay-body-wrap{padding:20px 28px 28px}
+.wd-overlay-title{font-family:'Space Grotesk',sans-serif;font-size:1.12rem;font-weight:700;margin-bottom:8px;color:var(--text)}
+.wd-overlay-body{font-size:.8rem;color:var(--muted);line-height:1.6;margin-bottom:6px}
+.wd-overlay-detail{font-size:.72rem;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin:12px 0;text-align:left;line-height:1.6}
+.wd-overlay-detail .lbl{font-size:.58rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:2px}
+.wd-overlay-detail .val{font-weight:600}
+.wd-overlay-detail .val.green{color:var(--wg)}
+.wd-overlay-detail .val.red{color:var(--wred)}
+.wd-overlay-detail .val.gold{color:var(--wgold)}
+/* Buttons */
+.wd-overlay-actions{display:flex;gap:8px;margin-top:18px}
+.wd-overlay-btn{flex:1;border:0;border-radius:12px;padding:12px 18px;font:inherit;font-weight:700;font-size:.82rem;cursor:pointer;transition:transform .12s,box-shadow .15s}
+.wd-overlay-btn:active{transform:scale(.96)}
+.wd-overlay-btn.primary{color:#06080F;background:linear-gradient(135deg,var(--wg),#059669);box-shadow:0 6px 18px -6px color-mix(in srgb,var(--wg) 50%,transparent)}
+.wd-overlay-btn.primary:hover{box-shadow:0 8px 24px -4px color-mix(in srgb,var(--wg) 60%,transparent)}
+.wd-overlay-btn.secondary{color:var(--text);background:var(--surface);border:1px solid var(--border)}
+.wd-overlay-btn.danger{color:#fff;background:linear-gradient(135deg,var(--wred),#dc2626)}
+/* Confetti canvas */
+#wdConfetti{position:fixed;inset:0;z-index:960;pointer-events:none;display:none}
 /* Crypto/Bank toggle */
-/* Loading skeleton + spinner */
-.wd-skeleton-pulse{background:linear-gradient(90deg,var(--surface) 25%,color-mix(in srgb,var(--border) 50%,var(--surface)) 50%,var(--surface) 75%);background-size:200% 100%;animation:wdShimmer 1.5s infinite}
-@keyframes wdShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
-@keyframes wdFade{0%,100%{opacity:.5}50%{opacity:1}}
-.wd-spinner{width:24px;height:24px;border:3px solid var(--border);border-top-color:var(--wg);border-radius:50%;animation:wdSpin .7s linear infinite;margin:0 auto}
-@keyframes wdSpin{to{transform:rotate(360deg)}}
 .wd-crypto{display:none}.wd-crypto.show{display:block}
 .wd-bank{display:block}.wd-bank.hide{display:none}
 .wd-fee-chip{display:inline-flex;align-items:center;gap:4px;font-size:.6rem;font-weight:700;padding:2px 8px;border-radius:7px;background:color-mix(in srgb,var(--wmag) 10%,transparent);color:var(--wmag);border:1px solid color-mix(in srgb,var(--wmag) 20%,transparent)}
+/* Loading */
+.wd-spinner{width:24px;height:24px;border:3px solid var(--border);border-top-color:var(--wg);border-radius:50%;animation:wdSpin .7s linear infinite;margin:0 auto}
+/* Toast (small bottom notification) */
+.wd-toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);z-index:970;
+background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 20px;
+font-size:.78rem;font-weight:600;color:var(--text);box-shadow:0 12px 40px -8px rgba(0,0,0,.5);
+display:flex;align-items:center;gap:10px;transition:transform .35s cubic-bezier(.2,.8,.2,1),opacity .3s;opacity:0;pointer-events:none;max-width:90vw}
+.wd-toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+.wd-toast .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.wd-toast .dot.green{background:var(--wg)}
+.wd-toast .dot.red{background:var(--wred)}
+.wd-toast .dot.gold{background:var(--wgold)}
+.wd-toast .dot.blue{background:var(--wblue)}
+/* Responsive */
+@media(max-width:420px){.wd-hero-amount{font-size:2.4rem}.wd-overlay-card{max-width:340px}.wd-overlay-body-wrap{padding:16px 20px 24px}}
 </style>
 
 <div id="wdPage" style="display:none">
@@ -158,7 +202,7 @@ animation:wdIconPop .5s cubic-bezier(.2,1.4,.3,1) .15s both}
 
 <div class="wd-head">
 <button class="wd-back" onclick="closeWdPage()">←</button>
-<h1>Withdrawal</h1>
+<h1>💸 Withdrawal</h1>
 <span class="wd-live"><i></i>Live</span>
 </div>
 
@@ -167,11 +211,14 @@ animation:wdIconPop .5s cubic-bezier(.2,1.4,.3,1) .15s both}
 <!-- Hero -->
 <div class="wd-hero">
 <div class="wd-hero-glow"></div>
-<div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:8px"> <div class="wd-hero-label" style="margin-bottom:0">Available Balance</div> <button class="wd-refresh-btn" onclick="wdRefreshBalance()" title="Refresh balance"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="width:14px;height:14px"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg></button> </div>
+<div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:8px">
+<div class="wd-hero-label" style="margin-bottom:0">Available Balance</div>
+<button class="wd-refresh-btn" onclick="wdRefreshBalance()" title="Refresh balance"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="width:14px;height:14px"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg></button>
+</div>
 <div class="wd-hero-amount wd-display" id="wdBalance">$0.00</div>
 <div class="wd-hero-pkr" id="wdBalancePkr">≈ Rs 0</div>
 <div class="wd-hero-stats">
-<div class="wd-hero-stat"><div class="k">Earned</div><div class="v" id="wdTotalEarned">$0</div></div>
+<div class="wd-hero-stat"><div class="k">Total Earned</div><div class="v" id="wdTotalEarned">$0</div></div>
 <div class="wd-hero-stat"><div class="k">Withdrawn</div><div class="v" id="wdTotalWithdrawn">$0</div></div>
 </div>
 <div class="wd-progress"><i id="wdProgressBar"></i></div>
@@ -184,19 +231,19 @@ animation:wdIconPop .5s cubic-bezier(.2,1.4,.3,1) .15s both}
 <div class="wd-field">
 <label>Amount (USD)</label>
 <input type="number" id="wdAmount" step="0.01" min="0" placeholder="0.00" oninput="wdCalcPkr()">
-<div class="hint">≈ <span id="wdAmountPkr">Rs 0</span> <span class="wd-fee-chip" id="wdFeeChip" style="display:none">Fee $<span id="wdFeeLabel">0</span> crypto only</span></div>
+<div class="hint">≈ <span id="wdAmountPkr">Rs 0</span> <span class="wd-fee-chip" id="wdFeeChip" style="display:none">+ Fee $<span id="wdFeeLabel">0</span> (crypto)</span></div>
 </div>
 <div class="wd-field">
 <label>Payment Method</label>
 <select id="wdMethod" onchange="wdMethodChange()">
 <option value="">Select method…</option>
-<option value="easypaisa">Easypaisa</option>
-<option value="jazzcash">JazzCash</option>
-<option value="nayapay">NayaPay</option>
-<option value="opay">OPay</option>
-<option value="bank">Bank Transfer</option>
-<option value="other">Other Wallet</option>
-<option value="crypto">Crypto (USDT)</option>
+<option value="easypaisa">📱 Easypaisa</option>
+<option value="jazzcash">📱 JazzCash</option>
+<option value="nayapay">📱 NayaPay</option>
+<option value="opay">📱 OPay</option>
+<option value="bank">🏦 Bank Transfer</option>
+<option value="other">💳 Other Wallet</option>
+<option value="crypto">🪙 Crypto (USDT)</option>
 </select>
 </div>
 <div class="wd-bank" id="wdBankSection">
@@ -211,7 +258,7 @@ animation:wdIconPop .5s cubic-bezier(.2,1.4,.3,1) .15s both}
 <div class="wd-field">
 <label>Confirm Account Number</label>
 <input type="text" id="wdAccNum2" placeholder="Re-enter to confirm" inputmode="numeric">
-<div class="warn">⚠ Double-check! Wrong details cannot be reversed.</div>
+<div class="warn">⚠️ Double-check! Wrong details cannot be reversed.</div>
 </div>
 <div class="wd-field">
 <label>Account Holder Name</label>
@@ -221,17 +268,17 @@ animation:wdIconPop .5s cubic-bezier(.2,1.4,.3,1) .15s both}
 <div class="wd-crypto" id="wdCryptoSection">
 <div class="wd-field">
 <label>Platform</label>
-<select id="wdCryptoPlatform"><option value="">Select…</option><option value="binance">Binance</option><option value="okx">OKX</option><option value="other">Other</option></select>
+<select id="wdCryptoPlatform"><option value="">Select…</option><option value="binance">Binance</option><option value="okx">OKX</option><option value="bybit">Bybit</option><option value="other">Other</option></select>
 </div>
 <div class="wd-field"><label>UID</label><input type="text" id="wdCryptoUid" placeholder="Exchange UID"></div>
 <div class="wd-field"><label>USDT Address (EVM)</label><input type="text" id="wdCryptoAddr" placeholder="0x…"></div>
-<div class="wd-field"><label>Confirm Address</label><input type="text" id="wdCryptoAddr2" placeholder="Re-enter address"><div class="warn">⚠ Wrong address = permanent loss!</div></div>
-<div class="wd-field"><label>Chain Name</label><input type="text" id="wdCryptoChain" placeholder="BSC, Ethereum, Polygon…"></div>
+<div class="wd-field"><label>Confirm Address</label><input type="text" id="wdCryptoAddr2" placeholder="Re-enter address"><div class="warn">⚠️ Wrong address = permanent loss!</div></div>
+<div class="wd-field"><label>Chain / Network</label><input type="text" id="wdCryptoChain" placeholder="BSC (BEP20), Ethereum, Polygon…"></div>
 </div>
-<div class="wd-field"><label>Note (Optional)</label><textarea id="wdNote" placeholder="Message for admin…"></textarea></div>
+<div class="wd-field"><label>Note (Optional)</label><textarea id="wdNote" placeholder="Any message for admin…"></textarea></div>
 <div class="wd-save-row"><input type="checkbox" id="wdSaveMethod" checked><label for="wdSaveMethod" style="margin:0;text-transform:none;letter-spacing:0;font-size:.74rem">Save details for next time</label></div>
-<button class="wd-btn" id="wdSubmitBtn" disabled onclick="wdSubmit()">Request Withdrawal</button>
-<div class="wd-notice">Processed within <b>3 hours</b> on business days.<br>Rare cases: up to <b>3 working days</b>.</div>
+<button class="wd-btn" id="wdSubmitBtn" disabled onclick="wdSubmit()">🚀 Request Withdrawal</button>
+<div class="wd-notice">⏱ Processed within <b>3 hours</b> on business days.<br>Rare cases: up to <b>3 working days</b>.</div>
 </div>
 
 <!-- History -->
@@ -242,7 +289,7 @@ animation:wdIconPop .5s cubic-bezier(.2,1.4,.3,1) .15s both}
 
 <!-- Recent -->
 <div class="wd-card">
-<div class="wd-card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:18px;height:18px;color:var(--wblue)"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg> Recent Withdrawals</div>
+<div class="wd-card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:18px;height:18px;color:var(--wblue)"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg> Recent Payouts</div>
 <div id="wdRecentList"><div style="text-align:center;padding:14px;color:var(--muted);font-size:.76rem">Loading…</div></div>
 </div>
 
@@ -259,7 +306,7 @@ animation:wdIconPop .5s cubic-bezier(.2,1.4,.3,1) .15s both}
 <label>Disable All</label><input type="checkbox" id="wdSetDisabled" style="width:16px;height:16px;accent-color:var(--wred)">
 <input class="wd-set-inp" id="wdSetDisMsg" type="text" placeholder="Reason message…" style="width:200px">
 </div>
-<div class="ea-msg" id="wdSetMsg" style="display:none;font-size:.74rem;font-weight:700;margin-top:6px"></div>
+<div id="wdSetMsg" style="display:none;font-size:.74rem;font-weight:700;margin-top:6px"></div>
 
 <h2 style="margin-top:18px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:16px;height:16px"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Pending Requests</h2>
 <div id="wdAdminRequests"><div style="text-align:center;padding:20px;color:var(--muted);font-size:.8rem">Loading…</div></div>
@@ -268,13 +315,26 @@ animation:wdIconPop .5s cubic-bezier(.2,1.4,.3,1) .15s both}
 </div>
 </div>
 
-<!-- Success overlay -->
-<div class="wd-overlay" id="wdSuccessOverlay">
+<!-- ═══ UNIVERSAL POPUP OVERLAY ═══ -->
+<div class="wd-overlay" id="wdOverlay">
 <div class="wd-overlay-card">
+<div class="wd-overlay-banner" id="wdOvBanner">
 <img class="wd-overlay-logo" src="/branding/logo-dark.png" alt="Zamil SMS" onerror="this.style.display='none'">
-<div class="wd-overlay-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
-<div class="wd-overlay-title" id="wdSuccessTitle">Submitted!</div>
-<div class="wd-overlay-body" id="wdSuccessBody">Your request is pending.</div>
-<button class="wd-overlay-btn" onclick="wdCloseSuccess()">Done</button>
+</div>
+<div class="wd-overlay-icon" id="wdOvIcon"><svg id="wdOvSvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+<div class="wd-overlay-body-wrap">
+<div class="wd-overlay-title" id="wdOvTitle">Success!</div>
+<div class="wd-overlay-body" id="wdOvBody">Your request has been submitted.</div>
+<div class="wd-overlay-detail" id="wdOvDetail" style="display:none"></div>
+<div class="wd-overlay-actions" id="wdOvActions">
+<button class="wd-overlay-btn primary" id="wdOvBtn1" onclick="wdCloseOverlay()">Done</button>
 </div>
 </div>
+</div>
+</div>
+
+<!-- ═══ CONFETTI CANVAS ═══ -->
+<canvas id="wdConfetti"></canvas>
+
+<!-- ═══ TOAST ═══ -->
+<div class="wd-toast" id="wdToast"><span class="dot green"></span><span id="wdToastMsg">Done</span></div>
