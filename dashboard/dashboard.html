@@ -142,7 +142,7 @@
                             <div class="lb-sub">Top SMS Senders</div>
                         </div>
                     </div>
-                    <button class="btn btn-sm btn-ghost lb-refresh" id="lbSpin" style="display:none">↻</button>
+                    <button class="btn btn-sm btn-ghost lb-refresh rbtn" id="lbSpin" style="display:none" title="Refresh leaderboard"><span class="r-ic">↻</span></button>
                 </div>
                 <div class="lb-range-group" style="margin-bottom:16px">
                     <button class="lb-range-btn selected" data-range="today" onclick="loadLeaderboard('today')">Today</button>
@@ -750,5 +750,29 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
 </script>
 
    <div id="featureRoot"></div>
+
+    <script>
+(function(){
+  function install(){
+    if(typeof loadLeaderboard!=='function'||loadLeaderboard._lbs)return;
+    var spin=document.getElementById('lbSpin');
+    var _llb=loadLeaderboard;
+    window.loadLeaderboard=function(){
+      if(spin)spin.classList.add('lb-loading');
+      var r=_llb.apply(this,arguments);
+      setTimeout(function(){if(spin)spin.classList.remove('lb-loading');},3000);
+      return r;
+    };
+    loadLeaderboard._lbs=1;
+    if(typeof renderLeaderboard==='function'&&!renderLeaderboard._lbs){
+      var _rlb=renderLeaderboard;
+      window.renderLeaderboard=function(){if(spin)spin.classList.remove('lb-loading');return _rlb.apply(this,arguments);};
+      renderLeaderboard._lbs=1;
+    }
+  }
+  if(document.readyState==='complete')install();else window.addEventListener('load',install);
+  setTimeout(function(){if(typeof loadLeaderboard!=='undefined'&&!loadLeaderboard._lbs)install();},1300);
+})();
+</script>
 </body>
 </html>
