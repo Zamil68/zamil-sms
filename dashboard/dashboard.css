@@ -516,3 +516,23 @@ button,input{font-family:inherit}
 
 /* ── INBOX REFRESH BUTTON ── */
 .sms-big-refresh{position:absolute;top:12px;right:12px;width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center}
+
+.rbtn .r-ic{display:inline-block;line-height:1;transition:transform .35s ease}
+.rbtn:hover .r-ic{transform:rotate(160deg)}
+.rbtn:active .r-ic{animation:spin .55s linear}
+.rbtn.is-loading .r-ic{animation:spin .8s linear infinite}
+#smsCounterCard.spinning .sms-big-refresh .r-ic{animation:spin .8s linear infinite}
+
+.bn-icon svg{width:1.15rem;height:1.15rem;display:block}
+.dor-title svg{width:.95em;height:.95em;vertical-align:-2px}
+
+#addNumPage #aRangeList .empty:has(.spinner){padding:28px 14px;display:flex;flex-direction:column;align-items:center;gap:16px}
+#addNumPage #aRangeList .empty:has(.spinner) .spinner{width:36px;height:36px;border-width:3px;border-color:var(--border);border-top-color:var(--accent);animation:spin .7s linear infinite,allocRing 1.6s ease-out infinite}
+#addNumPage #aRangeList .empty:has(.spinner)::after{content:'Searching ranges…';font-size:.76rem;font-weight:600;color:var(--muted);letter-spacing:.02em;animation:allocTextPulse 1.4s ease-in-out infinite}
+@keyframes allocRing{0%{box-shadow:0 0 0 0 rgba(34,211,238,.35)}100%{box-shadow:0 0 0 16px rgba(34,211,238,0)}}
+@keyframes allocTextPulse{0%,100%{opacity:.4}50%{opacity:1}}
+
+#addNumPage .alloc-card{transition:border-color .15s,box-shadow .15s}
+#addNumPage .alloc-card:hover{border-color:rgba(34,211,238,.22)}
+#addNumPage .alloc-step{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06080F;box-shadow:0 2px 8px rgba(34,211,238,.3)}
+#addNumPage .alloc-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
