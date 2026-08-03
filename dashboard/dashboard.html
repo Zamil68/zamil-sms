@@ -46,11 +46,11 @@
                         <div class="otp-hero-num" id="rangesOtpToday">0</div>
                         <div class="otp-hero-sub"><span class="live-dot"></span> Live · auto-updating</div>
                       </div>
-                      <div class="otp-hero-refresh" onclick="if(typeof silentSmsRefresh==='function')silentSmsRefresh(true)" title="Refresh">↻</div>
+                      <div class="otp-hero-refresh rbtn" onclick="if(typeof silentSmsRefresh==='function')silentSmsRefresh(true)" title="Refresh"><span class="r-ic">↻</span></div>
                     </div>
                         <div class="section-hdr" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
                         <div class="section-title">📡 Your Ranges <span class="badge" id="rangesCount">0</span></div>
-                        <button class="btn btn-sm btn-ghost" onclick="loadRanges(true)" title="Force refresh ranges">↻ Refresh</button>
+                        <button class="btn btn-sm btn-ghost rbtn" onclick="loadRanges(true)" title="Force refresh ranges"><span class="r-ic">↻</span> Refresh</button>
                     </div>
                     <div class="search-bar">
                         <span class="search-ic">🔍</span>
@@ -67,7 +67,7 @@
 
                     <div class="section-hdr">
                         <div class="section-title" id="panelTitle">Range Name</div>
-                        <button class="btn btn-sm btn-ghost" id="btnRefreshNums" onclick="refreshNumbers()">↻ Refresh</button>
+                        <button class="btn btn-sm btn-ghost rbtn" id="btnRefreshNums" onclick="refreshNumbers()"><span class="r-ic">↻</span> Refresh</button>
                     </div>
                     <div class="strip-bar">
                         <span class="strip-label">View:</span>
@@ -174,7 +174,7 @@
                             <div class="sms-big-sub" id="smsBigSub"><span class="live-dot"></span> Updated just now</div>
                         </div>
                     </div>
-                    <button class="sms-big-refresh" onclick="if(typeof silentSmsRefresh==='function')silentSmsRefresh(true)" title="Refresh now">↻</button>
+                    <button class="sms-big-refresh rbtn" onclick="if(typeof silentSmsRefresh==='function')silentSmsRefresh(true)" title="Refresh now"><span class="r-ic">↻</span></button>
                 </div>
 
                 <div class="sms-stats-row" style="margin-bottom:16px">
@@ -196,9 +196,9 @@
               <!-- DOR PAGE -->
             <div id="dorPage" style="display:none">
                 <div class="dor-hdr">
-                    <div class="dor-title">📊 OTP Report</div>
+                   <div class="dor-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg> OTP Report</div>
                     <div class="dor-sub">Global · today</div>
-                    <button class="btn btn-sm btn-ghost" onclick="loadDOR()">↻ Refresh</button>
+                    <button class="btn btn-sm btn-ghost rbtn" onclick="loadDOR()"><span class="r-ic">↻</span> Refresh</button>
                 </div>
                 <div class="dor-card">
                     <div id="dorLoading" style="padding:18px;text-align:center;color:var(--muted);font-size:.8rem">Loading…</div>
@@ -224,9 +224,9 @@
             <span>Add</span>
         </button>
         <button class="bn-item" data-page="dor" onclick="bnSwitch('dor')">
-            <span class="bn-icon">📊</span>
-            <span>DOR</span>
-        </button>
+    <span class="bn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg></span>
+    <span>DOR</span>
+</button>
         <button class="bn-item" data-page="top10" onclick="bnSwitch('top10')">
             <span class="bn-icon">🏆</span>
             <span>Top 10</span>
