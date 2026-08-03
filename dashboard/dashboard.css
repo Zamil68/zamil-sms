@@ -635,3 +635,41 @@ button,input{font-family:inherit}
   background:color-mix(in srgb,var(--red) 12%,transparent);
   border:1px solid color-mix(in srgb,var(--red) 35%,transparent);color:var(--text);
 }
+
+/* ═══ ADD PAGE — DOR-style compact header ═══ */
+#addNumPage .an-hdr{display:flex;align-items:center;gap:8px;padding:8px 0 10px;flex-wrap:wrap}
+#addNumPage .an-title{
+  font-size:.98rem;font-weight:800;letter-spacing:-.01em;
+  display:flex;align-items:center;gap:7px;
+  background:none;-webkit-background-clip:border-box;background-clip:border-box;
+  -webkit-text-fill-color:var(--text);color:var(--text);
+}
+#addNumPage .an-title svg{width:1em;height:1em;color:var(--accent);flex-shrink:0}
+#addNumPage .an-sub{font-size:.64rem;color:var(--muted);font-weight:600}
+#addNumPage .an-info{
+  margin-left:auto;width:26px;height:26px;flex-shrink:0;
+  border-radius:50%;border:1px solid var(--border);background:var(--surface);
+  color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:.72rem;font-weight:800;font-style:italic;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  transition:all .15s;
+}
+#addNumPage .an-info:hover{border-color:var(--accent);color:var(--accent)}
+#addNumPage .an-info.on{border-color:var(--accent);background:var(--accent);color:#06080F}
+
+#addNumPage .an-info-panel{
+  background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:12px 14px;margin-bottom:12px;font-size:.76rem;color:var(--muted);line-height:1.5;
+}
+#addNumPage .an-wa{
+  display:inline-flex;align-items:center;gap:5px;margin-top:8px;
+  color:var(--accent);font-weight:700;text-decoration:none;font-size:.78rem;
+}
+#addNumPage .an-wa:hover{text-decoration:underline}
+
+/* ═══ Compact Client chip (smaller, tight under header) ═══ */
+#addNumPage .an-client-card{padding:10px 13px;margin-bottom:10px}
+#addNumPage .an-client-card .alloc-card-title{margin-bottom:8px;font-size:.66rem}
+#addNumPage .an-client-card .alloc-client-info{padding:8px 11px;font-size:.76rem}
+
+/* ═══ Pull search card up a touch ═══ */
+#addNumPage #aSearchCard{margin-bottom:12px}
