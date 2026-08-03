@@ -536,3 +536,102 @@ button,input{font-family:inherit}
 #addNumPage .alloc-card:hover{border-color:rgba(34,211,238,.22)}
 #addNumPage .alloc-step{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06080F;box-shadow:0 2px 8px rgba(34,211,238,.3)}
 #addNumPage .alloc-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+
+#lbSpin .r-ic{display:inline-block;line-height:1}
+#lbSpin.lb-loading .r-ic{animation:lbSpin .7s linear infinite}
+@keyframes lbSpin{to{transform:rotate(360deg)}}
+
+/* ═══ ADD NUMBERS — polished allocation flow ═══ */
+#addNumPage{max-width:640px;margin:0 auto}
+#addNumPage .an-header{margin:4px 0 18px}
+#addNumPage .an-title{font-size:1.35rem;font-weight:700;letter-spacing:-.02em;display:flex;align-items:center;gap:9px}
+#addNumPage .an-subtitle{font-size:.8rem;color:var(--muted);margin-top:4px}
+
+#addNumPage .alloc-card{
+  position:relative;background:var(--card);border:1px solid var(--border);
+  border-radius:16px;padding:16px;margin-bottom:14px;
+  box-shadow:0 1px 3px rgba(0,0,0,.18);
+  transition:border-color .2s,box-shadow .2s;
+}
+#addNumPage .alloc-card:focus-within{
+  border-color:color-mix(in srgb,var(--accent) 45%,var(--border));
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent);
+}
+
+#addNumPage .alloc-card-title{
+  display:flex;align-items:center;gap:10px;
+  font-size:.82rem;font-weight:600;color:var(--text);margin-bottom:14px;
+}
+#addNumPage .alloc-step{
+  width:26px;height:26px;flex:0 0 26px;
+  display:inline-flex;align-items:center;justify-content:center;
+  border-radius:50%;font-size:.8rem;font-weight:700;color:#06080F;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  box-shadow:0 2px 8px color-mix(in srgb,var(--accent) 40%,transparent);
+}
+
+#addNumPage .alloc-client-info{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  font-size:.82rem;background:var(--surface);
+  border:1px solid var(--border);border-radius:10px;padding:10px 12px;
+}
+
+#addNumPage .alloc-search-row{display:flex;gap:8px}
+#addNumPage .alloc-input{
+  flex:1;min-width:0;background:var(--surface);
+  border:1px solid var(--border);border-radius:10px;
+  padding:11px 13px;font-size:.85rem;color:var(--text);
+  transition:border-color .15s,box-shadow .15s;
+}
+#addNumPage .alloc-input:focus{
+  outline:none;border-color:var(--accent);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent);
+}
+
+#addNumPage .alloc-range-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+#addNumPage .alloc-range-item{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:12px 14px;cursor:pointer;
+  transition:border-color .15s,transform .1s,background .15s;
+}
+#addNumPage .alloc-range-item:hover{
+  border-color:color-mix(in srgb,var(--accent) 40%,var(--border));transform:translateY(-1px);
+}
+#addNumPage .alloc-range-item.ar-selected{
+  border-color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 10%,var(--surface));
+  box-shadow:0 0 0 1px var(--accent);
+}
+#addNumPage .alloc-range-name{font-size:.84rem;font-weight:600;color:var(--text)}
+#addNumPage .alloc-range-id{font-size:.68rem;color:var(--muted);margin-top:2px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+
+#addNumPage .avail-ok{
+  color:var(--green);font-size:.72rem;font-weight:600;white-space:nowrap;
+  background:color-mix(in srgb,var(--green) 13%,transparent);
+  padding:3px 9px;border-radius:20px;
+}
+#addNumPage .avail-no{
+  color:var(--red);font-size:.72rem;font-weight:600;white-space:nowrap;
+  background:color-mix(in srgb,var(--red) 13%,transparent);
+  padding:3px 9px;border-radius:20px;
+}
+#addNumPage .avail-wait{display:inline-flex;align-items:center}
+
+#addNumPage .alloc-field{margin-bottom:4px}
+#addNumPage .alloc-field label{
+  display:block;font-size:.7rem;font-weight:600;color:var(--muted);
+  margin-bottom:6px;letter-spacing:.03em;text-transform:uppercase;
+}
+#addNumPage .alloc-limit-bar{font-size:.74rem;color:var(--muted);margin-top:10px;line-height:1.5}
+#addNumPage .alloc-limit-bar strong{color:var(--text)}
+
+#addNumPage .alloc-result{margin-top:14px;border-radius:12px;padding:12px 14px;font-size:.8rem;line-height:1.5}
+#addNumPage .alloc-result.ok{
+  background:color-mix(in srgb,var(--green) 12%,transparent);
+  border:1px solid color-mix(in srgb,var(--green) 35%,transparent);color:var(--text);
+}
+#addNumPage .alloc-result.err{
+  background:color-mix(in srgb,var(--red) 12%,transparent);
+  border:1px solid color-mix(in srgb,var(--red) 35%,transparent);color:var(--text);
+}
