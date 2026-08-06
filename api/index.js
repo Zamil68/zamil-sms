@@ -1898,91 +1898,81 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
     }
 
     if (url === '/earn/compute' && req.method === 'POST') {
-  try {
-    const user = getUserFromSession(req.body.session);
-    if (!user) return error(res, 401, 'Unauthorized');
-    const role = await getRole(user.username);
-    const rc = await loadRateMap(false);
-    const deductions = await loadDeductions(false);
-    const cfg = await getEarnSettings();
-    const win = _earnWindow(cfg);
-    const rows = await getCachedCDR(win.from, win.to, CDR_TTL_WIDE);
-
-    const DEFAULT_DEDUCTION = 30;
-    const me = { userNet: 0, gross: 0, perRange: {} };
-    const board = {};
-    let grossTotal = 0, userNetTotal = 0;
-    const t1 = (user.clientName || '').toLowerCase().trim();
-    const t2 = (user.username || '').toLowerCase().trim();
-
-    (rows || []).forEach(r => {
-      const rn = norm(r.range);
-      const rateObj = rc.map ? rc.map.get(rn) : null;
-      if (!rateObj) return;
-      const grossRate = rateObj.rate;
-
-      // Per-range deduction
-      const ded = deductions.get(rn);
-      const isFull = ded ? ded.full : false;
-      const dedPct = ded ? ded.pct : DEFAULT_DEDUCTION;
-      const userRate = isFull ? grossRate : grossRate * (1 - dedPct / 100);
-
-      grossTotal += grossRate;
-      userNetTotal += userRate;
-
-      const cli = (r.client || '').trim();
-      if (cli) {
-        if (!board[cli]) board[cli] = { username: cli, userNet: 0, gross: 0, count: 0 };
-        board[cli].userNet += userRate;
-        board[cli].gross += grossRate;
-        board[cli].count++;
-      }
-
-      const c = (cli || '').toLowerCase();
-      const isMe = c && (c === t1 || c === t2 || c.includes(t1) || c.includes(t2));
-      if (isMe) {
-        me.userNet += userRate;
-        me.gross += grossRate;
-        const k = r.range || 'Unknown';
-        if (!me.perRange[k]) me.perRange[k] = { range: k, count: 0, userNet: 0, gross: 0, dedPct, isFull };
-        const pr = me.perRange[k];
-        pr.count++;
-        pr.userNet += userRate;
-        pr.gross += grossRate;
-      }
-    });
-
-    // Round
-    me.userNet = Math.round(me.userNet * 10000) / 10000;
-    me.gross = Math.round(me.gross * 10000) / 10000;
-    Object.values(me.perRange).forEach(pr => {
-      pr.userNet = Math.round(pr.userNet * 10000) / 10000;
-      pr.gross = Math.round(pr.gross * 10000) / 10000;
-    });
-    Object.values(board).forEach(b => {
-      b.userNet = Math.round(b.userNet * 10000) / 10000;
-      b.gross = Math.round(b.gross * 10000) / 10000;
-    });
-
-    const perRange = Object.values(me.perRange).sort((a, b) => b.userNet - a.userNet);
-    const leaderboard = Object.values(board).sort((a, b) => b.userNet - a.userNet).slice(0, 50);
-// Cache user's earnings for fast withdrawal balance lookup
-     if (supaEnabled()) {
-       try {
-         await fetch(`${SUPABASE_URL}/rest/v1/user_balance_cache`, {
-           method: 'POST',
-           headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' },
-           body: JSON.stringify({ username: user.username.toLowerCase(), total_earnings: me.userNet, updated_at: new Date().toISOString() })
-         });
-       } catch(e) {}
-     }
-    return ok(res, {
-      window: win, mode: cfg.mode, goal: Number(cfg.goal_usd) || 50, ratesLoaded: rc.count,
-      me: { userNet: me.userNet, gross: me.gross, perRange },
-      leaderboard,
-      pool: (role === 'super') ? { grossTotal: Math.round(grossTotal * 10000) / 10000, userNetTotal: Math.round(userNetTotal * 10000) / 10000 } : null
-    });
-  } catch (e) { return error(res, 500, 'earn/compute: ' + e.message); }
+try {
+  const user = getUserFromSession(req.body.session);
+  if (!user) return error(res, 401, 'Unauthorized');
+  const role = await getRole(user.username);
+  const adminish = isAdminish(role);
+  const rc = await loadRateMap(false);
+  const deductions = await loadDeductions(false);
+  const cfg = await getEarnSettings();
+  const win = _earnWindow(cfg);
+  const rows = await getCachedCDR(win.from, win.to, CDR_TTL_WIDE);
+  const allPrefixes = await supaGetPrefixes();
+  const pinsMap = await getPinsMap();
+  const me = { userNet: 0, gross: 0, commission: 0, total: 0, perRange: {} };
+  const board = {};
+  let grossTotal = 0, userNetTotal = 0, companyTotal = 0, commissionTotal = 0;
+  const my1 = String(user.clientName || '').toLowerCase().trim();
+  const my2 = String(user.username || '').toLowerCase().trim();
+  (rows || []).forEach(r => {
+    const rateObj = rc.map ? rc.map.get(norm(r.range)) : null;
+    if (!rateObj) return;
+    const G = rateObj.rate;
+    grossTotal += G;
+    const ded = deductions.get(norm(r.range));
+    const isFull = ded ? ded.full : false;
+    const cli = String(r.client || '').trim();
+    const cl = cli.toLowerCase();
+    let uShare, cShare, mShare = 0, mTo = null;
+    if (isFull) { uShare = 1; cShare = 0; }                                                    // full-rate range → no deduct
+    else if (cl && (cl === SUPER_ADMIN || cl.includes(SUPER_ADMIN))) { uShare = 1; cShare = 0; } // OWNER = 100%
+    else {
+      const team = resolveTeam(cli, allPrefixes, pinsMap);
+      const adm = team ? (allPrefixes.find(p => p.prefix === team) || {}).admin_username : null;
+      const admLow = adm ? String(adm).toLowerCase() : '';
+      if (admLow && cl && (cl === admLow || cl.includes(admLow))) { uShare = 0.8; cShare = 0.2; } // ADMIN own = 80/20
+      else if (admLow) { uShare = 0.7; cShare = 0.2; mShare = 0.1; mTo = admLow; }                // TEAM user = 70/20/10
+      else { uShare = 0.7; cShare = 0.3; }                                                       // member = 70/30
+    }
+    const uN = G * uShare, cN = G * cShare, mN = G * mShare;
+    userNetTotal += uN; companyTotal += cN; commissionTotal += mN;
+    if (cli) {
+      if (!board[cli]) board[cli] = { username: cli, userNet: 0, gross: 0, count: 0 };
+      board[cli].userNet += uN; board[cli].gross += G; board[cli].count++;
+    }
+    const isMe = cl && my2 && (cl === my1 || cl === my2 || cl.includes(my1) || cl.includes(my2));
+    if (isMe) {
+      me.userNet += uN; me.gross += G;
+      const k = r.range || 'Unknown';
+      if (!me.perRange[k]) me.perRange[k] = { range: k, count: 0, userNet: 0, gross: 0, isFull, dedPct: ded ? ded.pct : 30 };
+      const pr = me.perRange[k]; pr.count++; pr.userNet += uN; pr.gross += G;
+    }
+    if (mTo && (mTo === my2 || mTo === my1)) me.commission += mN;
+  });
+  me.userNet = Math.round(me.userNet * 10000) / 10000;
+  me.gross = Math.round(me.gross * 10000) / 10000;
+  me.commission = Math.round(me.commission * 10000) / 10000;
+  me.total = Math.round((me.userNet + me.commission) * 10000) / 10000;
+  Object.values(me.perRange).forEach(pr => {
+    pr.userNet = Math.round(pr.userNet * 10000) / 10000;
+    pr.gross = Math.round(pr.gross * 10000) / 10000;
+    if (!adminish) { delete pr.dedPct; delete pr.gross; }   // 🔒 users never see deduction/gross
+  });
+  Object.values(board).forEach(b => { b.userNet = Math.round(b.userNet * 10000) / 10000; b.gross = Math.round(b.gross * 10000) / 10000; });
+  const perRange = Object.values(me.perRange).sort((a, b) => b.userNet - a.userNet);
+  const leaderboard = Object.values(board).sort((a, b) => b.userNet - a.userNet).slice(0, 50);
+  if (supaEnabled()) {
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/user_balance_cache`, { method: 'POST', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ username: user.username.toLowerCase(), total_earnings: me.total, updated_at: new Date().toISOString() }) });
+    } catch (e) {}
+  }
+  return ok(res, {
+    window: win, mode: cfg.mode, goal: Number(cfg.goal_usd) || 50, ratesLoaded: rc.count, role,
+    me, leaderboard,
+    pool: role === 'super' ? { grossTotal: Math.round(grossTotal * 10000) / 10000, userNetTotal: Math.round(userNetTotal * 10000) / 10000, companyTotal: Math.round(companyTotal * 10000) / 10000, commissionTotal: Math.round(commissionTotal * 10000) / 10000 } : null
+  });
+} catch (e) { return error(res, 500, 'earn/compute: ' + e.message); }
 }
    // ==========================================
 // NEW VERIFIED EARNING SYSTEM (uses user_creds, NOT users)
