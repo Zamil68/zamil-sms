@@ -1897,7 +1897,7 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
       } catch (e) { return error(res, 500, 'earn/push-notif: ' + e.message); }
     }
 
-    if (url === '/earn/compute' && req.method === 'POST') {
+   if (url === '/earn/compute' && req.method === 'POST') {
 try {
   const user = getUserFromSession(req.body.session);
   if (!user) return error(res, 401, 'Unauthorized');
@@ -1910,8 +1910,19 @@ try {
   const rows = await getCachedCDR(win.from, win.to, CDR_TTL_WIDE);
   const allPrefixes = await supaGetPrefixes();
   const pinsMap = await getPinsMap();
+  const adminSet = new Set();
+  if (supaEnabled()) {
+    try {
+      const ar = await fetch(`${SUPABASE_URL}/rest/v1/user_roles?role=eq.admin&select=username`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+      const arows = await ar.json();
+      if (Array.isArray(arows)) arows.forEach(x => adminSet.add(String(x.username || '').toLowerCase()));
+    } catch (e) {}
+  }
   const me = { userNet: 0, gross: 0, commission: 0, total: 0, perRange: {} };
   const board = {};
+  const teamOf = {};    // adminLow -> { memberLow -> {username,count,userNet,commission} }
+  const adminOwn = {};  // adminLow -> { username, ownNet, count }
+  const compRange = {};
   let grossTotal = 0, userNetTotal = 0, companyTotal = 0, commissionTotal = 0;
   const my1 = String(user.clientName || '').toLowerCase().trim();
   const my2 = String(user.username || '').toLowerCase().trim();
@@ -1924,16 +1935,17 @@ try {
     const isFull = ded ? ded.full : false;
     const cli = String(r.client || '').trim();
     const cl = cli.toLowerCase();
-    let uShare, cShare, mShare = 0, mTo = null;
-    if (isFull) { uShare = 1; cShare = 0; }                                                    // full-rate range → no deduct
-    else if (cl && (cl === SUPER_ADMIN || cl.includes(SUPER_ADMIN))) { uShare = 1; cShare = 0; } // OWNER = 100%
+    let uShare, cShare, mShare = 0, mTo = null, isAdminSelf = false;
+    if (cl && SUPER_ADMIN && (cl === SUPER_ADMIN || cl.includes(SUPER_ADMIN))) { uShare = 1; cShare = 0; }        // OWNER 100%
     else {
       const team = resolveTeam(cli, allPrefixes, pinsMap);
       const adm = team ? (allPrefixes.find(p => p.prefix === team) || {}).admin_username : null;
       const admLow = adm ? String(adm).toLowerCase() : '';
-      if (admLow && cl && (cl === admLow || cl.includes(admLow))) { uShare = 0.8; cShare = 0.2; } // ADMIN own = 80/20
-      else if (admLow) { uShare = 0.7; cShare = 0.2; mShare = 0.1; mTo = admLow; }                // TEAM user = 70/20/10
-      else { uShare = 0.7; cShare = 0.3; }                                                       // member = 70/30
+      isAdminSelf = !!(admLow && cl && (cl === admLow || (admLow.length >= 3 && cl.includes(admLow))));
+      if (isAdminSelf || (cl && adminSet.has(cl))) { uShare = 0.8; cShare = 0.2; isAdminSelf = true; }            // ADMIN own 80% (20% always)
+      else if (isFull) { uShare = 1; cShare = 0; }                                                                // full-rate user 100%
+      else if (admLow) { uShare = 0.7; cShare = 0.2; mShare = 0.1; mTo = admLow; }                                // TEAM user 70/20/10
+      else { uShare = 0.7; cShare = 0.3; }                                                                        // member 70/30
     }
     const uN = G * uShare, cN = G * cShare, mN = G * mShare;
     userNetTotal += uN; companyTotal += cN; commissionTotal += mN;
@@ -1941,37 +1953,62 @@ try {
       if (!board[cli]) board[cli] = { username: cli, userNet: 0, gross: 0, count: 0 };
       board[cli].userNet += uN; board[cli].gross += G; board[cli].count++;
     }
-    const isMe = cl && my2 && (cl === my1 || cl === my2 || cl.includes(my1) || cl.includes(my2));
+    if (mTo) {
+      if (!teamOf[mTo]) teamOf[mTo] = {};
+      if (!teamOf[mTo][cl]) teamOf[mTo][cl] = { username: cli, count: 0, userNet: 0, commission: 0 };
+      teamOf[mTo][cl].count++; teamOf[mTo][cl].userNet += uN; teamOf[mTo][cl].commission += mN;
+    }
+    if (isAdminSelf) {
+      if (!adminOwn[cl]) adminOwn[cl] = { username: cli, ownNet: 0, count: 0 };
+      adminOwn[cl].ownNet += uN; adminOwn[cl].count++;
+    }
+    if (role === 'super') {
+      const k = r.range || 'Unknown';
+      if (!compRange[k]) compRange[k] = { range: k, count: 0, gross: 0, userNet: 0, company: 0 };
+      compRange[k].count++; compRange[k].gross += G; compRange[k].userNet += uN; compRange[k].company += cN + mN;
+    }
+    const isMe = cl && ((my2 && (cl === my2 || cl.includes(my2) || my2.includes(cl))) || (my1 && (cl === my1 || cl.includes(my1) || my1.includes(cl))));
     if (isMe) {
       me.userNet += uN; me.gross += G;
       const k = r.range || 'Unknown';
-      if (!me.perRange[k]) me.perRange[k] = { range: k, count: 0, userNet: 0, gross: 0, isFull, dedPct: ded ? ded.pct : 30 };
+      if (!me.perRange[k]) me.perRange[k] = { range: k, count: 0, userNet: 0, gross: 0 };
       const pr = me.perRange[k]; pr.count++; pr.userNet += uN; pr.gross += G;
     }
     if (mTo && (mTo === my2 || mTo === my1)) me.commission += mN;
   });
-  me.userNet = Math.round(me.userNet * 10000) / 10000;
-  me.gross = Math.round(me.gross * 10000) / 10000;
-  me.commission = Math.round(me.commission * 10000) / 10000;
-  me.total = Math.round((me.userNet + me.commission) * 10000) / 10000;
-  Object.values(me.perRange).forEach(pr => {
-    pr.userNet = Math.round(pr.userNet * 10000) / 10000;
-    pr.gross = Math.round(pr.gross * 10000) / 10000;
-    if (!adminish) { delete pr.dedPct; delete pr.gross; }   // 🔒 users never see deduction/gross
-  });
-  Object.values(board).forEach(b => { b.userNet = Math.round(b.userNet * 10000) / 10000; b.gross = Math.round(b.gross * 10000) / 10000; });
+  const rnd = v => Math.round(v * 10000) / 10000;
+  me.userNet = rnd(me.userNet); me.gross = rnd(me.gross); me.commission = rnd(me.commission);
+  me.total = rnd(me.userNet + me.commission);
+  Object.values(me.perRange).forEach(pr => { pr.userNet = rnd(pr.userNet); pr.gross = rnd(pr.gross); if (!adminish) delete pr.gross; });   // 🔒 users see final only
+  Object.values(board).forEach(b => { b.userNet = rnd(b.userNet); b.gross = rnd(b.gross); });
   const perRange = Object.values(me.perRange).sort((a, b) => b.userNet - a.userNet);
   const leaderboard = Object.values(board).sort((a, b) => b.userNet - a.userNet).slice(0, 50);
+  let team = null;
+  const myTeamKey = (my2 && teamOf[my2]) ? my2 : ((my1 && teamOf[my1]) ? my1 : null);
+  if (adminish && myTeamKey) {
+    const members = Object.values(teamOf[myTeamKey]).sort((a, b) => b.userNet - a.userNet).map(m => ({ username: m.username, count: m.count, userNet: rnd(m.userNet), commission: rnd(m.commission) }));
+    team = { members, totalMemberNet: rnd(members.reduce((s, m) => s + m.userNet, 0)), totalCommission: rnd(members.reduce((s, m) => s + m.commission, 0)), otps: members.reduce((s, m) => s + m.count, 0) };
+  }
+  let company = null;
+  if (role === 'super') {
+    const admMap = {};
+    Object.values(adminOwn).forEach(a => { admMap[String(a.username).toLowerCase()] = { username: a.username, ownNet: rnd(a.ownNet), commission: 0, total: 0, teamOtps: 0 }; });
+    Object.keys(teamOf).forEach(al => {
+      const members = Object.values(teamOf[al]);
+      const comm = rnd(members.reduce((s, m) => s + m.commission, 0));
+      if (!admMap[al]) admMap[al] = { username: members[0] ? members[0].username : al, ownNet: 0, commission: 0, total: 0, teamOtps: 0 };
+      admMap[al].commission = comm; admMap[al].teamOtps = members.reduce((s, m) => s + m.count, 0);
+    });
+    const admins = Object.values(admMap).map(a => { a.total = rnd(a.ownNet + a.commission); return a; }).sort((a, b) => b.total - a.total);
+    company = { grossTotal: rnd(grossTotal), userNetTotal: rnd(userNetTotal), companyTotal: rnd(companyTotal), commissionTotal: rnd(commissionTotal), admins,
+      perRange: Object.values(compRange).map(o => ({ range: o.range, count: o.count, gross: rnd(o.gross), userNet: rnd(o.userNet), company: rnd(o.company) })).sort((a, b) => b.gross - a.gross).slice(0, 80) };
+  }
   if (supaEnabled()) {
     try {
       await fetch(`${SUPABASE_URL}/rest/v1/user_balance_cache`, { method: 'POST', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ username: user.username.toLowerCase(), total_earnings: me.total, updated_at: new Date().toISOString() }) });
     } catch (e) {}
   }
-  return ok(res, {
-    window: win, mode: cfg.mode, goal: Number(cfg.goal_usd) || 50, ratesLoaded: rc.count, role,
-    me, leaderboard,
-    pool: role === 'super' ? { grossTotal: Math.round(grossTotal * 10000) / 10000, userNetTotal: Math.round(userNetTotal * 10000) / 10000, companyTotal: Math.round(companyTotal * 10000) / 10000, commissionTotal: Math.round(commissionTotal * 10000) / 10000 } : null
-  });
+  return ok(res, { window: win, mode: cfg.mode, goal: Number(cfg.goal_usd) || 50, ratesLoaded: rc.count, role, me, leaderboard, team, company, pool: company });
 } catch (e) { return error(res, 500, 'earn/compute: ' + e.message); }
 }
    // ==========================================
