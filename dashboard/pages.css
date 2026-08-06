@@ -614,3 +614,26 @@ body.earn-is-super #earnPoolGrid{display:grid}
   #earnBoard{display:grid;grid-template-columns:1fr 1fr;gap:7px}
   #earnBoard .elb{margin-bottom:0}
 }
+
+.earn-grid4{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+@media(min-width:900px){.earn-grid4{grid-template-columns:repeat(4,1fr)}}
+.earn-mini.owner{border-color:color-mix(in srgb,var(--egold) 40%,var(--border));background:linear-gradient(150deg,color-mix(in srgb,var(--egold) 10%,var(--card)),var(--card))}
+.earn-mini.admin{border-color:color-mix(in srgb,var(--emag) 35%,var(--border))}
+.earn-mini.company{border-color:color-mix(in srgb,var(--accent) 30%,var(--border))}
+#earnRanges,#earnCompRanges{display:grid;grid-template-columns:1fr;gap:8px}
+@media(min-width:640px){#earnRanges,#earnCompRanges{grid-template-columns:1fr 1fr}}
+.ern-card{background:var(--card);border:1px solid var(--border);border-left:4px solid var(--rc,var(--accent));border-radius:12px;padding:10px 12px}
+.ern-top{display:flex;align-items:center;gap:8px}
+.ern-dot{width:9px;height:9px;border-radius:50%;background:var(--rc,var(--accent));flex-shrink:0}
+.ern-name{flex:1;min-width:0;font-size:.76rem;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ern-net{font-family:'Space Grotesk',monospace;font-weight:700;font-size:.86rem;color:var(--eg)}
+.ern-sub{font-size:.62rem;color:var(--muted);font-weight:600;margin:3px 0 6px}
+.ern-bar{height:4px;border-radius:3px;background:var(--border);overflow:hidden}
+.ern-bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--rc,var(--accent)),color-mix(in srgb,var(--rc,var(--accent)) 40%,#fff));border-radius:3px;transition:width .8s cubic-bezier(.2,.8,.2,1)}
+.elb-sub{font-size:.62rem;color:var(--muted);font-weight:600;margin-top:2px}
+.eli{display:inline-flex;font-size:.58rem;font-weight:800;border-radius:20px;padding:2px 8px;margin:4px 6px 0 0;vertical-align:middle}
+.eli.on{color:var(--eg);background:color-mix(in srgb,var(--eg) 12%,transparent);border:1px solid color-mix(in srgb,var(--eg) 30%,transparent)}
+.eli.off{color:var(--muted);background:var(--surface);border:1px solid var(--border)}
+.eli-ctl{display:inline-flex;gap:3px;vertical-align:middle}
+.eli-b{font:inherit;font-size:.56rem;font-weight:700;border:1px solid var(--border);background:var(--surface);color:var(--muted);border-radius:6px;padding:2px 7px;cursor:pointer}
+.eli-b.act{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,var(--border));background:color-mix(in srgb,var(--accent) 10%,transparent)}
