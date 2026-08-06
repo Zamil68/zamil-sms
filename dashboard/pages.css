@@ -547,8 +547,9 @@ body.earn-is-super #earnPoolGrid{display:grid}
 .cli-ctry-date{font-size:.6rem;color:var(--muted);font-weight:600;white-space:nowrap}
 .cli-ctry-n{font-family:'Space Grotesk',monospace;font-size:.62rem;font-weight:700;color:var(--muted)}
 .cli-sample{margin-top:8px;font-size:.72rem;padding:8px 10px 8px 12px}
-@media(min-width:900px){.cli-list{display:grid;grid-template-columns:1fr 1fr;gap:9px}}
-@media(min-width:1280px){.cli-list{grid-template-columns:repeat(3,1fr)}}
+@media(min-width:900px){.cli-list{display:grid;grid-template-columns:1fr 1fr;gap:9px;align-items:start}}
+@media(min-width:1536px){.cli-list{grid-template-columns:repeat(3,1fr)}}
+.cli-row{align-self:start}
 /* CLI TRACK compact + desktop */
 .ct-wrap{max-width:680px}
 @media(min-width:900px){.ct-wrap{max-width:1080px}}
