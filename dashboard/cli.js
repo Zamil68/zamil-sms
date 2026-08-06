@@ -1,4 +1,4 @@
-/* ═══ cli.js — CLI Insights (Zamil SMS) ═══ */
+/* ═══ cli.js — CLI Insights (Zamil SMS) v2 — compact UI + smart cache ═══ */
 (function(){
 'use strict';
 function sess(){ return localStorage.getItem('app_session'); }
@@ -10,10 +10,7 @@ function post(url, body, cb, timeout){
     .then(function(r){clearTimeout(t);return r.json().catch(function(){return{ok:false,error:'HTTP '+r.status};});})
     .then(cb).catch(function(e){clearTimeout(t);cb({ok:false,error:e.name==='AbortError'?'Timed out — try again':'Network error'});});
 }
-
-var _injected=false, _list=[], _stats={}, _role='none';
-var _refetchT=null, _tickT=null;
-
+var MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function ago(iso){
   if(!iso) return '—';
   var d=new Date(iso), s=Math.floor((Date.now()-d.getTime())/1000);
@@ -30,6 +27,19 @@ function pktTime(iso){
   var ap=h>=12?'PM':'AM', h12=h%12||12;
   return h12+':'+(m<10?'0':'')+m+' '+ap;
 }
+function dmy(t){
+  if(!t) return '';
+  var d=new Date(t);
+  if(isNaN(d.getTime())) return '';
+  return d.getUTCDate()+' '+MONTHS[d.getUTCMonth()];
+}
+function loaderHtml(msg){
+  return '<div class="zload-wrap"><div class="loader"></div><div class="zload-msg">'+(msg||'Crunching CLI traffic…')+'</div></div>';
+}
+
+var _injected=false, _list=[], _stats={}, _role='none';
+var _refetchT=null, _tickT=null, _cacheTs=0;
+var CACHE_TTL=15*60*1000; /* 15 min — server-friendly for 500 users */
 
 function inject(){
   if(_injected) return; _injected=true;
@@ -38,17 +48,19 @@ function inject(){
     while(d.firstElementChild) document.body.appendChild(d.firstElementChild);
     var p=document.getElementById('cliPage'); if(p) p.style.display='block';
     window.scrollTo(0,0);
-    loadRole(); loadAnalysis();
-    startTimers();
+    loadRole(); loadAnalysis(false); startTimers();
   });
 }
 function startTimers(){
   if(_tickT) clearInterval(_tickT);
-  _tickT=setInterval(function(){ // recompute "x ago" labels without refetch
+  _tickT=setInterval(function(){
     document.querySelectorAll('.cli-time').forEach(function(el){ el.textContent=ago(el.getAttribute('data-ls')); });
-  },30000);
+  },30000); /* client-only label tick — zero server load */
   if(_refetchT) clearInterval(_refetchT);
-  _refetchT=setInterval(function(){ loadAnalysis(true); },90000); // silent auto-refresh
+  _refetchT=setInterval(function(){
+    var p=document.getElementById('cliPage');
+    if(p&&p.style.display!=='none'&&!document.hidden) loadAnalysis(true);
+  },CACHE_TTL);
 }
 function loadRole(){
   post('/api/auth/role',{},function(r){
@@ -61,7 +73,6 @@ function loadRole(){
 window.openCliPage=function(){
   post('/api/cli/gate',{openAction:'open_insights'},function(g){
     if(g&&g.ok&&g.insights===false){
-      // Show blocked overlay
       var p=document.getElementById('cliPage');
       if(p){
         p.style.display='block';
@@ -73,23 +84,30 @@ window.openCliPage=function(){
       }
       return;
     }
-    // Allowed — hide any old blocked overlay and proceed normally
     var ov2=document.getElementById('cliBlockedOv'); if(ov2) ov2.style.display='none';
     var p2=document.getElementById('cliPage');
-    if(p2){ p2.style.display='block'; window.scrollTo(0,0); loadAnalysis(true); return; }
+    if(p2){
+      p2.style.display='block'; window.scrollTo(0,0);
+      if(_list.length&&(Date.now()-_cacheTs)<CACHE_TTL){ renderStats(); cliRenderList(); } /* fresh cache → no fetch */
+      else loadAnalysis(false);
+      return;
+    }
     inject();
   });
 };
-window.closeCliPage=function(){ var p=document.getElementById('cliPage'); if(p) p.style.display='none'; };
+window.closeCliPage=function(){
+  var p=document.getElementById('cliPage'); if(p) p.style.display='none';
+  if(_refetchT){ clearInterval(_refetchT); _refetchT=null; } /* sleep when closed */
+};
 
 function loadAnalysis(silent){
   var el=document.getElementById('cliList');
-  if(!silent && el && !_list.length) el.innerHTML='<div class="cli-empty">Loading CLI data…</div>';
+  if(!silent&&el&&!_list.length) el.innerHTML=loaderHtml();
   post('/api/cli/analysis',{},function(d){
-    if(!d||!d.ok){ if(el) el.innerHTML='<div class="cli-empty">Could not load CLI data.</div>'; return; }
-    _list=d.list||[]; _stats=d.stats||{};
+    if(!d||!d.ok){ if(el&&!_list.length) el.innerHTML='<div class="cli-empty">Could not load CLI data.</div>'; return; }
+    _list=d.list||[]; _stats=d.stats||{}; _cacheTs=Date.now();
     renderStats(); cliRenderList();
-    if((d.reason==='no_creds'||d.reason==='no_data') && !d.list.length){
+    if((d.reason==='no_creds'||d.reason==='no_data')&&!d.list.length){
       if(el) el.innerHTML='<div class="cli-empty">'+(_role==='super'?'No data yet — set the analysis panel login below, then tap Refresh.':'Analysis data will appear once the admin configures the analysis panel.')+'</div>';
     }
   },60000);
@@ -109,16 +127,25 @@ function renderStats(){
 }
 window.cliRenderList=function(){
   var el=document.getElementById('cliList'); if(!el) return;
-  var q=(document.getElementById('cliSearch').value||'').toLowerCase().trim();
+  var q=((document.getElementById('cliSearch').value)||'').toLowerCase().trim();
   var data=_list;
   if(q){ data=_list.filter(function(x){ var hay=(x.cli+' '+x.countries.map(function(c){return c.name;}).join(' ')).toLowerCase(); return hay.indexOf(q)>=0; }); }
   if(!data.length){ el.innerHTML='<div class="cli-empty">'+(q?'No apps match “'+esc(q)+'”':'No CLI data yet. Tap the refresh button.')+'</div>'; return; }
   el.innerHTML=data.map(function(x,i){
     var flags=x.countries.slice(0,4).map(function(c){ return '<span class="cli-flag" title="'+esc(c.name)+' · '+c.n.toLocaleString()+' SMS">'+c.flag+'</span>'; }).join('');
     var extra=x.countries.length>4?'<span class="cli-flag-more">+'+(x.countries.length-4)+'</span>':'';
-    var samples=(x.samples&&x.samples.length)?x.samples.map(function(s){
-      return '<div class="cli-sample"><span class="cli-sample-t">'+pktTime(s.t)+'</span>'+esc(s.text)+'</div>';
-    }).join(''):'<div class="cli-sample">No message sample available.</div>';
+    var ctry=(x.countries&&x.countries.length)?('<div class="cli-ctrylist">'+x.countries.map(function(c){
+      var range=c.range||(Array.isArray(c.ranges)?c.ranges.join(', '):c.ranges)||c.rangeName||'';
+      var when=dmy(c.last||c.lastSeen||x.lastSeen);
+      return '<div class="cli-ctry"><span class="cli-ctry-flag">'+c.flag+'</span>'
+        +'<span class="cli-ctry-name">'+esc(c.name)+'</span>'
+        +(range?'<span class="cli-ctry-range">'+esc(range)+'</span>':'')
+        +(when?'<span class="cli-ctry-date">'+when+'</span>':'')
+        +'<span class="cli-ctry-n">'+(c.n||0).toLocaleString()+'</span></div>';
+    }).join('')+'</div>'):'';
+    var s0=(x.samples&&x.samples[0])
+      ? '<div class="cli-sample"><span class="cli-sample-t">'+pktTime(x.samples[0].t)+'</span>'+esc(x.samples[0].text)+'</div>'
+      : '<div class="cli-sample">No message sample available.</div>';
     return '<div class="cli-row" style="animation-delay:'+(i<12?(i*0.02):0)+'s">'
       +'<div class="cli-row-top" onclick="cliToggle(this)">'
         +'<span class="cli-rank">'+(i+1)+'</span>'
@@ -127,7 +154,7 @@ window.cliRenderList=function(){
         +'<div class="cli-count-box"><div class="cli-count">'+x.count.toLocaleString()+'</div><div class="cli-count-lbl">SMS</div></div>'
         +'<span class="cli-chev">▾</span>'
       +'</div>'
-      +'<div class="cli-expand">'+samples+'</div>'
+      +'<div class="cli-expand">'+ctry+s0+'</div>'
     +'</div>';
   }).join('');
 };
@@ -137,14 +164,14 @@ window.cliToggle=function(topEl){
 window.cliDoRefresh=function(){
   var btn=document.getElementById('cliRefreshBtn');
   if(btn){ btn.classList.add('spinning'); btn.disabled=true; }
+  _cacheTs=0; /* hard refresh bypasses cache */
   post('/api/cli/refresh',{},function(d){
     if(btn){ btn.classList.remove('spinning'); btn.disabled=false; }
     if(d&&d.ok){ loadAnalysis(); }
     else { var el=document.getElementById('cliList'); if(el&&(!_list.length)) el.innerHTML='<div class="cli-empty">'+esc((d&&d.error)||'Refresh failed')+'</div>'; }
-  },120000); // long timeout — full-day scrape
+  },120000);
 };
 
-/* ── super admin creds ── */
 function loadCreds(){
   post('/api/admin/cli-creds-get',{},function(d){
     if(!d||!d.ok) return;
