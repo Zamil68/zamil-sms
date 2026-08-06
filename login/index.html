@@ -5,135 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>ZAMIL SMS — Login</title>
     <link rel="icon" type="image/x-icon" href="/branding/favicon.ico">
-   <link rel="stylesheet" href="/login/common.css">
-<link rel="stylesheet" href="/login/login.css">
-    <style>
-        /* ZAMIL SMS — Beautiful Login Enhancements */
-        #loginScreen {
-            background:
-                radial-gradient(ellipse 80% 60% at 50% -10%, rgba(8,145,178,.08) 0%, transparent 70%),
-                radial-gradient(ellipse 50% 40% at 85% 90%, rgba(79,70,229,.06) 0%, transparent 60%),
-                var(--bg);
-        }
-        
-        .login-card {
-            max-width: 420px;
-            padding: 36px 32px 32px;
-            border-radius: 24px;
-            box-shadow: 0 20px 60px rgba(0,0,0,.08), 0 1px 3px rgba(0,0,0,.04);
-            border: 1px solid rgba(221,228,240,.8);
-        }
-        
-        .login-brand {
-            margin-bottom: 12px;
-        }
-        
-        .login-logo-svg {
-            height: 48px;
-            width: auto;
-        }
-        
-        .login-sub {
-            font-size: .85rem;
-            color: var(--muted);
-            margin-bottom: 28px;
-            font-weight: 500;
-        }
-        
-        /* LaMix Network Badge */
-        .lamix-badge {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            padding: 10px 16px;
-            background: linear-gradient(135deg, rgba(8,145,178,.08), rgba(79,70,229,.06));
-            border: 1.5px solid rgba(8,145,178,.18);
-            border-radius: 12px;
-            margin-bottom: 24px;
-            font-size: .78rem;
-            font-weight: 600;
-            color: var(--accent);
-        }
-        
-        .lamix-badge-icon {
-            width: 20px;
-            height: 20px;
-            background: linear-gradient(135deg, var(--accent), var(--accent2));
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: .7rem;
-            color: #fff;
-            font-weight: 700;
-        }
-        
-        .field {
-            margin-bottom: 16px;
-        }
-        
-        .field label {
-            font-size: .72rem;
-            font-weight: 700;
-            letter-spacing: .06em;
-            text-transform: uppercase;
-            color: var(--muted);
-            margin-bottom: 8px;
-            display: block;
-        }
-        
-        .field input {
-            padding: 13px 15px;
-            font-size: .95rem;
-            border-radius: 10px;
-            border: 1.5px solid var(--border);
-            background: var(--surface);
-            transition: all .15s;
-        }
-        
-        .field input:focus {
-            border-color: var(--accent);
-            box-shadow: 0 0 0 3px rgba(8,145,178,.1);
-        }
-        
-        .btn.btn-primary {
-            width: 100%;
-            padding: 14px;
-            font-size: .95rem;
-            border-radius: 12px;
-            margin-top: 8px;
-            font-weight: 700;
-            letter-spacing: .02em;
-        }
-        
-        .login-foot {
-            margin-top: 20px;
-            font-size: .72rem;
-            color: var(--muted);
-            text-align: center;
-            font-weight: 500;
-        }
-        
-        .login-foot::before {
-            content: ' ';
-        }
-        
-        @media(max-width: 480px) {
-            .login-card {
-                padding: 28px 24px 24px;
-                border-radius: 20px;
-            }
-            
-            .login-logo-svg {
-                height: 42px;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="/login/common.css">
+    <link rel="stylesheet" href="/login/login.css?v=20260806">
 </head>
 <body>
 <script>
-/* If already signed in, go straight to the dashboard (validates first → no redirect loop) */
 (function(){
   try{
     var s = localStorage.getItem('app_session');
@@ -142,13 +18,36 @@
     fetch('/api/ping', { method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'}, body: JSON.stringify({session:s}), cache:'no-store', signal: ctrl.signal })
       .then(function(r){ clearTimeout(t); return r.json(); })
       .then(function(d){ if(d && d.ok){ location.replace('/dashboard'); } else { localStorage.removeItem('app_session'); } })
-      .catch(function(){ clearTimeout(t); /* offline/timeout → stay on login, never loop */ });
+      .catch(function(){ clearTimeout(t); });
   }catch(e){}
 })();
 </script>
-    
+
     <div id="loginScreen">
        <div class="login-card">
+
+            <div class="mascot" id="mascot" data-mood="happy" aria-hidden="true">
+              <svg viewBox="0 0 140 140">
+                <defs>
+                  <linearGradient id="mFace" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a5f3fc"/><stop offset="1" stop-color="#67e8f9"/></linearGradient>
+                  <linearGradient id="mCrown" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fde68a"/><stop offset="1" stop-color="#f59e0b"/></linearGradient>
+                </defs>
+                <path class="m-crown" d="M47 32 L54 14 L64 26 L70 10 L76 26 L86 14 L93 32 Z"/>
+                <circle class="m-face" cx="70" cy="80" r="46"/>
+                <circle class="m-cheek" cx="50" cy="92" r="6"/>
+                <circle class="m-cheek" cx="90" cy="92" r="6"/>
+                <g class="m-eye"><circle cx="54" cy="74" r="8" fill="#fff"/><circle class="m-pupil" cx="54" cy="75" r="3.6" fill="#083344"/></g>
+                <g class="m-eye"><circle cx="86" cy="74" r="8" fill="#fff"/><circle class="m-pupil" cx="86" cy="75" r="3.6" fill="#083344"/></g>
+                <path class="m-brow" d="M46 62 L60 66"/>
+                <path class="m-brow" d="M94 62 L80 66"/>
+                <path class="m-mouth happy" d="M56 94 Q70 106 84 94"/>
+                <path class="m-mouth sad" d="M56 102 Q70 92 84 102"/>
+                <circle class="m-tear" cx="54" cy="84" r="3"/>
+                <g class="m-hand"><circle cx="54" cy="74" r="12"/></g>
+                <g class="m-hand"><circle cx="86" cy="74" r="12"/></g>
+              </svg>
+            </div>
+
             <div class="login-brand">
                 <img src="/branding/logo-dark.png" alt="ZAMIL SMS" class="login-logo-svg header-logo-dark">
                 <img src="/branding/logo-light.png" alt="ZAMIL SMS" class="login-logo-svg header-logo-light">
@@ -157,14 +56,16 @@
             <div class="lamix-badge"><div class="lamix-badge-icon">⚡</div><span>Connected to LaMix Network</span></div>
             <div id="loginErr" class="err-box"></div>
 
-            <!-- LOGIN FORM -->
             <div id="loginForm">
                 <div class="field"><label for="inpUser">Username</label>
                     <input type="text" id="inpUser" autocomplete="username" placeholder="Enter your username"></div>
                 <div class="field"><label for="inpPass">Password</label>
                     <div class="pwd-wrap">
                         <input type="password" id="inpPass" autocomplete="current-password" placeholder="Enter your password">
-                        <button type="button" class="pwd-toggle" onclick="var i=document.getElementById('inpPass');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'':'🙈';">👁</button>
+                        <button type="button" class="pwd-toggle" onclick="togglePwd('inpPass',this)" aria-label="Show or hide password">
+                            <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                            <svg class="eye-shut" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                        </button>
                     </div>
                     <div id="capsHint" class="caps-hint">⚠ Caps Lock is ON</div>
                 </div>
@@ -178,33 +79,82 @@
                 <div class="login-foot">Encrypted · Your data is protected end-to-end</div>
             </div>
 
-            <!-- SET PASSWORD (first login) -->
             <div id="setPassPanel" style="display:none">
-                <div style="font-size:.85rem;font-weight:700;margin-bottom:4px">🔐 Activate your account</div>
-                <div style="font-size:.76rem;color:var(--muted);margin-bottom:14px">Welcome <b id="spUser"></b>! Set your Zamil SMS password.</div>
-                <div class="field"><label>New Password</label><input type="password" id="spNew" placeholder="Min 6 characters"></div>
-                <div class="field"><label>Confirm Password</label><input type="password" id="spConfirm" placeholder="Repeat password"></div>
-                <div class="field"><label>Recovery Code</label><input type="text" id="spRecovery" placeholder="A secret code to reset your password later"></div>
-                <button class="btn btn-primary" onclick="submitSetPassword()">Activate & Sign In →</button>
-                <div style="text-align:center;margin-top:10px"><a href="javascript:void(0)" onclick="backToLogin()" style="font-size:.74rem;color:var(--muted)">← Back to login</a></div>
+                <div class="panel-title">🔐 Activate your account</div>
+                <div class="panel-sub">Welcome <b id="spUser"></b>! Set your Zamil SMS password.</div>
+                <div class="field"><label>New Password</label>
+                    <div class="pwd-wrap">
+                        <input type="password" id="spNew" placeholder="Min 6 characters">
+                        <button type="button" class="pwd-toggle" onclick="togglePwd('spNew',this)" aria-label="Show or hide password">
+                            <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                            <svg class="eye-shut" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="pwd-pop" id="spPop">
+                    <div class="pwd-pop-t">Password checklist</div>
+                    <div class="pwd-chk len"><span class="tick"></span>At least 6 characters</div>
+                    <div class="pwd-chk match"><span class="tick"></span>Confirm matches password</div>
+                    <div class="pwd-strength"><i></i></div>
+                </div>
+                <div class="field"><label>Confirm Password</label>
+                    <div class="pwd-wrap">
+                        <input type="password" id="spConfirm" placeholder="Repeat password">
+                        <button type="button" class="pwd-toggle" onclick="togglePwd('spConfirm',this)" aria-label="Show or hide password">
+                            <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                            <svg class="eye-shut" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="field"><label>Recovery Code</label>
+                    <input type="text" id="spRecovery" placeholder="A secret code to reset your password later">
+                    <div class="rec-hint">🔒 Write this code down &amp; keep it safe — it is the ONLY way to reset your password later. Not even admin can recover it.</div>
+                </div>
+                <button class="btn btn-primary" onclick="submitSetPassword()">Activate &amp; Sign In →</button>
+                <div style="text-align:center;margin-top:10px"><a href="javascript:void(0)" onclick="backToLogin()" class="back-link">← Back to login</a></div>
             </div>
 
-            <!-- FORGOT PASSWORD -->
             <div id="forgotPanel" style="display:none">
-                <div style="font-size:.85rem;font-weight:700;margin-bottom:4px">🔑 Reset your password</div>
-                <div style="font-size:.76rem;color:var(--muted);margin-bottom:14px">Enter your username, recovery code, and a new password.</div>
+                <div class="panel-title">🔑 Reset your password</div>
+                <div class="panel-sub">Enter your username, recovery code, and a new password.</div>
                 <div class="field"><label>Username</label><input type="text" id="fpUser" placeholder="Your username"></div>
-                <div class="field"><label>Recovery Code</label><input type="text" id="fpRecovery" placeholder="The code you set"></div>
-                <div class="field"><label>New Password</label><input type="password" id="fpNew" placeholder="Min 6 characters"></div>
-                <div class="field"><label>Confirm New Password</label><input type="password" id="fpConfirm" placeholder="Repeat password"></div>
+                <div class="field"><label>Recovery Code</label>
+                    <input type="text" id="fpRecovery" placeholder="The code you set">
+                    <div class="rec-hint">🔑 This is the secret code you wrote down when activating your account.</div>
+                </div>
+                <div class="field"><label>New Password</label>
+                    <div class="pwd-wrap">
+                        <input type="password" id="fpNew" placeholder="Min 6 characters">
+                        <button type="button" class="pwd-toggle" onclick="togglePwd('fpNew',this)" aria-label="Show or hide password">
+                            <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                            <svg class="eye-shut" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="pwd-pop" id="fpPop">
+                    <div class="pwd-pop-t">Password checklist</div>
+                    <div class="pwd-chk len"><span class="tick"></span>At least 6 characters</div>
+                    <div class="pwd-chk match"><span class="tick"></span>Confirm matches password</div>
+                    <div class="pwd-strength"><i></i></div>
+                </div>
+                <div class="field"><label>Confirm New Password</label>
+                    <div class="pwd-wrap">
+                        <input type="password" id="fpConfirm" placeholder="Repeat password">
+                        <button type="button" class="pwd-toggle" onclick="togglePwd('fpConfirm',this)" aria-label="Show or hide password">
+                            <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                            <svg class="eye-shut" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                        </button>
+                    </div>
+                </div>
                 <button class="btn btn-primary" onclick="submitForgot()">Reset Password →</button>
                 <div style="text-align:center;margin-top:10px">
-                    <a href="javascript:void(0)" onclick="backToLogin()" style="font-size:.74rem;color:var(--muted)">← Back to login</a>
+                    <a href="javascript:void(0)" onclick="backToLogin()" class="back-link">← Back to login</a>
                     &nbsp;·&nbsp;
-                    <a href="https://wa.me/qr/4M2BZRDAFE6DJ1" target="_blank" style="font-size:.74rem;color:var(--accent);text-decoration:none">Lost code? WhatsApp admin</a>
+                    <a href="https://wa.me/qr/4M2BZRDAFE6DJ1" target="_blank" class="wa-link">Lost code? WhatsApp admin</a>
                 </div>
             </div>
         </div>
+    </div>
 
     <div id="loadingOverlay" class="loading-overlay">
         <div class="spinner" style="width:32px;height:32px;border-width:3px"></div>
@@ -215,27 +165,71 @@
 <script src="/login/utils.js"></script>
 <script src="/login/api.js"></script>
 <script src="/login/auth.js"></script>
-   <script>
-    // Safe Caps Lock detection
-    document.getElementById('inpPass').addEventListener('keyup', function(e) {
-        var isCaps = (e.getModifierState && e.getModifierState('CapsLock')) || false;
-        document.getElementById('capsHint').classList.toggle('show', isCaps);
-    });
+
+<script>
+document.getElementById('inpPass').addEventListener('keyup', function(e) {
+    var isCaps = (e.getModifierState && e.getModifierState('CapsLock')) || false;
+    document.getElementById('capsHint').classList.toggle('show', isCaps);
+});
+</script>
+
+<script>
+(function(){
+  function $(id){ return document.getElementById(id); }
+  var m=$('mascot');
+  window.setMascotMood=function(x){ if(m) m.setAttribute('data-mood',x); };
+  var u=$('inpUser');
+  if(u){
+    u.addEventListener('focus',function(){setMascotMood('typing');});
+    u.addEventListener('input',function(){setMascotMood('typing');});
+    u.addEventListener('blur',function(){setMascotMood('happy');});
+  }
+  document.querySelectorAll('input[type="password"]').forEach(function(i){
+    i.addEventListener('focus',function(){setMascotMood('peek');});
+    i.addEventListener('blur',function(){setMascotMood('happy');});
+  });
+  window.togglePwd=function(id,btn){
+    var i=$(id); if(!i) return;
+    var on=(i.type==='password');
+    i.type=on?'text':'password';
+    if(btn) btn.classList.toggle('on',on);
+  };
+  function strength(v){var s=0;if(v.length>=6)s++;if(v.length>=10)s++;if(/[0-9]/.test(v)&&/[a-zA-Z]/.test(v))s++;return s;}
+  function paintPop(pop,nv,cv){
+    if(!pop) return;
+    pop.querySelector('.pwd-chk.len').classList.toggle('ok',nv.length>=6);
+    pop.querySelector('.pwd-chk.match').classList.toggle('ok',cv.length>0&&nv===cv);
+    var bar=pop.querySelector('.pwd-strength i');
+    if(bar){var s=strength(nv);bar.style.width=(nv?(s/3*100):0)+'%';bar.className=s>=3?'s3':(s===2?'s2':'s1');}
+  }
+  function bindPair(nid,cid,pid){
+    var n=$(nid),c=$(cid),pop=$(pid);
+    function show(on){ if(pop) pop.classList.toggle('show',on); }
+    function upd(){ paintPop(pop,n.value,c.value); }
+    if(n){n.addEventListener('focus',function(){show(true);upd();});n.addEventListener('input',upd);n.addEventListener('blur',function(){setTimeout(function(){if(document.activeElement!==c)show(false);},120);});}
+    if(c){c.addEventListener('focus',function(){show(true);upd();});c.addEventListener('input',upd);c.addEventListener('blur',function(){setTimeout(function(){if(document.activeElement!==n)show(false);},120);});}
+  }
+  bindPair('spNew','spConfirm','spPop');
+  bindPair('fpNew','fpConfirm','fpPop');
+})();
 </script>
 
 <script>
     (function(){
       var _pending = null;
       function $(id){ return document.getElementById(id); }
-      function showErr(m){ var e=$('loginErr'); e.textContent=m; e.classList.add('show'); }
+      function showErr(msg){ var e=$('loginErr'); e.textContent=msg; e.classList.add('show');
+        try{ if(window.setMascotMood){ setMascotMood('sad'); clearTimeout(window._moodT); window._moodT=setTimeout(function(){setMascotMood('happy');},2600);} }catch(err){}
+      }
       function hideErr(){ var e=$('loginErr'); e.textContent=''; e.classList.remove('show'); }
       function busy(on){ var s=$('loginSpinner'), b=$('btnLogin'); if(s)s.style.display=on?'inline-block':'none'; if(b)b.disabled=on; }
       function go(d, fallbackUser){
+        try{ window.setMascotMood && setMascotMood('party'); }catch(e){}
         localStorage.setItem('app_session', d.session);
         localStorage.setItem('app_username', d.username || fallbackUser);
         if(d.clientId) localStorage.setItem('app_client_id', String(d.clientId));
         if(d.clientName) localStorage.setItem('app_client_name', String(d.clientName));
-        location.replace(d.redirect || '/dashboard/dashboard.html');
+        setTimeout(function(){ location.replace(d.redirect || '/dashboard/dashboard.html'); }, 450);
       }
 
       window.doLogin = function(){
@@ -274,11 +268,10 @@
         if(p1!==p2){ showErr('Passwords do not match'); return; }
         busy(true);
         fetch('/api/auth/forgot-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,recovery:rc,newPassword:p1})})
-          .then(function(r){return r.json();}).then(function(d){ busy(false); if(d&&d.ok){ alert('Password reset! You can now sign in.'); backToLogin(); } else showErr((d&&d.error)||'Reset failed'); })
+          .then(function(r){return r.json();}).then(function(d){ busy(false); if(d&&d.ok){ try{setMascotMood('party');}catch(e){} setTimeout(function(){ alert('Password reset! You can now sign in.'); backToLogin(); },400); } else showErr((d&&d.error)||'Reset failed'); })
           .catch(function(){ busy(false); showErr('Connection error'); });
       };
     })();
     </script>
-        
 </body>
 </html>
