@@ -7,10 +7,16 @@
     { "src": "**/*.js", "use": "@vercel/static" },
     { "src": "branding/**", "use": "@vercel/static" }
   ],
+  "headers": [
+    { "source": "/(.*)\\.html", "headers": [ { "key": "Cache-Control", "value": "no-cache" } ] },
+    { "source": "/dashboard/(.*)\\.(css|js)", "headers": [ { "key": "Cache-Control", "value": "no-cache" } ] },
+    { "source": "/login/(.*)\\.(css|js)", "headers": [ { "key": "Cache-Control", "value": "no-cache" } ] },
+    { "source": "/sw.js", "headers": [ { "key": "Cache-Control", "value": "no-cache, max-age=0" } ] },
+    { "source": "/branding/(.*)", "headers": [ { "key": "Cache-Control", "value": "public, max-age=86400" } ] }
+  ],
   "routes": [
     { "src": "^/$", "dest": "/login", "status": 302 },
     { "src": "^/dashboard/?$", "dest": "/dashboard/dashboard.html" },
-
     { "src": "/api/(.*)", "dest": "/api/index.js" },
     { "src": "/login/(.*)", "dest": "/login/$1" },
     { "src": "/dashboard/(.*)", "dest": "/dashboard/$1" },
