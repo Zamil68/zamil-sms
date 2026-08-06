@@ -63,8 +63,14 @@ var _DETAILS={
   ranges:{t:'📈 Range Breakdown',b:'Each range with OTP count and your final earning for it. Members see only final amounts; admins/super see deduction details.'},
   board:{t:'🏆 Leaderboard',b:'All users ranked by final earning in the window. Auto-updates every 5 seconds.'}
 };
-window.earnDetail=function(k){ var d=_DETAILS[k]; if(!d)return; var t=document.getElementById('earnDetailTitle'); if(t)t.textContent=d.t; var b=document.getElementById('earnDetailBody'); if(b)b.textContent=d.b; var ov=document.getElementById('earnDetail'); if(ov)ov.classList.add('show'); };
+window.earnDetail=function(k){ var d=_DETAILS[k]; if(!d)return; var t=document.getElementById('earnDetailTitle'); if(t)t.textContent=d.t; var b=document.getElementById('earnDetailBody'); if(b) b.textContent=(key==='board')?boardNote():d.b; var ov=document.getElementById('earnDetail'); if(ov)ov.classList.add('show'); };
 window.closeEarnDetail=function(){ var ov=document.getElementById('earnDetail'); if(ov)ov.classList.remove('show'); };
+window.earnSetElig=function(u,mode){ post('/admin/eligibility-set',{username:u,mode:mode},function(d){ if(d&&d.ok) loadAll(); }); };
+function boardNote(){
+  if(_role==='super') return 'Leaderboard uses ONE fair formula for everyone (members, admins, owner): 70% of each range rate (full-rate = 100%). Your personal page shows your real 100% share.';
+  if(_role==='admin') return 'Leaderboard shows the flat member rate (70%) for fair ranking — that\'s why it looks low. Your ACTUAL payout uses your admin rate (80% own + 10% team).';
+  return 'Leaderboard uses one fair formula for everyone: 70% of each OTP\'s range rate (full-rate ranges = 100%).';
+}
 function loadAll(){
   post('/api/auth/role',{},function(r){
     _role=(r&&r.ok)?r.role:'none';
@@ -93,7 +99,8 @@ function render(d){
   }
   var sr=document.getElementById('earnShareRow');
   if(sr){
-    var chips=[['Owner','100%',isSuper],['Admin','80%',!isSuper&&isAdminish],['Member','70%',!isAdminish],['Team commission','10%',!isSuper&&isAdminish]];
+    var chips=[['Owner','100%',isSuper],['Admin','80%',!isSuper&&isAdminish],['Member','70%',!isAdminish],['Team commission','10%',!isSuper&&isAdminish]];     
+     if(!isSuper&&isAdminish&&d.eligibility){ chips.push(d.eligibility.eligible?['✅ Eligible admin','',true]:['⚪ '+fmt(d.eligibility.weekGross)+' / $50 this week','',false]); }     if(!isSuper&&isAdminish&&d.eligibility){ chips.push(d.eligibility.eligible?['✅ Eligible admin','',true]:['⚪ '+fmt(d.eligibility.weekGross)+' / $50 this week','',false]); }     if(!isSuper&&isAdminish&&d.eligibility){ chips.push(d.eligibility.eligible?['✅ Eligible admin','',true]:['⚪ '+fmt(d.eligibility.weekGross)+' / $50 this week','',false]); }
     sr.innerHTML=chips.map(function(c){ return '<span class="earn-share-chip'+(c[2]?' me':'')+'">'+c[0]+' <b>'+c[1]+'</b></span>'; }).join('');
   }
   var cw=document.getElementById('earnCommWrap');
@@ -101,18 +108,32 @@ function render(d){
     var cn=document.getElementById('earnCommNet'); if(cn) cn.textContent=fmt(d.me.commission||0);
     var on=document.getElementById('earnOwnNet'); if(on) on.textContent=fmt(d.me.userNet||0);
   }
-  if(isSuper){
+ if(isSuper){
     var mg=document.getElementById('earnMeGross'); if(mg) mg.textContent=fmt(d.me.gross);
-    var pool=d.pool||d.company||null;
-    var pn=document.getElementById('earnPoolNet'); if(pn) pn.textContent=pool?fmt(pool.userNetTotal):'—';
-    var pg=document.getElementById('earnPoolGross'); if(pg) pg.textContent=pool?fmt(pool.companyTotal):'—';
+    var ov=d.overall||null;
+    var osec=document.getElementById('earnOverallSec'), ogrid=document.getElementById('earnOverall');
+    if(osec) osec.style.display=ov?'flex':'none';
+    if(ogrid&&ov){
+      var op=document.getElementById('earnOverallPill'); if(op) op.textContent=fmt(ov.grossTotal)+' gross';
+      ogrid.innerHTML=
+        '<div class="earn-mini owner rv in"><div class="k">👑 Owner (100%)</div><div class="v earn-display">'+fmt(ov.ownerNet)+'</div></div>'
+        +'<div class="earn-mini admin rv in"><div class="k">🛡️ Admins (own+team)</div><div class="v earn-display">'+fmt(ov.adminsTotal)+'</div></div>'
+        +'<div class="earn-mini company rv in"><div class="k">🏢 Company pool</div><div class="v earn-display">'+fmt(ov.companyTotal)+'</div></div>'
+        +'<div class="earn-mini users rv in"><div class="k">👥 Users pool (70%)</div><div class="v earn-display" style="color:var(--eg)">'+fmt(ov.usersPool)+'</div></div>';
+    }
+    var pool=d.company||null;
     var asec=document.getElementById('earnAdminsSec'), abody=document.getElementById('earnAdmins');
     if(asec) asec.style.display=(pool&&pool.admins&&pool.admins.length)?'flex':'none';
     if(abody&&pool&&pool.admins){
       var ac=document.getElementById('earnAdminsCount'); if(ac) ac.textContent=pool.admins.length;
       abody.innerHTML=pool.admins.map(function(a,i){
         var h=hueFor(a.username);
-        return '<div class="elb rv in" style="--hue:'+h+'"><div class="rk">'+(i+1)+'</div><div class="av">'+esc(String(a.username||'?').slice(0,2).toUpperCase())+'</div><div class="nm">'+esc(a.username)+'<div style="font-size:.62rem;color:var(--muted);font-weight:600">own '+fmt(a.ownNet)+' + comm '+fmt(a.commission)+' · '+a.teamOtps+' OTPs</div></div><div class="amt">'+fmt(a.total)+'</div></div>';
+        var chip=a.eligible?'<span class="eli on">✅ eligible</span>':'<span class="eli off">⚪ not eligible</span>';
+        var ctl='<span class="eli-ctl">'
+          +'<button class="eli-b'+(a.mode==='auto'?' act':'')+'" onclick="earnSetElig(\''+esc(a.username)+'\',\'auto\')">auto</button>'
+          +'<button class="eli-b'+(a.mode==='on'?' act':'')+'" onclick="earnSetElig(\''+esc(a.username)+'\',\'on\')">on</button>'
+          +'<button class="eli-b'+(a.mode==='off'?' act':'')+'" onclick="earnSetElig(\''+esc(a.username)+'\',\'off\')">off</button></span>';
+        return '<div class="elb rv in" style="--hue:'+h+'"><div class="rk">'+(i+1)+'</div><div class="av">'+esc(String(a.username||'?').slice(0,2).toUpperCase())+'</div><div class="nm">'+esc(a.username)+'<div class="elb-sub">own '+fmt(a.ownNet)+' + comm '+fmt(a.commission)+' · '+a.teamOtps+' OTPs · week '+fmt(a.weekGross)+'</div>'+chip+ctl+'</div><div class="amt">'+fmt(a.total)+'</div></div>';
       }).join('');
     }
     var csec=document.getElementById('earnCompSec'), cbody=document.getElementById('earnCompRanges');
@@ -121,8 +142,9 @@ function render(d){
       var cc=document.getElementById('earnCompCount'); if(cc) cc.textContent=pool.perRange.length;
       cbody.innerHTML=pool.perRange.slice(0,60).map(function(r){
         var h=hueFor(r.range);
-        return '<div class="rr rv in" style="--rc:hsl('+h+',70%,55%)"><div class="meta"><div class="rn">'+esc(r.range)+'</div><div class="rc">'+r.count+' OTPs · company '+fmt(r.company)+'</div></div><div class="figs"><div class="net">'+fmt(r.gross)+'</div><div class="grs">users '+fmt(r.userNet)+'</div></div></div>';
+        return '<div class="ern-card rv in" style="--rc:hsl('+h+',70%,55%)"><div class="ern-top"><span class="ern-dot"></span><div class="ern-name">'+esc(r.range)+'</div><div class="ern-net">'+fmt(r.gross)+'</div></div><div class="ern-sub">'+r.count+' OTPs · company '+fmt(r.company)+' · users '+fmt(r.userNet)+'</div><div class="ern-bar"><i data-w="'+Math.max(4,(r.gross/(pool.perRange[0].gross||1))*100)+'"></i></div></div>';
       }).join('');
+      requestAnimationFrame(function(){ cbody.querySelectorAll('.ern-bar > i').forEach(function(i){ i.style.width=i.dataset.w+'%'; }); });
     }
   }
   var team=d.team||null;
@@ -157,10 +179,9 @@ function render(d){
       var maxN=ranges[0].userNet||1;
       rg.innerHTML=ranges.slice(0,60).map(function(r){
         var h=hueFor(r.range), share=Math.max(4,(r.userNet/maxN)*100);
-        var sub=r.count+' OTP'+(r.count>1?'s':'')+(r.isFull?' · full rate':'')+(isAdminish&&r.dedPct!=null?' · '+r.dedPct+'% ded':'');
-        return '<div class="rr rv in" style="--rc:hsl('+h+',70%,55%)"><div class="meta"><div class="rn">'+esc(r.range)+'</div><div class="rc">'+sub+'</div><div class="bar"><i data-w="'+share+'"></i></div></div><div class="figs"><div class="net">'+fmt(r.userNet)+'</div>'+(isSuper?'<div class="grs">gross '+fmt(r.gross)+'</div>':'')+'</div></div>';
+        return '<div class="ern-card rv in" style="--rc:hsl('+h+',70%,55%)"><div class="ern-top"><span class="ern-dot"></span><div class="ern-name">'+esc(r.range)+'</div><div class="ern-net">'+fmt(r.userNet)+'</div></div><div class="ern-sub">'+r.count+' OTP'+(r.count>1?'s':'')+(r.isFull?' · full rate':'')+'</div><div class="ern-bar"><i data-w="'+share+'"></i></div></div>';
       }).join('');
-      requestAnimationFrame(function(){ rg.querySelectorAll('.rr .bar > i').forEach(function(i){ i.style.width=i.dataset.w+'%'; }); });
+      requestAnimationFrame(function(){ rg.querySelectorAll('.ern-bar > i').forEach(function(i){ i.style.width=i.dataset.w+'%'; }); });
     }
   }
   var lb=d.leaderboard||[];
