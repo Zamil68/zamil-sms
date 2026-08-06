@@ -65,7 +65,7 @@ var _DETAILS={
 };
 window.earnDetail=function(k){ var d=_DETAILS[k]; if(!d)return; var t=document.getElementById('earnDetailTitle'); if(t)t.textContent=d.t; var b=document.getElementById('earnDetailBody'); if(b) b.textContent=(key==='board')?boardNote():d.b; var ov=document.getElementById('earnDetail'); if(ov)ov.classList.add('show'); };
 window.closeEarnDetail=function(){ var ov=document.getElementById('earnDetail'); if(ov)ov.classList.remove('show'); };
-window.earnSetElig=function(u,mode){ post('/admin/eligibility-set',{username:u,mode:mode},function(d){ if(d&&d.ok) loadAll(); }); };
+window.earnSetElig=function(u,mode){ post('/api/admin/eligibility-set',{username:u,mode:mode},function(d){ if(d&&d.ok) loadAll(); }); };
 function boardNote(){
   if(_role==='super') return 'Leaderboard uses ONE fair formula for everyone (members, admins, owner): 70% of each range rate (full-rate = 100%). Your personal page shows your real 100% share.';
   if(_role==='admin') return 'Leaderboard shows the flat member rate (70%) for fair ranking — that\'s why it looks low. Your ACTUAL payout uses your admin rate (80% own + 10% team).';
