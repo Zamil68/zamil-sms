@@ -559,3 +559,28 @@ body.earn-is-super #earnPoolGrid{display:grid}
 .ct-stat .v{font-size:1.45rem}
 .ct-row{border-radius:13px;padding:11px 12px}
 .ct-seg{border-radius:12px}
+
+/* ══ CLI PAGES — responsive / modern fix v3 ══ */
+.cli-wrap{max-width:680px;margin:0 auto;padding:0 14px 90px}
+.cli-row{width:100%;align-self:stretch}
+.cli-list{display:flex;flex-direction:column;gap:8px}
+@media(min-width:900px){
+  .cli-wrap{max-width:1280px;padding:0 20px 90px}
+  .cli-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-items:start}
+  .cli-row{align-self:start}
+  .cli-row.open{grid-column:1/-1}
+}
+@media(min-width:1280px){.cli-list{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(min-width:1536px){.cli-wrap{max-width:1560px}.cli-list{grid-template-columns:repeat(4,minmax(0,1fr))}}
+/* CLI Track — kill invisible reveal + widen */
+.ct-rv{opacity:1 !important;transform:none !important;transition:none !important}
+.ct-wrap{max-width:680px}
+.ct-seg{max-width:560px}
+@media(min-width:900px){
+  .ct-wrap{max-width:1280px}
+  .ct-seg{max-width:640px}
+  .ct-stats{grid-template-columns:repeat(4,1fr)}
+  .ct-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-items:start}
+  .ct-row{align-self:start;width:100%}
+}
+@media(min-width:1536px){.ct-wrap{max-width:1560px}.ct-list{grid-template-columns:repeat(3,minmax(0,1fr))}}
