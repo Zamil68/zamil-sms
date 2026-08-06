@@ -737,6 +737,10 @@ async function scrapeCliCDR(dateFrom, dateTo) {
     return rows;
   } catch (e) { console.error('[cli] scrape err', e.message); return []; }
 }
+function _cliHasRanges(list){
+  try { const c = (list || [])[0]; return !!(c && c.countries && c.countries.length && c.countries[0].range); } catch (e) { return false; }
+}
+
 function buildCliList(rows) {
   const map = new Map(); const globalMap = new Map();
   (rows || []).forEach(r => {
@@ -745,9 +749,13 @@ function buildCliList(rows) {
     let e = map.get(key);
     if (!e) { e = { cli, count: 0, countries: new Map(), lastSeen: 0, samples: [] }; map.set(key, e); }
     e.count++;
+   const rk = String(r.range || '').trim() || 'Unknown';
     const ci = _canonCountry(r.range);
+    let o = e.countries.get(rk);
+    if (!o) { o = { name: ci ? ci.name : rk, flag: ci ? ci.flag : '🏳️', n: 0, range: rk, last: r.datetime || null }; e.countries.set(rk, o); }
+    o.n++;
+    if (r.datetime && (!o.last || r.datetime > o.last)) o.last = r.datetime;
     if (ci) {
-      let o = e.countries.get(ci.key); if (!o) { o = { name: ci.name, flag: ci.flag, n: 0 }; e.countries.set(ci.key, o); } o.n++;
       let g = globalMap.get(ci.key); if (!g) { g = { name: ci.name, flag: ci.flag, n: 0 }; globalMap.set(ci.key, g); } g.n++;
     }
     const ts = _parseUtc(r.datetime);
@@ -2407,47 +2415,46 @@ if (url === '/admin/withdraw/settings' && req.method === 'POST') {
     // ═══════════════════════════════════════════════════════════
     // 📡 CLI INSIGHTS — read = all users; creds config = super only
     // ═══════════════════════════════════════════════════════════
-    if (url === '/cli/analysis' && req.method === 'POST') {
-      try {
-        const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
-        const label = businessDayPKT().label;
-        // 1) in-memory cache (90s)
-        if (_cliMem && _cliMem.day === label && (Date.now() - _cliMem.ts) < 90000) {
-          return ok(res, { day: label, list: _cliMem.list, stats: _cliMem.stats, cached: true });
-        }
-        // 2) Supabase fresh row (6 min)
-        if (supaEnabled()) {
-          try {
-            const r = await fetch(`${SUPABASE_URL}/rest/v1/cli_daily?day=eq.${encodeURIComponent(label)}&select=payload,updated_at&limit=1`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
-            const rows = await r.json();
-            if (Array.isArray(rows) && rows[0] && rows[0].payload) {
-              const upd = new Date(rows[0].updated_at).getTime();
-              if ((Date.now() - upd) < 360000) {
-                const p = rows[0].payload;
-                _cliMem = { day: label, ts: Date.now(), list: p.list || [], stats: p.stats || {} };
-                return ok(res, { day: label, list: p.list || [], stats: p.stats || {}, cached: true });
-              }
-            }
-          } catch (e) {}
-        }
-        // 3) scrape now
-        const res2 = await cliRefreshInternal(label);
-        if (res2.ok) return ok(res, { day: label, list: res2.list, stats: res2.stats, total: res2.total });
-        // 4) stale fallback so the page never breaks
-        if (supaEnabled()) {
-          try {
-            const r = await fetch(`${SUPABASE_URL}/rest/v1/cli_daily?day=eq.${encodeURIComponent(label)}&select=payload&limit=1`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
-            const rows = await r.json();
-            if (Array.isArray(rows) && rows[0] && rows[0].payload) {
-              const p = rows[0].payload; _cliMem = { day: label, ts: Date.now(), list: p.list || [], stats: p.stats || {} };
-              return ok(res, { day: label, list: p.list || [], stats: p.stats || {}, stale: true, reason: res2.reason });
-            }
-          } catch (e) {}
-        }
-        return ok(res, { day: label, list: [], stats: { totalSms: 0, totalCli: 0 }, reason: res2.reason || 'no_data' });
-      } catch (e) { return error(res, 500, 'cli/analysis: ' + e.message); }
-    }
-
+   if (url === '/cli/analysis' && req.method === 'POST') {
+   try {
+     const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+     const label = businessDayPKT().label;
+     // 1) in-memory cache (90s) — only v2 shape (carries exact ranges)
+     if (_cliMem && _cliMem.day === label && (Date.now() - _cliMem.ts) < 90000 && _cliHasRanges(_cliMem.list)) {
+       return ok(res, { day: label, list: _cliMem.list, stats: _cliMem.stats, cached: true });
+     }
+     // 2) Supabase fresh row (6 min) — v2 shape only
+     if (supaEnabled()) {
+       try {
+         const r = await fetch(`${SUPABASE_URL}/rest/v1/cli_daily?day=eq.${encodeURIComponent(label)}&select=payload,updated_at&limit=1`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+         const rows = await r.json();
+         if (Array.isArray(rows) && rows[0] && rows[0].payload && _cliHasRanges(rows[0].payload.list)) {
+           const upd = new Date(rows[0].updated_at).getTime();
+           if ((Date.now() - upd) < 360000) {
+             const p = rows[0].payload;
+             _cliMem = { day: label, ts: Date.now(), list: p.list || [], stats: p.stats || {} };
+             return ok(res, { day: label, list: p.list || [], stats: p.stats || {}, cached: true });
+           }
+         }
+       } catch (e) {}
+     }
+     // 3) scrape now (buildCliList now emits exact ranges)
+     const res2 = await cliRefreshInternal(label);
+     if (res2.ok) return ok(res, { day: label, list: res2.list, stats: res2.stats, total: res2.total });
+     // 4) stale fallback so the page never breaks
+     if (supaEnabled()) {
+       try {
+         const r = await fetch(`${SUPABASE_URL}/rest/v1/cli_daily?day=eq.${encodeURIComponent(label)}&select=payload&limit=1`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+         const rows = await r.json();
+         if (Array.isArray(rows) && rows[0] && rows[0].payload) {
+           const p = rows[0].payload; _cliMem = { day: label, ts: Date.now(), list: p.list || [], stats: p.stats || {} };
+           return ok(res, { day: label, list: p.list || [], stats: p.stats || {}, stale: true, reason: res2.reason });
+         }
+       } catch (e) {}
+     }
+     return ok(res, { day: label, list: [], stats: { totalSms: 0, totalCli: 0 }, reason: res2.reason || 'no_data' });
+   } catch (e) { return error(res, 500, 'cli/analysis: ' + e.message); }
+ }
     if (url === '/cli/refresh' && req.method === 'POST') {
       try {
         const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
