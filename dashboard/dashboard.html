@@ -6,9 +6,41 @@
     <meta name="theme-color" content="#06080F">
     <title>Zamil SMS — Dashboard</title>
     <link rel="icon" type="image/x-icon" href="/branding/favicon.ico">
-    <link rel="stylesheet" href="common.css?v=20260803">
-    <link rel="stylesheet" href="/dashboard/dashboard.css?v=20260803">
-    <link rel="stylesheet" href="/dashboard/pages.css?v=20260803">
+    <link rel="stylesheet" href="common.css?v=20260806">
+    <link rel="stylesheet" href="/dashboard/dashboard.css?v=20260806">
+    <link rel="stylesheet" href="/dashboard/pages.css?v=20260806">
+    <script>
+    /* ══ Inactivity cache-killer: 1h idle → purge data caches + force fresh load ══ */
+    (function(){
+      var KEY='zamil_last_active', GAP=60*60*1000;
+      var now=Date.now(), last=0;
+      try{ last=parseInt(localStorage.getItem(KEY)||'0',10)||0; }catch(e){}
+      var freshReload=/[?&]fresh=\d+/.test(location.search);
+      if(last>0 && (now-last)>GAP && !freshReload){
+        try{
+          var KEEP={app_session:1,app_username:1,app_theme:1,app_client_id:1,app_client_name:1,app_panel_num:1,
+                    hydra_role:1,hydra_agent_token:1,zamil_last_active:1,notif_banner_dismissed:1,
+                    ranges_grouped:1,earn_cur:1,earn_pkr_rate:1};
+          var kill=[];
+          for(var i=0;i<localStorage.length;i++){
+            var k=localStorage.key(i); if(!k||KEEP[k])continue;
+            if(/cache|otp|sms|range|nums|numbers|lb_|dor|as_|zc_/i.test(k))kill.push(k);
+          }
+          kill.forEach(function(k){localStorage.removeItem(k);});
+        }catch(e){}
+        try{ sessionStorage.clear(); }catch(e){}
+        if(window.caches){try{caches.keys().then(function(ns){ns.forEach(function(n){caches.delete(n);});});}catch(e){}}
+        location.replace(location.pathname+(location.search?location.search+'&':'?')+'fresh='+now);
+        return;
+      }
+      if(freshReload&&history.replaceState){
+        try{history.replaceState(null,'',location.pathname+location.search.replace(/([?&])fresh=\d+&?/,'$1').replace(/[?&]$/,''));}catch(e){}
+      }
+      function touch(){try{localStorage.setItem(KEY,String(Date.now()));}catch(e){}}
+      ['pointerdown','keydown','touchstart','wheel'].forEach(function(ev){document.addEventListener(ev,touch,{passive:true});});
+      touch();
+    })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -62,12 +94,10 @@
 
                 <!-- NUMBERS PANEL -->
               <div id="numbersPanel">
-                    <button class="panel-back" onclick="showRanges()" style="margin-bottom:12px; font-size:0.95rem; font-weight:700; padding:8px 0;">
-                        ← Back to Ranges
-                    </button>
-
-                    <div class="section-hdr">
-                        <div class="section-title" id="panelTitle">Range Name</div>
+                    <div class="num-top-row">
+                        <button class="panel-back" onclick="showRanges()">← Back</button>
+                        <div class="num-top-title" id="panelTitle">Range Name</div>
+                        <span class="badge" id="numCount">0</span>
                         <button class="btn btn-sm btn-ghost rbtn" id="btnRefreshNums" onclick="refreshNumbers()"><span class="r-ic">↻</span> Refresh</button>
                     </div>
                     <div class="strip-bar">
@@ -794,5 +824,29 @@ function toggleAnInfo(){
 }
 window.toggleAnInfo=toggleAnInfo;
 </script>
+
+    <script>
+    /* ══ Universal loader + slow-load watchdog + numbers count sync ══ */
+    document.addEventListener('DOMContentLoaded',function(){
+      var ov=document.getElementById('loadingOverlay');
+      if(ov){var sp=ov.querySelector('.spinner');if(sp){var l=document.createElement('div');l.className='loader';sp.parentNode.replaceChild(l,sp);}}
+      var dor=document.getElementById('dorLoading');
+      if(dor&&dor.textContent.indexOf('Loading')>-1){dor.innerHTML='<div class="zload-wrap"><div class="loader"></div><div class="zload-msg">Fetching global OTP report…</div></div>';}
+      var seen={};
+      setInterval(function(){
+        ['loadingOverlay','dorLoading','lbComing'].forEach(function(id){
+          var el=document.getElementById(id);if(!el)return;
+          var vis=false;try{vis=getComputedStyle(el).display!=='none';}catch(e){}
+          if(vis){if(!seen[id])seen[id]=Date.now();
+            if(Date.now()-seen[id]>8000&&!el.querySelector('.zload-slow')){
+              var n=document.createElement('div');n.className='zload-slow';
+              n.textContent='Taking longer than usual — system busy, please wait…';el.appendChild(n);}
+          }else{seen[id]=null;var s=el.querySelector('.zload-slow');if(s)s.remove();}
+        });
+      },1000);
+      var tn=document.getElementById('totalNums'),nc=document.getElementById('numCount');
+      if(tn&&nc){setInterval(function(){var m=(tn.textContent||'').match(/\d+/);if(m)nc.textContent=m[0];},1000);}
+    });
+    </script>
 </body>
 </html>
