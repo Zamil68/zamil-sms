@@ -1,7 +1,7 @@
 <!-- earning.html — injected by earning.js -->
 
 <div id="earnPage" style="position:fixed;inset:0;z-index:600;overflow-y:auto">
-<div style="max-width:620px;margin:0 auto;padding:0 14px 90px">
+<div class="earn-wrap">
 
 <div class="earn-head">
 <button class="earn-back" onclick="closeEarnPage()">←</button>
@@ -14,25 +14,26 @@
 </div>
 </div>
 
-<div id="earnPKRrow" style="display:none;margin:0 0 12px" class="ea-row">
+<div id="earnPKRrow" style="display:none" class="ea-row">
 <label>PKR / USD rate</label>
 <input class="ea-inp" id="earnPKRrate" type="number" step="0.01" style="width:120px" oninput="savePKR()">
 </div>
 
-<!-- hero -->
 <div class="earn-hero rv">
 <div class="earn-hero-glow" aria-hidden="true"></div>
 <div class="earn-hero-main">
 <div class="earn-eyebrow">
-<span class="earn-dot"></span><span>Your earnings</span>
+<span class="earn-dot"></span><span>Your final earnings</span>
 <button class="earn-info" onclick="earnDetail('hero')">i</button>
 <span class="earn-win" id="earnWinLbl">—</span>
 </div>
+<span class="earn-role-chip" id="earnRoleChip" style="display:none"></span>
 <div class="earn-figure">
 <span class="earn-currency" id="earnCurLabel">$</span>
 <span class="big earn-display" id="earnMeNet">0.00</span>
 </div>
 <div class="earn-slogan" id="earnSlogan">Your first dollar is one OTP away 💪</div>
+<div class="earn-share-row" id="earnShareRow"></div>
 <div id="earnGrossWrap"><span class="earn-gross-k">Your OTP value (gross)</span><b id="earnMeGross">$0.00</b></div>
 </div>
 <div class="earn-ring">
@@ -46,30 +47,47 @@
 <div class="earn-progress"><div class="earn-progress-bar"><i id="earnProgressBar"></i></div><div class="earn-progress-lbl"><span>toward goal</span><b id="earnGoalAmt">$50</b></div></div>
 </div>
 
-<!-- pool (super-only) -->
-<div class="earn-grid2" id="earnPoolGrid">
-<div class="earn-mini rv"><div class="k">Team payout pool</div><div class="v earn-display" id="earnPoolNet" style="color:var(--eg)">$0.00</div></div>
-<div class="earn-mini rv"><div class="k">Gross volume (company)</div><div class="v earn-display" id="earnPoolGross">$0.00</div></div>
+<div class="earn-grid2" id="earnCommWrap">
+<div class="earn-mini comm rv"><div class="k"> Team commission (10%)</div><div class="v earn-display" id="earnCommNet">$0.00</div></div>
+<div class="earn-mini rv"><div class="k">Your OTP net (80/70%)</div><div class="v earn-display" id="earnOwnNet">$0.00</div></div>
 </div>
 
-<!-- per-range -->
-<div class="earn-sec-t rv">📈 Your ranges
+<div class="earn-grid2" id="earnPoolGrid">
+<div class="earn-mini rv"><div class="k">Users pool (70%)</div><div class="v earn-display" id="earnPoolNet" style="color:var(--eg)">$0.00</div></div>
+<div class="earn-mini rv"><div class="k">Company share (20/30%)</div><div class="v earn-display" id="earnPoolGross">$0.00</div></div>
+</div>
+
+<divdiv class="earn-sec-t rv" id="earnTeamSec" style="display:none">👥 My team · members 70% / me 10%
+<button class="earn-info" onclick="earnDetail('team')">i</button>
+<span class="pill" id="earnTeamCount">0</span>
+</div>
+<div id="earnTeam"></div>
+
+<div class="earn-sec-t rv" id="earnAdminsSec" style="display:none">🛡️ Admins earnings · 80% own + 10% team
+<span class="pill" id="earnAdminsCount">0</span>
+</div>
+<div id="earnAdmins"></div>
+
+<div class="earn-sec-t rv" id="earnCompSec" style="display:none">📊 Company ranges · gross / users / company
+<span class="pill" id="earnCompCount">0</span>
+</div>
+<div id="earnCompRanges"></div>
+
+<div class="earn-sec-t rv">📈 Your ranges · final earning
 <button class="earn-info" onclick="earnDetail('ranges')">i</button>
 <span class="pill" id="earnRangeCount">0</span>
 </div>
 <div id="earnRanges"></div>
 
-<!-- leaderboard -->
 <div class="earn-sec-t rv">🏆 Earnings leaderboard
 <button class="earn-info" onclick="earnDetail('board')">i</button>
 <span class="pill" id="earnBoardCount">0</span>
 </div>
 <div id="earnBoard"></div>
 
-<!-- super admin: range deductions + window + notifs -->
 <div class="earn-admin rv" id="earnAdmin" style="display:none">
 <h2>🎯 Range Deduction Settings</h2>
-<p style="font-size:.72rem;color:var(--muted);margin:-6px 0 12px">Select ranges → set deduction % or mark Full Rate (100% to user). Unselected = default 30%.</p>
+<p class="earn-admin-sub">Select ranges → set deduction % or mark Full Rate (100% to user). Unselected = default 30%. Owner always 100%, admins 80%.</p>
 <div class="ea-row">
 <button class="ea-btn ghost" onclick="rdSelectAll()">Select All</button>
 <button class="ea-btn ghost" onclick="rdDeselectAll()">Deselect</button>
@@ -77,7 +95,7 @@
 <button class="ea-btn ghost" onclick="rdSetBulk(0)">Set Full Rate</button>
 <button class="ea-btn" onclick="rdSave()">💾 Save Selected</button>
 </div>
-<div style="overflow-x:auto;max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:12px;padding:8px">
+<div class="rd-scroll">
 <table class="rd-table">
 <thead><tr><th><input type="checkbox" class="rd-cb" id="rdCheckAll" onchange="rdToggleAll(this)"></th><th>Range</th><th>Rate ($)</th><th>Deduct %</th><th>Full</th></tr></thead>
 <tbody id="rdBody"><tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted)">Loading ranges…</td></tr></tbody>
@@ -103,7 +121,6 @@
 </div>
 </div>
 
-<!-- detail modal -->
 <div id="earnDetail">
 <div class="ed-card">
 <button class="ed-x" onclick="closeEarnDetail()">✕</button>
@@ -112,7 +129,6 @@
 </div>
 </div>
 
-<!-- notification card -->
 <div id="earnNotif">
 <div class="en-card">
 <button class="en-x" onclick="closeEarnNotif()">✕</button>
