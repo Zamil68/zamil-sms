@@ -519,3 +519,42 @@ body.earn-is-super #earnPoolGrid{display:grid}
   .earn-hero .big{font-size:2.5rem}.earn-ring{width:78px;height:78px}
   .wd-hero-amount{font-size:2.4rem}.wd-overlay-card{max-width:340px}.wd-overlay-body-wrap{padding:16px 20px 24px}
 }
+
+/* ══ CLI PAGES — compact modern refresh ══ */
+#cliPage>div{max-width:680px}
+@media(min-width:900px){#cliPage>div{max-width:1020px}}
+.cli-hero{border-radius:16px;padding:12px 14px;margin:8px 0 10px}
+.cli-hero-grid{gap:6px}
+.cli-stat .v{font-size:1.3rem}
+.cli-stat .k{font-size:.52rem}
+.cli-toprow{margin-top:9px;gap:5px}
+.cli-chip{font-size:.62rem;padding:3px 9px}
+.cli-search{margin:0 0 10px}
+.cli-search input{padding:10px 12px 10px 36px;border-radius:12px;font-size:.82rem}
+.cli-list{gap:7px}
+.cli-row{border-radius:13px}
+.cli-row-top{padding:10px 12px;gap:9px}
+.cli-name{font-size:.84rem}
+.cli-count{font-size:1.02rem}
+.cli-meta{margin-top:2px;gap:5px}
+.cli-flags{font-size:.85rem}
+.cli-expand{padding:0 12px 11px}
+.cli-ctrylist{display:flex;flex-direction:column;gap:4px;margin:9px 0 2px;padding:8px 9px;border-radius:10px;background:color-mix(in srgb,var(--cblue) 5%,var(--surface));border:1px solid color-mix(in srgb,var(--cblue) 14%,var(--border))}
+.cli-ctry{display:flex;align-items:center;gap:7px;font-size:.72rem;font-weight:600;color:var(--text);padding:2px}
+.cli-ctry-flag{font-size:.9rem;line-height:1}
+.cli-ctry-name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cli-ctry-range{font-family:'Space Grotesk',monospace;font-size:.6rem;font-weight:700;color:var(--cblue);background:color-mix(in srgb,var(--cblue) 10%,transparent);border:1px solid color-mix(in srgb,var(--cblue) 22%,transparent);border-radius:6px;padding:1px 7px;white-space:nowrap}
+.cli-ctry-date{font-size:.6rem;color:var(--muted);font-weight:600;white-space:nowrap}
+.cli-ctry-n{font-family:'Space Grotesk',monospace;font-size:.62rem;font-weight:700;color:var(--muted)}
+.cli-sample{margin-top:8px;font-size:.72rem;padding:8px 10px 8px 12px}
+@media(min-width:900px){.cli-list{display:grid;grid-template-columns:1fr 1fr;gap:9px}}
+@media(min-width:1280px){.cli-list{grid-template-columns:repeat(3,1fr)}}
+/* CLI TRACK compact + desktop */
+.ct-wrap{max-width:680px}
+@media(min-width:900px){.ct-wrap{max-width:1080px}}
+@media(min-width:768px){.ct-stats{grid-template-columns:repeat(4,1fr)}}
+@media(min-width:1024px){.ct-list{display:grid;grid-template-columns:1fr 1fr;gap:9px;align-items:start}}
+.ct-stat{border-radius:14px;padding:12px 12px 11px}
+.ct-stat .v{font-size:1.45rem}
+.ct-row{border-radius:13px;padding:11px 12px}
+.ct-seg{border-radius:12px}
