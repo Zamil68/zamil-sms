@@ -584,3 +584,33 @@ body.earn-is-super #earnPoolGrid{display:grid}
   .ct-row{align-self:start;width:100%}
 }
 @media(min-width:1536px){.ct-wrap{max-width:1560px}.ct-list{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+/* ══ EARN v2 — role chips, commission, responsive ══ */
+.earn-wrap{max-width:680px;margin:0 auto;padding:0 14px 90px}
+@media(min-width:900px){.earn-wrap{max-width:1080px}}
+.earn-head{flex-wrap:wrap}
+.earn-role-chip{display:inline-flex;align-items:center;gap:6px;font-size:.62rem;font-weight:800;letter-spacing:.04em;padding:5px 12px;border-radius:20px;margin:8px 0 2px;border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border));background:color-mix(in srgb,var(--accent) 10%,var(--surface));color:var(--accent)}
+.earn-role-chip.owner{border-color:color-mix(in srgb,var(--egold) 45%,var(--border));background:color-mix(in srgb,var(--egold) 12%,var(--surface));color:var(--egold)}
+.earn-role-chip.admin{border-color:color-mix(in srgb,var(--emag) 40%,var(--border));background:color-mix(in srgb,var(--emag) 10%,var(--surface));color:var(--emag)}
+.earn-share-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.earn-share-chip{font-size:.6rem;font-weight:700;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:3px 10px}
+.earn-share-chip b{color:var(--text);font-family:'Space Grotesk',monospace}
+.earn-share-chip.me{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,var(--border));background:color-mix(in srgb,var(--accent) 8%,var(--surface))}
+#earnCommWrap{display:none}
+#earnCommWrap.show{display:grid}
+.earn-mini.comm{border-color:color-mix(in srgb,var(--emag) 35%,var(--border));background:linear-gradient(150deg,color-mix(in srgb,var(--emag) 10%,var(--card)),var(--card))}
+.earn-admin-sub{font-size:.72rem;color:var(--muted);margin:-6px 0 12px}
+.rd-scroll{overflow-x:auto;max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:12px;padding:8px}
+.rd-raw{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rd-rate{font-family:ui-monospace,'SF Mono',monospace;font-weight:700}
+@media(max-width:560px){
+  .earn-hero{grid-template-columns:1fr;grid-template-areas:"main" "ring" "prog"}
+  .earn-ring{margin:0 auto}
+  .earn-grid2{grid-template-columns:1fr 1fr}
+}
+@media(min-width:900px){
+  #earnRanges{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  #earnRanges .rr{margin-bottom:0}
+  #earnBoard{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+  #earnBoard .elb{margin-bottom:0}
+}
