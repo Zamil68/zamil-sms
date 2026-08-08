@@ -2738,7 +2738,36 @@ if (url === '/notifs/send' && req.method === 'POST') {
     return ok(res, { sent:true });
   } catch(e){ return error(res, 500, 'notifs/send: '+e.message); }
 }
-    
+
+// ═══ ADMIN: withdrawal users summary (earnings − withdrawn = live) ═══
+if (url === '/admin/withdraw/users' && req.method === 'POST') {
+  try {
+    const user = getUserFromSession(req.body.session);
+    if (!user) return error(res, 401, 'Unauthorized');
+    if (!isAdminish(await getRole(user.username))) return error(res, 403, 'Admins only');
+    if (!supaEnabled()) return ok(res, { users: [] });
+    const H = { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY };
+    const er = await fetch(`${SUPABASE_URL}/rest/v1/user_balance_cache?select=username,total_earnings&limit=2000`, { headers: H });
+    const earnings = await er.json();
+    const wr = await fetch(`${SUPABASE_URL}/rest/v1/withdrawals?status=in.(approved,pending)&select=username,amount_usd&limit=5000`, { headers: H });
+    const wrows = await wr.json();
+    const map = {};
+    (Array.isArray(earnings) ? earnings : []).forEach(e => { map[String(e.username).toLowerCase()] = { username: e.username, earnings: parseFloat(e.total_earnings) || 0, withdrawn: 0 }; });
+    (Array.isArray(wrows) ? wrows : []).forEach(w => {
+      const u = String(w.username || '').toLowerCase();
+      if (!map[u]) map[u] = { username: w.username, earnings: 0, withdrawn: 0 };
+      map[u].withdrawn += parseFloat(w.amount_usd) || 0;
+    });
+    const users = Object.values(map).map(u => ({
+      username: u.username,
+      earnings: Math.round(u.earnings * 10000) / 10000,
+      withdrawn: Math.round(u.withdrawn * 10000) / 10000,
+      live: Math.max(0, Math.round((u.earnings - u.withdrawn) * 10000) / 10000)
+    })).sort((a, b) => b.withdrawn - a.withdrawn);
+    return ok(res, { users });
+  } catch (e) { return error(res, 500, 'withdraw/users: ' + e.message); }
+}
+  
  return error(res, 404, 'Route not found');
   } catch (err) {
     console.error('API Error:', err.message);
