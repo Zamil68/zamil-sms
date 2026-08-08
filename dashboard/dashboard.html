@@ -392,11 +392,17 @@
   <span id="themeBtn" aria-hidden="true" style="display:none"></span>
 </aside>
 
-    <script src="/dashboard/panel.js" defer></script>
+    <!-- ═══ 1. Panel engine FIRST (defines window.PANEL + switcher) ═══ -->
+    <script src="/dashboard/panel.js?v=20260809" defer></script>
+
     <script src="/dashboard/flags.js" defer></script>
     <script src="/login/providers.js" defer></script>
     <script src="/dashboard/utils.js" defer></script>
     <script src="/dashboard/api.js" defer></script>
+
+    <!-- ═══ 2. Bridge AFTER api.js (wraps fetch + apiCall), BEFORE app.js ═══ -->
+    <script src="/dashboard/panel-bridge.js?v=20260809" defer></script>
+
     <script src="/dashboard/auth.js" defer></script>
     <script src="/dashboard/app.js" defer></script>
     <script src="/dashboard/feature.js" defer></script>
