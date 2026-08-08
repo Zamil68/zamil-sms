@@ -3072,6 +3072,45 @@ if (url === '/p/earn/compute' && req.method === 'POST') {
       pool: { grossTotal: rnd(grossTotal), userNetTotal: rnd(userNetTotal) } });
   } catch(e){ return error(res, 500, 'p/earn/compute: '+e.message); }
 }
+
+  // ═══ PANEL: inbox / leaderboard / clients (Zyron & EVS) ═══
+if (url === '/p/smscount' && req.method === 'POST') {
+  const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+  const key = String(req.body.panel||'').toLowerCase(); const P = PANELS[key]; if (!P || !P.base) return error(res, 400, 'Unknown panel');
+  const bd = businessDayPKT();
+  const rows = await getPanelCachedCDR(key, bd.from, bd.to, 5000);
+  const t1 = (user.clientName||'').toLowerCase().trim(), t2 = (user.username||'').toLowerCase().trim();
+  let mine = rows.filter(r => { const c=(r.client||'').toLowerCase().trim(); return c && (c===t1||c===t2||c.includes(t1)||c.includes(t2)); });
+  const num = String(req.body.number||'').replace(/[^0-9]/g,'');
+  if (num) mine = mine.filter(r => { const n=(r.number||'').replace(/[^0-9]/g,''); return n===num||n.endsWith(num)||num.endsWith(n); });
+  mine.sort((a,b)=>b.datetime.localeCompare(a.datetime));
+  return ok(res, { panel:key, count: mine.length, recent: mine.slice(0,50).map(r=>({ time:r.time, datetime:r.datetime, number:r.number, cli:r.cli, message:r.message, range:r.range })) });
+}
+if (url === '/p/leaderboard' && req.method === 'POST') {
+  const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+  const key = String(req.body.panel||'').toLowerCase(); const P = PANELS[key]; if (!P || !P.base) return error(res, 400, 'Unknown panel');
+  const range = req.body.range || 'today';
+  const bd = businessDayPKT(); const today = bd.label;
+  const dayBack = n => new Date(new Date(today+'T00:00:00Z').getTime() - n*86400000).toISOString().slice(0,10);
+  let from = bd.from, to = bd.to;
+  if (range==='week'){ from = dayBack(6)+' 00:00:00'; to = today+' 23:59:59'; }
+  if (range==='month'){ from = dayBack(29)+' 00:00:00'; to = today+' 23:59:59'; }
+  const rows = await getPanelCachedCDR(key, from, to, range==='today'?5000:60000);
+  const counts = {}; rows.forEach(r => { const c = lbName(r.client); counts[c]=(counts[c]||0)+1; });
+  const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+  const meKeys = [user.clientName,user.username].map(s=>String(s||'').toLowerCase().trim()).filter(Boolean);
+  let me = null;
+  for (let i=0;i<sorted.length;i++){ const k=sorted[i][0].toLowerCase(); if (meKeys.some(m=>k===m||k.includes(m)||m.includes(k))){ me={rank:i+1,username:sorted[i][0],count:sorted[i][1]}; break; } }
+  return ok(res, { panel:key, users: sorted.slice(0,50).map(([username,count])=>({username,count})), range, me, total: sorted.length });
+}
+if (url === '/p/clients' && req.method === 'POST') {
+  const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+  const key = String(req.body.panel||'').toLowerCase(); const P = PANELS[key]; if (!P || !P.base) return error(res, 400, 'Unknown panel');
+  const d = await scrapePanel(key, 'res/data_clients.php', { sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:1000, sSearch:'' }, P.base+'Clients');
+  let clients = [];
+  if (d && d.aaData) clients = d.aaData.map(c => { const m = String(c[0]||'').match(/value=["']?(\d+)["']?/); return { id: m?m[1]:String(c[1]||'0'), username: String(c[1]||'').replace(/<[^>]*>/g,'').trim(), name: String(c[2]||'').replace(/<[^>]*>/g,'').trim(), panel: key }; }).filter(c=>c.username);
+  return ok(res, { panel:key, clients });
+}
   
  return error(res, 404, 'Route not found');
   } catch (err) {
