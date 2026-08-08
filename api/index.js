@@ -875,70 +875,115 @@ function _cliWindowDays(range) {
   return { start, today, label: range === 'week' ? 'Last 7 days' : range === 'month' ? 'Last 30 days' : 'Today' };
 }
 
-module.exports = async (req, res) => {
-  if (req.method === 'OPTIONS') return res.status(200).json({ ...corsHeaders });
-  const url = req.url.replace(/^\/api/, '');
-
+// ═══ CLOUD SESSIONS (Supabase auth_sessions) — revocable + expirable ═══
+function sha256(s){ return crypto.createHash('sha256').update(String(s||'')).digest('hex'); }
+const _sessCache = new Map();
+async function sessionRowValid(token){
+  const h = sha256(token);
+  const c = _sessCache.get(h);
+  if (c && (Date.now() - c.ts) < 30000) return c.ok;   // 30s memory cache → near-zero DB load
+  let okFlag = true;                                    // fail-open: Supabase down ≠ users locked out
   try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/auth_sessions?token_hash=eq.${encodeURIComponent(h)}&select=expires_at&limit=1`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+    if (r.ok) {
+      const rows = await r.json();
+      if (!Array.isArray(rows) || !rows[0]) okFlag = false;                      // no row
+      else okFlag = new Date(rows[0].expires_at).getTime() > Date.now();         // not expired
+    }
+  } catch (e) { okFlag = true; }
+  _sessCache.set(h, { ts: Date.now(), ok: okFlag });
+  if (_sessCache.size > 3000) _sessCache.clear();
+  return okFlag;
+}
+async function createSessionRow(user, token){
+  if (!supaEnabled()) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/auth_sessions`, { method: 'POST', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({ token_hash: sha256(token), username: user.username, client_id: String(user.clientId||'0'), client_name: user.clientName||user.username, panel_num: user.panelNum||1, created_at: new Date().toISOString(), expires_at: new Date(Date.now()+7*86400000).toISOString(), last_seen: new Date().toISOString() }) });
+  } catch (e) {}
+}
+
+module.exports = async (req, res) => {
+if (req.method === 'OPTIONS') return res.status(200).json({ ...corsHeaders });
+const url = req.url.replace(/^\/api/, '');
+try {
+// ═══ CLOUD SESSION GATE — one check for every route (self-healing migration) ═══
+if (req.body && req.body.session) {
+  const sessOk = await sessionRowValid(req.body.session);
+  if (!sessOk) {
+    const payload = getUserFromSession(req.body.session);   // valid JWT but no row yet → create it (old users migrate automatically, nobody gets locked out)
+    if (payload) { await createSessionRow(payload, req.body.session); }
+    else return error(res, 401, 'Session expired');
+  }
+}
     // ═══════════════════════════════════════════════════════════
     // 1. LOGIN — dynamic LaMix lookup (username OR name) + fallback + self-healing cookie
     // ═══════════════════════════════════════════════════════════
    if (url === '/login' && req.method === 'POST') {
-      const rawUsername = (req.body.username || '').trim();
-      const password = (req.body.password || '').trim();
-      if (!rawUsername || !password) return error(res, 400, 'Username and password required');
-      const want = rawUsername.toLowerCase();
-
-      const fallback = {
-        'muzammil62': { clientId: '0', clientName: 'Agent', panelNum: 1 },
-        'zml_ahsan':  { clientId: '169269', clientName: 'ZML_Ahsan', panelNum: 1 },
-        'zml_anns':   { clientId: '169270', clientName: 'ZML_Anns', panelNum: 1 }
-      };
-
-      // Agent/fallback accounts (always reachable; verify hash only if one exists)
-      if (fallback[want]) {
-        if (supaEnabled()) {
-          const creds = await supaGetCreds(rawUsername);
-          if (creds && creds.pass_hash && !verifyPassword(password, creds.pass_hash)) return error(res, 401, 'Incorrect password.');
-        }
-        const u = fallback[want];
-        const token = jwt.sign({ username: rawUsername, clientId: u.clientId, clientName: u.clientName, panelNum: u.panelNum }, JWT_SECRET, { expiresIn: '7d' });
-        return ok(res, { session: token, username: rawUsername, clientId: u.clientId, clientName: u.clientName, redirect: '/dashboard/dashboard.html' });
-      }
-
-      if (supaEnabled()) {
-        const creds = await supaGetCreds(rawUsername);
-        if (creds && creds.pass_hash) {
-          if (!verifyPassword(password, creds.pass_hash)) return error(res, 401, 'Incorrect password.');
-          const token = jwt.sign({ username: rawUsername, clientId: creds.client_id||'0', clientName: creds.client_name||rawUsername, panelNum: 1 }, JWT_SECRET, { expiresIn: '7d' });
-          return ok(res, { session: token, username: rawUsername, clientId: creds.client_id||'0', clientName: creds.client_name||rawUsername, redirect: '/dashboard/dashboard.html' });
-        }
-        // First-time: confirm the username exists in LaMix, then ask them to set a password
-        const lamix = await lookupLaMixClient(rawUsername);
-        if (lamix) return ok(res, { firstLogin: true, username: rawUsername, clientId: lamix.clientId, clientName: lamix.clientName });
-        return res.status(401).json({ ok: false, error: 'Client not found in LaMix. Check the username.', ...corsHeaders });
-      }
-
-      // Supabase not configured → legacy LaMix-only (any password)
-      const lamix = await lookupLaMixClient(rawUsername);
-      if (lamix) {
-        const token = jwt.sign({ username: rawUsername, clientId: lamix.clientId, clientName: lamix.clientName, panelNum: 1 }, JWT_SECRET, { expiresIn: '7d' });
-        return ok(res, { session: token, username: rawUsername, clientId: lamix.clientId, clientName: lamix.clientName, redirect: '/dashboard/dashboard.html' });
-      }
-      return res.status(401).json({ ok: false, error: 'Client not found in LaMix. Check the username.', ...corsHeaders });
-    }
-
-    // 🔐 FIRST-LOGIN: set password + recovery code, then sign in
-    if (url === '/auth/set-password' && req.method === 'POST') {
-      const { username, clientId, clientName, password, recovery } = req.body;
-      if (!username || !password || String(password).length < 6) return error(res, 400, 'Password must be at least 6 characters.');
-      if (!supaEnabled()) return error(res, 400, 'Password storage not configured.');
-      const recHash = (recovery && String(recovery).length >= 4) ? hashPassword(recovery) : null;
-      await supaUpsertCreds(username, hashPassword(password), clientId||'0', clientName||username, recHash);
-      const token = jwt.sign({ username, clientId: clientId||'0', clientName: clientName||username, panelNum: 1 }, JWT_SECRET, { expiresIn: '7d' });
-      return ok(res, { session: token, username, clientId: clientId||'0', clientName: clientName||username, redirect: '/dashboard/dashboard.html' });
-    }
-
+   const rawUsername = (req.body.username || '').trim();
+   const password = (req.body.password || '').trim();
+   if (!rawUsername || !password) return error(res, 400, 'Username and password required');
+   const want = rawUsername.toLowerCase();
+   const fallback = {
+     'muzammil62': { clientId: '0', clientName: 'Agent', panelNum: 1 },
+     'zml_ahsan':  { clientId: '169269', clientName: 'ZML_Ahsan', panelNum: 1 },
+     'zml_anns':   { clientId: '169270', clientName: 'ZML_Anns', panelNum: 1 }
+   };
+   // Agent/fallback accounts
+   if (fallback[want]) {
+     if (supaEnabled()) {
+       const creds = await supaGetCreds(rawUsername);
+       if (creds && creds.pass_hash && !verifyPassword(password, creds.pass_hash)) return error(res, 401, 'Incorrect password.');
+     }
+     const u = fallback[want];
+     const token = jwt.sign({ username: rawUsername, clientId: u.clientId, clientName: u.clientName, panelNum: u.panelNum }, JWT_SECRET, { expiresIn: '7d' });
+     await createSessionRow({ username: rawUsername, clientId: u.clientId, clientName: u.clientName, panelNum: u.panelNum }, token);
+     return ok(res, { session: token, username: rawUsername, clientId: u.clientId, clientName: u.clientName, redirect: '/dashboard/dashboard.html' });
+   }
+   if (supaEnabled()) {
+     const creds = await supaGetCreds(rawUsername);
+     if (creds && creds.pass_hash) {
+       if (!verifyPassword(password, creds.pass_hash)) return error(res, 401, 'Incorrect password.');
+       const token = jwt.sign({ username: rawUsername, clientId: creds.client_id||'0', clientName: creds.client_name||rawUsername, panelNum: 1 }, JWT_SECRET, { expiresIn: '7d' });
+       await createSessionRow({ username: rawUsername, clientId: creds.client_id||'0', clientName: creds.client_name||rawUsername, panelNum: 1 }, token);
+       return ok(res, { session: token, username: rawUsername, clientId: creds.client_id||'0', clientName: creds.client_name||rawUsername, redirect: '/dashboard/dashboard.html' });
+     }
+     // First-time: confirm the username exists in LaMix, then ask them to set a password
+     const lamix = await lookupLaMixClient(rawUsername);
+     if (lamix) return ok(res, { firstLogin: true, username: rawUsername, clientId: lamix.clientId, clientName: lamix.clientName });
+     return res.status(401).json({ ok: false, error: 'Client not found in LaMix. Check the username.', ...corsHeaders });
+   }
+   // Supabase not configured → legacy LaMix-only
+   const lamix = await lookupLaMixClient(rawUsername);
+   if (lamix) {
+     const token = jwt.sign({ username: rawUsername, clientId: lamix.clientId, clientName: lamix.clientName, panelNum: 1 }, JWT_SECRET, { expiresIn: '7d' });
+     await createSessionRow({ username: rawUsername, clientId: lamix.clientId, clientName: lamix.clientName, panelNum: 1 }, token);
+     return ok(res, { session: token, username: rawUsername, clientId: lamix.clientId, clientName: lamix.clientName, redirect: '/dashboard/dashboard.html' });
+   }
+   return res.status(401).json({ ok: false, error: 'Client not found in LaMix. Check the username.', ...corsHeaders });
+ }
+ // 🔐 FIRST-LOGIN: set password + recovery code, then sign in
+ if (url === '/auth/set-password' && req.method === 'POST') {
+   const { username, clientId, clientName, password, recovery } = req.body;
+   if (!username || !password || String(password).length < 6) return error(res, 400, 'Password must be at least 6 characters.');
+   if (!supaEnabled()) return error(res, 400, 'Password storage not configured.');
+   const recHash = (recovery && String(recovery).length >= 4) ? hashPassword(recovery) : null;
+   await supaUpsertCreds(username, hashPassword(password), clientId||'0', clientName||username, recHash);
+   const token = jwt.sign({ username, clientId: clientId||'0', clientName: clientName||username, panelNum: 1 }, JWT_SECRET, { expiresIn: '7d' });
+   await createSessionRow({ username, clientId: clientId||'0', clientName: clientName||username, panelNum: 1 }, token);
+   return ok(res, { session: token, username, clientId: clientId||'0', clientName: clientName||username, redirect: '/dashboard/dashboard.html' });
+ }
+ // 🔐 LOGOUT — kills the cloud session row (works on every device)
+ if (url === '/auth/logout' && req.method === 'POST') {
+   try {
+     const t = String(req.body.session || '');
+     if (t && supaEnabled()) {
+       await fetch(`${SUPABASE_URL}/rest/v1/auth_sessions?token_hash=eq.${encodeURIComponent(sha256(t))}`, { method: 'DELETE', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+       _sessCache.delete(sha256(t));
+     }
+     return ok(res, { message: 'Logged out' });
+   } catch (e) { return ok(res, { message: 'Logged out' }); }
+ }
     // 🔐 CHANGE PASSWORD (profile)
     if (url === '/auth/change-password' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
