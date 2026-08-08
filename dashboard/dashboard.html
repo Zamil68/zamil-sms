@@ -401,6 +401,7 @@
     <script src="/dashboard/withdrawal.js" defer></script>
     <script src="/dashboard/cli.js"></script>
     <script src="/dashboard/cli-track.js" defer></script>
+    <script src="/dashboard/notifs.js" defer></script>
 
     <script>
     window.addEventListener('DOMContentLoaded', function(){
@@ -901,86 +902,7 @@ window.addEventListener('DOMContentLoaded', function(){
     </div>
   </div>
 </div>
-<script>
-(function(){
-  function sess(){ return localStorage.getItem('app_session'); }
-  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-  function npost(url, body, cb){
-    fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(Object.assign({session: sess()}, body||{}))})
-      .then(function(r){ return r.json().catch(function(){ return {ok:false}; }); })
-      .then(cb).catch(function(){ cb({ok:false}); });
-  }
-  var _items = [];
-  function ago(iso){
-    if(!iso) return '';
-    var s = Math.floor((Date.now() - new Date(iso).getTime())/1000);
-    if(isNaN(s)||s<0) return '';
-    if(s<60) return 'just now';
-    var m=Math.floor(s/60); if(m<60) return m+'m ago';
-    var h=Math.floor(m/60); if(h<24) return h+'h ago';
-    return Math.floor(h/24)+'d ago';
-  }
-  var ICONS = {
-    info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>',
-    success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>',
-    warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
-    money: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 100 4h4a2 2 0 110 4H8"/><path d="M12 6v2M12 16v2"/></svg>'
-  };
-  function render(){
-    var el = document.getElementById('notifList'); if(!el) return;
-    if(!_items.length){ el.innerHTML = '<div class="notif-empty">No notifications yet</div>'; return; }
-    el.innerHTML = _items.map(function(n){
-      return '<div class="notif-item t-'+(n.type||'info')+(n.read?'':' unread')+'">'
-        +'<div class="ni-ic">'+(ICONS[n.type]||ICONS.info)+'</div>'
-        +'<div class="ni-body">'+(n.title?'<div class="ni-title">'+esc(n.title)+'</div>':'')
-        +'<div class="ni-text">'+esc(n.body)+'</div>'
-        +'<div class="ni-time">'+ago(n.at)+'</div></div></div>';
-    }).join('');
-  }
-  function badge(count){
-    var b = document.getElementById('bellBadge'); if(!b) return;
-    if(count>0){ b.style.display='flex'; b.textContent = count>9?'9+':String(count); }
-    else b.style.display='none';
-  }
-  function load(markRead){
-    npost('/api/notifs/list', {}, function(d){
-      _items = (d&&d.notifs)||[];
-      badge((d&&d.unread)||0);
-      render();
-      if(markRead && d && d.unread>0){
-        var ids = _items.filter(function(n){return !n.read;}).map(function(n){return n.id;});
-        npost('/api/notifs/mark-read', {ids: ids}, function(){
-          _items.forEach(function(n){ n.read = true; });
-          badge(0); render();
-        });
-      }
-    });
-  }
-  window.openNotifPanel = function(){
-    var ov = document.getElementById('notifOverlay'); if(ov) ov.classList.add('show');
-    load(true); /* auto-read when opened */
-    npost('/api/auth/role', {}, function(r){
-      var c = document.getElementById('notifCompose');
-      if(c) c.style.display = (r&&r.role==='super') ? 'block' : 'none';
-    });
-  };
-  window.closeNotifPanel = function(){
-    var ov = document.getElementById('notifOverlay'); if(ov) ov.classList.remove('show');
-  };
-  window.sendNotifMsg = function(){
-    var target = document.getElementById('ncTarget').value;
-    if(target==='user'){ target = (document.getElementById('ncUser').value||'').trim(); if(!target){ alert('Enter a username'); return; } }
-    var body = (document.getElementById('ncBody').value||'').trim();
-    if(!body){ alert('Write a message first'); return; }
-    npost('/api/notifs/send', { target: target, type: document.getElementById('ncType').value, title: document.getElementById('ncTitle').value.trim(), body: body }, function(d){
-      if(d&&d.ok){ document.getElementById('ncBody').value=''; document.getElementById('ncTitle').value=''; load(false); }
-      else alert((d&&d.error)||'Failed to send');
-    });
-  };
-  load(false);
-  setInterval(function(){ if(!document.hidden) load(false); }, 60000);
-})();
-</script>
+
 </body>
     
 </html>
