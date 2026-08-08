@@ -849,7 +849,17 @@ window.addEventListener('DOMContentLoaded', function(){
   if (typeof doLogout === 'function' && !doLogout._zl) {
     var _o = doLogout;
     window.doLogout = function(){
-      try{ fetch('/api/auth/logout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:localStorage.getItem('app_session')})}).catch(function(){}); }catch(e){}
+      try{
+        var s = localStorage.getItem('app_session');
+        if (s) {
+          var payload = JSON.stringify({ session: s });
+          if (navigator.sendBeacon) {
+            navigator.sendBeacon('/api/auth/logout', new Blob([payload], {type:'application/json'}));
+          } else {
+            fetch('/api/auth/logout', { method:'POST', keepalive:true, headers:{'Content-Type':'application/json'}, body: payload }).catch(function(){});
+          }
+        }
+      }catch(e){}
       return _o.apply(this, arguments);
     };
     doLogout._zl = 1;
