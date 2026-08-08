@@ -844,5 +844,18 @@ window.toggleAnInfo=toggleAnInfo;
       if(tn&&nc){setInterval(function(){var m=(tn.textContent||'').match(/\d+/);if(m)nc.textContent=m[0];},1000);}
     });
     </script>
+<script>
+window.addEventListener('DOMContentLoaded', function(){
+  if (typeof doLogout === 'function' && !doLogout._zl) {
+    var _o = doLogout;
+    window.doLogout = function(){
+      try{ fetch('/api/auth/logout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:localStorage.getItem('app_session')})}).catch(function(){}); }catch(e){}
+      return _o.apply(this, arguments);
+    };
+    doLogout._zl = 1;
+  }
+});
+</script>
+    
 </body>
 </html>
