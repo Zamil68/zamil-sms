@@ -903,6 +903,140 @@ async function createSessionRow(user, token){
   } catch (e) {}
 }
 
+// ═══ MULTI-PANEL ENGINE (Zyron / EVS) — LaMix code untouched ═══
+const PANELS = {
+  zyron: { label:'Zyron', base:'http://151.80.19.204/ints/agent/', loginBase:'http://151.80.19.204/ints/',
+    user: process.env.ZYRON_USER || 'muzammil62', pass: process.env.ZYRON_PASS || 'Zamil6262#$&#$&@',
+    limits:{ perRange:10, rangesPerDay:2 }, features:{ cli:false, withdrawal:false, earnings:true } },
+  evs: { label:'EVS', base: process.env.EVS_BASE || '', loginBase: process.env.EVS_BASE ? process.env.EVS_BASE.replace('agent/','') : '',
+    user: process.env.EVS_USER || '', pass: process.env.EVS_PASS || '',
+    limits:{ perRange:10, rangesPerDay:2 }, features:{ cli:false, withdrawal:false, earnings:true } }
+};
+const _panelSessions = {};
+async function ensurePanelSession(key, force){
+  const P = PANELS[key]; if (!P || !P.base) return null;
+  const s = _panelSessions[key] || (_panelSessions[key] = { cookie:'', ts:0, lastTry:0 });
+  if (!force && s.cookie && (Date.now()-s.ts) < 20*60*1000) return s.cookie;
+  if (!force && (Date.now()-s.lastTry) < 60*1000) return s.cookie || null;
+  s.lastTry = Date.now();
+  for (const u of [P.loginBase+'signin', P.loginBase+'login', P.base]) {
+    try {
+      const res = await axios.post(u, new URLSearchParams({ username:P.user, password:P.pass }).toString(), {
+        headers:{ 'Content-Type':'application/x-www-form-urlencoded','User-Agent':UA,'Referer':P.loginBase+'login','Origin':new URL(P.base).origin },
+        maxRedirects:0, validateStatus:()=>true, timeout:10000 });
+      const sc = res.headers['set-cookie'];
+      if (sc) { const m = (Array.isArray(sc)?sc.join('; '):String(sc)).match(/PHPSESSID=([^;]+)/); if (m) { s.cookie='PHPSESSID='+m[1]; s.ts=Date.now(); return s.cookie; } }
+    } catch(e){}
+  }
+  return s.cookie || null;
+}
+function panelHeaders(key, referer){
+  const P = PANELS[key], s = _panelSessions[key];
+  return { 'Accept':'application/json, text/javascript, */*; q=0.01','Accept-Encoding':'gzip, deflate','Accept-Language':'en-US,en;q=0.9,ja;q=0.8','Connection':'keep-alive',
+    'Cookie': (s&&s.cookie)||'', 'Host': new URL(P.base).host, 'Referer': referer || (P.base+'MySMSNumbers'), 'User-Agent':UA, 'X-Requested-With':'XMLHttpRequest' };
+}
+async function scrapePanel(key, endpoint, params, referer){
+  const P = PANELS[key]; if (!P || !P.base) return null;
+  await ensurePanelSession(key);
+  const doReq = async () => (await axios.get(P.base+endpoint, { params, headers: panelHeaders(key, referer), timeout:20000, maxRedirects:5, validateStatus:()=>true })).data;
+  try { let d = await doReq(); if (looksLikeLogin(d)) { await ensurePanelSession(key, true); d = await doReq(); } return d; } catch(e){ return null; }
+}
+// Zyron columns: [checkbox(id), Range, Prefix, Number, MyPayout, Client, Payout, Limits]
+function parsePanelNumbers(key, data){
+  if (!data || !data.aaData) return [];
+  return data.aaData.map(row => {
+    const idm = String(row[0]||'').match(/value=["']?(\d+)["']?/);
+    const range = String(row[1]||'').replace(/<[^>]*>/g,'').trim();
+    return { id: idm?idm[1]:'', range, prefix: String(row[2]||'').replace(/<[^>]*>/g,'').trim(),
+      number: String(row[3]||'').replace(/<[^>]*>/g,'').trim(), myPayout: String(row[4]||'').replace(/<[^>]*>/g,'').trim(),
+      client: String(row[5]||'').replace(/<[^>]*>/g,'').trim(), payout: String(row[6]||'').replace(/<[^>]*>/g,'').trim(),
+      country: _countryOfRange(range) };
+  });
+}
+const _panelClientCache = {};
+async function getPanelClientMap(key, force){
+  const c = _panelClientCache[key];
+  if (!force && c && c.map && (Date.now()-c.ts) < 5*60*1000) return c.map;
+  const html = await scrapePanel(key, 'MySMSNumbers', {});
+  const map = {};
+  if (typeof html === 'string') {
+    const $ = cheerio.load(html);
+    $('select[name="fclient"] option').each((i,o)=>{ const v=$(o).attr('value'), t=$(o).text().trim(); if (v && t) map[t.toLowerCase()] = v; });
+  }
+  if (Object.keys(map).length) _panelClientCache[key] = { ts: Date.now(), map };
+  return _panelClientCache[key] ? _panelClientCache[key].map : map;
+}
+
+// ═══ PANEL RATES + CDR (Zyron/EVS) ═══
+const _panelRatesCache = {};   // key -> { ts, map }
+async function loadPanelRateMap(key, force){
+  const c = _panelRatesCache[key];
+  if (!force && c && c.map && (Date.now()-c.ts) < 5*60*1000) return c;
+  const data = await scrapePanel(key, 'res/data_smsnumbers.php', { frange:'', fclient:'', sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
+  const map = new Map();
+  parsePanelNumbers(key, data).forEach(n => {
+    const rate = parseFloat(String(n.myPayout||'0').replace(/[^0-9.]/g,''));
+    if (n.range && isFinite(rate) && rate > 0 && !map.has(norm(n.range))) map.set(norm(n.range), { rate, raw: n.range });
+  });
+  if (map.size) _panelRatesCache[key] = { ts: Date.now(), map };
+  return _panelRatesCache[key] || { ts:0, map: new Map() };
+}
+async function scrapePanelCDR(key, dateFrom, dateTo){
+  const mp = {};
+  for (let i = 0; i < 9; i++){ mp['mDataProp_'+i]=i; mp['sSearch_'+i]=''; mp['bRegex_'+i]=false; mp['bSearchable_'+i]=true; mp['bSortable_'+i]=(i!==8); }
+  const params = Object.assign({ fdate1:dateFrom, fdate2:dateTo, frange:'', fclient:'', fnum:'', fcli:'',
+    fgdate:'', fgmonth:'', fgrange:'', fgclient:'', fgnumber:'', fgcli:'', fg:0,
+    sEcho:1, iColumns:9, sColumns:',,,,,,,,', iDisplayStart:0, iDisplayLength:100000,
+    sSearch:'', bRegex:false, iSortCol_0:0, sSortDir_0:'desc', iSortingCols:1 }, mp);
+  const d = await scrapePanel(key, 'res/data_smscdr.php', params, PANELS[key].base + 'SMSCDRReports');
+  if (!d || !d.aaData) return [];
+  const rows = [];
+  d.aaData.forEach(r => {
+    if (!Array.isArray(r)) return;
+    const dt = String(r[0]||'');
+    if (!/^\d{4}-\d{2}-\d{2}/.test(dt)) return;
+    rows.push({ datetime: dt, date: dt.slice(0,10), time: dt.slice(11,19),
+      range: String(r[1]||'').replace(/<[^>]*>/g,'').trim(), number: String(r[2]||'').replace(/<[^>]*>/g,'').trim(),
+      cli: String(r[3]||'').replace(/<[^>]*>/g,'').trim(), client: String(r[4]||'').replace(/<[^>]*>/g,'').trim(),
+      message: String(r[5]||'').replace(/<[^>]*>/g,'').trim(), currency: String(r[6]||'').trim(), myPayout: r[7], clientPayout: r[8] });
+  });
+  return rows;
+}
+const _panelCdrCache = new Map();  // "panel|from|to"
+async function getPanelCachedCDR(key, from, to, ttl){
+  const ck = key + '|' + from + '|' + to;
+  const hit = _panelCdrCache.get(ck);
+  if (hit && (Date.now()-hit.ts) < (ttl || 60000)) return hit.rows;
+  const rows = await scrapePanelCDR(key, from, to);
+  _panelCdrCache.set(ck, { ts: Date.now(), rows });
+  if (_panelCdrCache.size > 15) { const now = Date.now(); for (const [k,v] of _panelCdrCache) if (now-v.ts > 180000) _panelCdrCache.delete(k); }
+  return rows;
+}
+// data_smsranges.php → [Range, Prefix, TestNumber, Currency, 1/1, 7/1, 7/7, 30/45, Memo, Action(info=RID)]
+function parsePanelRangeCatalog(data){
+  if (!data || !data.aaData) return [];
+  return data.aaData.map(row => {
+    const html = (row||[]).join(' ');
+    const rid = (html.match(/info=["']?(\d+)["']?/) || [])[1] || '';
+    const cl = i => String(row[i]||'').replace(/<[^>]*>/g,'').trim();
+    return { rid, range: cl(0), prefix: cl(1), testNumber: cl(2), currency: cl(3),
+      p11: parseFloat(String(row[4]||'').replace(/[^0-9.]/g,''))||0, p71: parseFloat(String(row[5]||'').replace(/[^0-9.]/g,''))||0,
+      p77: parseFloat(String(row[6]||'').replace(/[^0-9.]/g,''))||0, p3045: parseFloat(String(row[7]||'').replace(/[^0-9.]/g,''))||0,
+      memo: cl(8), country: _countryOfRange(cl(0)) };
+  }).filter(r => r.range);
+}
+async function getPanelDailyUse(username, key){
+  if (!supaEnabled()) return { byRange:{}, ranges:new Set() };
+  try {
+    const start = encodeURIComponent('gte.' + _todayStartUTC());
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/alloc_events?username=${encodeURIComponent('eq.'+username)}&panel=${encodeURIComponent('eq.'+key)}&created_at=${start}&select=range_id,qty`, { headers:{ 'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY } });
+    const rows = await res.json();
+    const list = Array.isArray(rows) ? rows : [];
+    const byRange = {}; const ranges = new Set();
+    list.forEach(x => { if (x.range_id){ byRange[x.range_id]=(byRange[x.range_id]||0)+(x.qty||1); ranges.add(x.range_id); } });
+    return { byRange, ranges };
+  } catch(e){ return { byRange:{}, ranges:new Set() }; }
+}
 
 module.exports = async (req, res) => {
 if (req.method === 'OPTIONS') return res.status(200).json({ ...corsHeaders });
@@ -2766,6 +2900,177 @@ if (url === '/admin/withdraw/users' && req.method === 'POST') {
     })).sort((a, b) => b.withdrawn - a.withdrawn);
     return ok(res, { users });
   } catch (e) { return error(res, 500, 'withdraw/users: ' + e.message); }
+}
+
+// ═══ PANEL DATA (read-only, per-panel) ═══
+if (url === '/p/numbers' && req.method === 'POST') {
+  const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+  const key = String(req.body.panel||'').toLowerCase(); if (!PANELS[key] || !PANELS[key].base) return error(res, 400, 'Unknown panel');
+  const data = await scrapePanel(key, 'res/data_smsnumbers.php', { frange:'', fclient:'', sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
+  return ok(res, { numbers: parsePanelNumbers(key, data) });
+}
+if (url === '/p/ranges' && req.method === 'POST') {
+  const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+  const key = String(req.body.panel||'').toLowerCase(); if (!PANELS[key] || !PANELS[key].base) return error(res, 400, 'Unknown panel');
+  const data = await scrapePanel(key, 'res/data_smsnumbers.php', { frange:'', fclient:'', sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
+  const nums = parsePanelNumbers(key, data);
+  const m = new Map();
+  nums.forEach(n => {
+    const k = n.country + ' -- ' + n.range;
+    if (!m.has(k)) m.set(k, { id:'r_'+norm(n.country+'|'+n.range), title:n.range, country:n.country, count:0, available:0 });
+    const r = m.get(k); r.count++; if (isAvailableClient(n.client)) r.available++;
+  });
+  return ok(res, { ranges: Array.from(m.values()) });
+}
+// ═══ PANEL ALLOCATE (checkbox numbers → client → payterm → payout) with STRICT caps ═══
+if (url === '/p/allocate-numbers' && req.method === 'POST') {
+  try {
+    const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+    const key = String(req.body.panel||'').toLowerCase();
+    const P = PANELS[key]; if (!P || !P.base) return error(res, 400, 'Unknown panel');
+    const role = await getRole(user.username);
+    const ids = (Array.isArray(req.body.ids)?req.body.ids:String(req.body.ids||'').split(',')).map(x=>String(x).trim()).filter(Boolean);
+    if (!ids.length) return error(res, 400, 'Select at least one number');
+    const clientName = String(req.body.client||'').trim();
+    const payterm = String(req.body.payterm||'2');
+    const payout = parseFloat(req.body.payout)||0.01;
+    const rangeTitle = String(req.body.rangeTitle||''); const rangeId = norm(rangeTitle);
+    // strict daily caps per panel (admins exempt)
+    if (!isAdminish(role) && supaEnabled()) {
+      const start = encodeURIComponent('gte.'+_todayStartUTC());
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/alloc_events?username=${encodeURIComponent('eq.'+user.username)}&panel=${encodeURIComponent('eq.'+key)}&created_at=${start}&select=range_id,qty`, { headers:{ 'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY } });
+      const ev = Array.isArray(await r.json()) ? await (async()=>[])() : [];
+      const rows2 = await fetch(`${SUPABASE_URL}/rest/v1/alloc_events?username=${encodeURIComponent('eq.'+user.username)}&panel=${encodeURIComponent('eq.'+key)}&created_at=${start}&select=range_id,qty`, { headers:{ 'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY } }).then(x=>x.json()).catch(()=>[]);
+      const list = Array.isArray(rows2)?rows2:[];
+      const sameRange = list.filter(x=>x.range_id===rangeId).reduce((s,x)=>s+(x.qty||1),0);
+      const distinct = new Set(list.map(x=>x.range_id));
+      if (sameRange + ids.length > P.limits.perRange) return ok(res, { limitReached:true, capType:'range', used:sameRange, limit:P.limits.perRange, message:`Max ${P.limits.perRange} numbers per range per day on ${P.label}.` });
+      if (!distinct.has(rangeId) && distinct.size >= P.limits.rangesPerDay) return ok(res, { limitReached:true, capType:'ranges', used:distinct.size, limit:P.limits.rangesPerDay, message:`Max ${P.limits.rangesPerDay} ranges per day on ${P.label}.` });
+    }
+    const cmap = await getPanelClientMap(key);
+    const clientId = cmap[clientName.toLowerCase()];
+    if (!clientId) return error(res, 400, 'Client "'+clientName+'" not found in '+P.label+' panel.');
+    const NP = { frange:'', fclient:clientId, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 };
+    const before = parsePanelNumbers(key, await scrapePanel(key, 'res/data_smsnumbers.php', NP)).length;
+    const body = new URLSearchParams({ action:'allocateall', cbarr: ids.join(','), client: clientId, payterm, payout: String(payout), frange:'', fclient:'' }).toString();
+    const postIt = () => axios.post(P.base+'MySMSNumbers', body, { headers: Object.assign({}, panelHeaders(key, P.base+'MySMSNumbers'), { 'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8', 'Origin': new URL(P.base).origin }), transformRequest:[(d)=>d], maxRedirects:5, validateStatus:()=>true, timeout:20000 });
+    let st = null, resp = '';
+    try { let r = await postIt(); if (looksLikeLogin(r.data)) { await ensurePanelSession(key, true); r = await postIt(); } st = r.status; resp = String(typeof r.data==='string'?r.data:JSON.stringify(r.data)); } catch(e){ return error(res, 500, P.label+' request failed: '+(e.code||e.message)); }
+    const after = parsePanelNumbers(key, await scrapePanel(key, 'res/data_smsnumbers.php', NP)).length;
+    const allocatedReal = Math.max(0, after - before);
+    if (allocatedReal > 0 && supaEnabled()) await supaInsertEvent({ username:user.username, country:_countryOfRange(rangeTitle), range_id:rangeId, range_title:rangeTitle, qty:ids.length, panel:key });
+    return ok(res, { allocated: ids.length, allocatedReal, before, after, client:clientName, clientId, status:st, _server: resp.replace(/\s+/g,' ').slice(0,160) });
+  } catch(e){ return error(res, 500, 'allocate-numbers: '+e.message); }
+}
+
+  // ═══ PANEL ADD: search ranges from Zyron/EVS catalog ═══
+if (url === '/p/ranges-search' && req.method === 'POST') {
+  try {
+    const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+    const key = String(req.body.panel||'').toLowerCase();
+    const P = PANELS[key]; if (!P || !P.base) return error(res, 400, 'Unknown panel');
+    const query = String(req.body.query||'').toLowerCase().replace(/[\s\u00a0\u200b-\u200d\ufeff]+/g,' ').trim();
+    const role = await getRole(user.username);
+    const use = await getPanelDailyUse(user.username, key);
+    const data = await scrapePanel(key, 'res/data_smsranges.php', { sEcho:1, iColumns:10, iDisplayStart:0, iDisplayLength:5000, sSearch:'', bRegex:false, iSortCol_0:0, sSortDir_0:'asc', iSortingCols:1 }, P.base + 'SMSRanges');
+    let cat = parsePanelRangeCatalog(data);
+    if (query) {
+      const qns = query.replace(/\s+/g,'');
+      cat = cat.filter(r => {
+        const hay = (r.country + ' ' + r.range + ' ' + r.prefix).toLowerCase();
+        if (hay.includes(query) || hay.replace(/\s+/g,'').includes(qns)) return true;
+        const toks = query.split(/\s+/).filter(Boolean);
+        return toks.length > 1 && toks.every(t => hay.includes(t));
+      });
+    }
+    const ranges = cat.slice(0, 60).map(r => {
+      const rk = norm(r.country + '|' + r.range);
+      const used = use.byRange[rk] || 0;
+      const remaining = isAdminish(role) ? 999 : Math.max(0, P.limits.perRange - used);
+      return Object.assign({}, r, { id: rk, usedToday: used, remaining, rangesUsedToday: use.ranges.size, rangesLimit: isAdminish(role) ? 999 : P.limits.rangesPerDay });
+    });
+    return ok(res, { panel: key, ranges, total: cat.length });
+  } catch(e){ return error(res, 500, 'p/ranges-search: '+e.message); }
+}
+// ═══ PANEL ADD: request numbers (exact panel flow + shows panel's real answer) ═══
+if (url === '/p/request-range' && req.method === 'POST') {
+  try {
+    const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+    const key = String(req.body.panel||'').toLowerCase();
+    const P = PANELS[key]; if (!P || !P.base) return error(res, 400, 'Unknown panel');
+    const role = await getRole(user.username);
+    const rid = String(req.body.rid||'').trim();
+    const qty = Math.max(1, parseInt(req.body.qty)||5);
+    const payterm = String(req.body.payterm||'2');
+    const rangeTitle = String(req.body.rangeTitle||'');
+    const rk = norm(String(req.body.country||_countryOfRange(rangeTitle)) + '|' + rangeTitle) || ('rid_'+rid);
+    if (!rid) return error(res, 400, 'Range ID missing — search again.');
+    // ── strict daily caps (admins exempt) ──
+    if (!isAdminish(role) && supaEnabled()) {
+      const use = await getPanelDailyUse(user.username, key);
+      const used = use.byRange[rk] || 0;
+      if (used + qty > P.limits.perRange) return ok(res, { limitReached:true, capType:'range', used, limit:P.limits.perRange, message:`${P.label}: max ${P.limits.perRange} numbers per range per day (already ${used}).` });
+      if (!use.ranges.has(rk) && use.ranges.size >= P.limits.rangesPerDay) return ok(res, { limitReached:true, capType:'ranges', used:use.ranges.size, limit:P.limits.rangesPerDay, message:`${P.label}: max ${P.limits.rangesPerDay} ranges per day.` });
+    }
+    // ── POST exactly like the panel modal ──
+    const body = new URLSearchParams({ rid, payterm, qty: String(qty) }).toString();
+    const postIt = () => axios.post(P.base + 'res/requestsmsnumberfinal.php', body, {
+      headers: Object.assign({}, panelHeaders(key, P.base + 'SMSRanges'), { 'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8', 'Origin': new URL(P.base).origin }),
+      transformRequest:[(d)=>d], maxRedirects:5, validateStatus:()=>true, timeout:25000 });
+    let resp = '', st = null;
+    try { let r = await postIt(); if (looksLikeLogin(r.data)) { await ensurePanelSession(key, true); r = await postIt(); } st = r.status; resp = String(typeof r.data==='string'?r.data:JSON.stringify(r.data||'')); }
+    catch(e){ return error(res, 500, P.label+' request failed: '+(e.code||e.message)); }
+    // ── parse panel answer: green = success (+numbers), anything else = show their message ──
+    const plain = resp.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+    const isOk = /color=['"]?green/i.test(resp) || /allocated to your account successfully/i.test(plain);
+    const nums = (plain.match(/Numbers\s+([\d,\s]+?)\s+allocated/i) || [])[1];
+    const numbers = nums ? nums.split(',').map(s=>s.trim()).filter(Boolean) : [];
+    if (isOk && supaEnabled()) await supaInsertEvent({ username:user.username, country:_countryOfRange(rangeTitle), range_id:rk, range_title:rangeTitle, qty: numbers.length || qty, panel:key });
+    return ok(res, { allocated: isOk, numbers, count: numbers.length || (isOk?qty:0), message: plain.slice(0,300), status: st, panel: P.label });
+  } catch(e){ return error(res, 500, 'p/request-range: '+e.message); }
+}
+// ═══ PANEL EARNINGS (same 70% / full-rate engine, panel's own CDR + rates) ═══
+if (url === '/p/earn/compute' && req.method === 'POST') {
+  try {
+    const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+    const key = String(req.body.panel||'').toLowerCase();
+    const P = PANELS[key]; if (!P || !P.base) return error(res, 400, 'Unknown panel');
+    const rc = await loadPanelRateMap(key, false);
+    const deductions = await loadDeductions(false);
+    const bd = businessDayPKT();
+    const rows = await getPanelCachedCDR(key, bd.from, bd.to, 60000);
+    const my1 = String(user.clientName||'').toLowerCase().trim();
+    const my2 = String(user.username||'').toLowerCase().trim();
+    const me = { userNet:0, gross:0, perRange:{} }; const board = {};
+    let grossTotal = 0, userNetTotal = 0;
+    (rows||[]).forEach(r => {
+      const rt = rc.map ? rc.map.get(norm(r.range)) : null;
+      if (!rt) return;
+      const G = rt.rate; grossTotal += G;
+      const ded = deductions.get(norm(r.range));
+      const isFull = ded ? ded.full : false;
+      const uN = isFull ? G : G * 0.7;
+      userNetTotal += uN;
+      const cli = String(r.client||'').trim();
+      if (cli) { if (!board[cli]) board[cli] = { username: cli, userNet:0, count:0 }; board[cli].userNet += uN; board[cli].count++; }
+      const cl = cli.toLowerCase();
+      const isMe = cl && ((my2 && (cl===my2||cl.includes(my2)||my2.includes(cl))) || (my1 && (cl===my1||cl.includes(my1)||my1.includes(cl))));
+      if (isMe) {
+        me.userNet += uN; me.gross += G;
+        const k = r.range||'Unknown';
+        if (!me.perRange[k]) me.perRange[k] = { range:k, count:0, userNet:0, gross:0, isFull };
+        me.perRange[k].count++; me.perRange[k].userNet += uN; me.perRange[k].gross += G;
+      }
+    });
+    const rnd = v => Math.round(v*10000)/10000;
+    me.userNet = rnd(me.userNet); me.gross = rnd(me.gross);
+    Object.values(me.perRange).forEach(pr => { pr.userNet = rnd(pr.userNet); pr.gross = rnd(pr.gross); });
+    Object.values(board).forEach(b => { b.userNet = rnd(b.userNet); });
+    return ok(res, { panel: key, window: bd, ratesLoaded: rc.map ? rc.map.size : 0,
+      me, perRange: Object.values(me.perRange).sort((a,b)=>b.userNet-a.userNet),
+      leaderboard: Object.values(board).sort((a,b)=>b.userNet-a.userNet).slice(0,50),
+      pool: { grossTotal: rnd(grossTotal), userNetTotal: rnd(userNetTotal) } });
+  } catch(e){ return error(res, 500, 'p/earn/compute: '+e.message); }
 }
   
  return error(res, 404, 'Route not found');
