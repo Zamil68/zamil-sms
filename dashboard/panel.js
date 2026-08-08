@@ -62,9 +62,11 @@ function mountSwitcher(){
     var b=e.target.closest('button[data-p]'); if(!b)return;
     var p=b.getAttribute('data-p'); if(p===cur())return;
     if(p==='evs'&&!window.EVS_READY){ toast('EVS panel coming soon','gold'); return; }
-    wipe(cur()); wipe(p);                       // clear BOTH panels' caches
+    wipe(cur()); wipe(p);                       // clear BOTH panels' pc_ caches
+    try{ if(window.ZCache) window.ZCache.clearAll(); }catch(e){}   // kill zc_ data caches
+    try{ sessionStorage.clear(); }catch(e){}                       // kill view/number restore
     localStorage.setItem('app_panel', p);
-    location.reload();                          // clean boot on the new panel
+    location.reload();                          // clean boot on the new panel                         // clean boot on the new panel
   });
 }
 /* ═══ FEATURE GATES (data-pf="cli" / "withdrawal") ═══ */
