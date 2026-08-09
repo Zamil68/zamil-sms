@@ -1,4 +1,4 @@
-/* ═══ panel.js — Zamil SMS multi-panel engine (LaMix / Zyron / EVS) ═══ */
+/* ═══ panel.js — Zamil SMS multi-panel engine (LaMix / Zyron / EVS) — FINAL ═══ */
 (function(){
 'use strict';
 var REG = {
@@ -7,6 +7,7 @@ var REG = {
   evs:   { label:'EVS',   grad:'linear-gradient(135deg,#fb923c,#ef4444)' }
 };
 window.EVS_READY = window.EVS_READY || false;   // flip true when EVS_BASE env is live
+var WA_LINK = 'https://wa.me/qr/4M2BZRDAFE6DJ1';
 var PAYTERMS = [['1','Daily'],['2','Weekly'],['3','Weekly7'],['4','BiWeekly'],['5','BiWeekly30'],['6','Monthly15'],['7','Monthly30'],['8','Monthly45'],['9','Monthly60']];
 
 function cur(){ var p = localStorage.getItem('app_panel'); return REG[p] ? p : 'lamix'; }
@@ -28,7 +29,11 @@ function store(k,v){ try{ localStorage.setItem('pc_'+cur()+'_'+k, JSON.stringify
 function read(k){ try{ var s = localStorage.getItem('pc_'+cur()+'_'+k); return s ? JSON.parse(s) : null; }catch(e){ return null; } }
 function wipe(p){ var pre='pc_'+p+'_'; Object.keys(localStorage).forEach(function(k){ if(k.indexOf(pre)===0) localStorage.removeItem(k); }); }
 
-/* ═══ UNIFIED DATA API — pages call PANEL.api.* instead of raw routes ═══ */
+/* ═══ LOADER (universal dashboard overlay) ═══ */
+function showLoader(msg){ var ov=document.getElementById('loadingOverlay'), lt=document.getElementById('loadingText'); if(lt)lt.textContent=msg||'Loading…'; if(ov)ov.classList.add('show'); }
+function hideLoader(){ var ov=document.getElementById('loadingOverlay'); if(ov)ov.classList.remove('show'); }
+
+/* ═══ UNIFIED DATA API ═══ */
 var api = {
   numbers:   function(cb){ isLamix() ? post('/api/numbers',{},cb)        : post('/api/p/numbers',{panel:cur()},cb); },
   ranges:    function(cb){ isLamix() ? post('/api/ranges',{},cb)         : post('/api/p/ranges',{panel:cur()},cb); },
@@ -39,7 +44,10 @@ var api = {
   addSearch: function(q,cb){ isLamix() ? post('/api/alloc/search-ranges',{query:q},cb) : post('/api/p/ranges-search',{panel:cur(),query:q},cb); },
   addExec:   function(o,cb){ isLamix() ? post('/api/alloc/allocate',o,cb) : post('/api/p/request-range',Object.assign({panel:cur()},o),cb); },
   allocateNumbers: function(o,cb){ post('/api/p/allocate-numbers',Object.assign({panel:cur()},o),cb); },
-  clients:   function(cb){ isLamix() ? post('/api/clients/list',{},cb)   : post('/api/p/clients',{panel:cur()},cb); }
+  clients:   function(cb){ isLamix() ? post('/api/clients/list',{},cb)   : post('/api/p/clients',{panel:cur()},cb); },
+  checkId:   function(p,cb){ post('/api/p/check-id',{panel:p},cb); },
+  linkSet:   function(p,name,cb){ post('/api/p/link-set',{panel:p,panelClient:name},cb); },
+  linkDel:   function(p,cb){ post('/api/p/link-del',{panel:p},cb); }
 };
 
 /* ═══ TOAST ═══ */
@@ -52,21 +60,103 @@ function toast(msg,color){
   t.classList.add('show'); if(_tT)clearTimeout(_tT); _tT=setTimeout(function(){t.classList.remove('show');},3200);
 }
 
+/* ═══ NO-ID POPUP (WhatsApp + manual link + unlink) ═══ */
+function buildNoIdOv(){
+  var ov=document.getElementById('noIdOv');
+  if(ov) return ov;
+  ov=document.createElement('div'); ov.id='noIdOv'; ov.className='pz-ov';
+  ov.innerHTML='<div class="pz-card">'
+    +'<button class="pz-x" onclick="closeNoIdPopup()">✕</button>'
+    +'<div class="pz-t" id="noIdTitle">No ID on panel</div>'
+    +'<div id="noIdMsg" style="font-size:.76rem;color:var(--muted);line-height:1.5;margin:6px 0 4px"></div>'
+    +'<a class="pz-wa" href="'+WA_LINK+'" target="_blank" rel="noopener">💬 WhatsApp admin to create ID</a>'
+    +'<div class="pz-link-box">'
+      +'<div class="pz-sub">Have a different ID on this panel? Link it (must match exactly):</div>'
+      +'<input class="pz-inp" id="linkInput" placeholder="Your exact ID on this panel" autocomplete="off">'
+      +'<button class="pz-btn" id="linkBtn">Link ID</button>'
+      +'<button class="pz-btn ghost" id="unlinkBtn" style="display:none">Unlink</button>'
+    +'</div></div>';
+  document.body.appendChild(ov);
+  ov.addEventListener('click',function(e){ if(e.target===ov) closeNoIdPopup(); });
+  return ov;
+}
+function openNoId(p,d){
+  var ov=buildNoIdOv(); ov._panel=p;
+  document.getElementById('noIdTitle').textContent='No ID on '+REG[p].label;
+  document.getElementById('noIdMsg').textContent='Your Zamil ID was not found in the '+REG[p].label+' panel. Contact the admin to create one, or link an existing ID below (must match exactly).';
+  document.getElementById('linkInput').value='';
+  var ub=document.getElementById('unlinkBtn'); if(ub) ub.style.display=(d&&d.linked)?'inline-block':'none';
+  ov.classList.add('show');
+}
+window.closeNoIdPopup=function(){ var ov=document.getElementById('noIdOv'); if(ov)ov.classList.remove('show'); };
+window.openNoIdPopup=openNoId;   // panel-bridge calls this on any noId response
+
+function doLink(){
+  var ov=document.getElementById('noIdOv'); if(!ov)return;
+  var p=ov._panel||'zyron';
+  var val=(document.getElementById('linkInput').value||'').trim();
+  if(!val){ toast('Enter your exact ID on this panel','red'); return; }
+  var btn=document.getElementById('linkBtn'); btn.disabled=true; btn.textContent='Linking…';
+  api.linkSet(p,val,function(d){
+    btn.disabled=false; btn.textContent='Link ID';
+    if(d&&d.ok){
+      toast('Linked to '+d.client,'green'); closeNoIdPopup();
+      wipe(cur()); wipe(p);
+      try{ if(window.ZCache)window.ZCache.clearAll(); }catch(e){}
+      try{ sessionStorage.clear(); }catch(e){}
+      localStorage.setItem('app_panel',p);
+      showLoader('Fetching '+REG[p].label+' data…');
+      setTimeout(function(){ location.reload(); },300);
+    } else toast((d&&d.error)||'Link failed','red');
+  });
+}
+function doUnlink(){
+  var ov=document.getElementById('noIdOv'); if(!ov)return;
+  var p=ov._panel||'zyron';
+  api.linkDel(p,function(d){ if(d&&d.ok){ toast('Unlinked','green'); var ub=document.getElementById('unlinkBtn'); if(ub)ub.style.display='none'; } });
+}
+
+/* ═══ SWITCH FLOW (ID check → wipe → fresh load) ═══ */
+function switchTo(p){
+  if(p===cur()) return;
+  if(p==='evs'&&!window.EVS_READY){ toast('EVS panel coming soon','gold'); return; }
+  // LaMix: direct switch
+  if(p==='lamix'){
+    wipe(cur());
+    try{ if(window.ZCache)window.ZCache.clearAll(); }catch(e){}
+    try{ sessionStorage.clear(); }catch(e){}
+    localStorage.setItem('app_panel',p);
+    showLoader('Fetching LaMix data…');
+    location.reload();
+    return;
+  }
+  // Zyron/EVS: verify ID first
+  showLoader('Checking your ID on '+REG[p].label+'…');
+  api.checkId(p,function(d){
+    hideLoader();
+    if(!d||!d.ok){ toast((d&&d.error)||'Could not verify ID','red'); return; }
+    if(d.exists){
+      wipe(cur()); wipe(p);
+      try{ if(window.ZCache)window.ZCache.clearAll(); }catch(e){}
+      try{ sessionStorage.clear(); }catch(e){}
+      localStorage.setItem('app_panel',p);
+      showLoader('Fetching '+REG[p].label+' data…');
+      location.reload();
+    } else {
+      openNoId(p,d);
+    }
+  });
+}
+
 /* ═══ SWITCHER PILL ═══ */
 function mountSwitcher(){
-  var host=document.getElementById('panelSwitch'); if(!host)return;
+  var host=document.getElementById('panelSwitch'); if(!host||host._m)return; host._m=true;
   host.innerHTML=Object.keys(REG).map(function(k){
     return '<button data-p="'+k+'" class="'+(k===cur()?'on':'')+'" style="--pg:'+REG[k].grad+'">'+REG[k].label+'</button>';
   }).join('');
   host.addEventListener('click',function(e){
     var b=e.target.closest('button[data-p]'); if(!b)return;
-    var p=b.getAttribute('data-p'); if(p===cur())return;
-    if(p==='evs'&&!window.EVS_READY){ toast('EVS panel coming soon','gold'); return; }
-    wipe(cur()); wipe(p);                       // clear BOTH panels' pc_ caches
-    try{ if(window.ZCache) window.ZCache.clearAll(); }catch(e){}   // kill zc_ data caches
-    try{ sessionStorage.clear(); }catch(e){}                       // kill view/number restore
-    localStorage.setItem('app_panel', p);
-    location.reload();                          // clean boot on the new panel                         // clean boot on the new panel
+    switchTo(b.getAttribute('data-p'));
   });
 }
 /* ═══ FEATURE GATES (data-pf="cli" / "withdrawal") ═══ */
@@ -77,14 +167,14 @@ function applyGates(){
   document.body.setAttribute('data-panel', cur());
 }
 
-/* ═══ ADD MODAL — LaMix: your old flow · Zyron/EVS: search→request ═══ */
+/* ═══ ADD MODAL — LaMix: old flow · Zyron/EVS: search→request ═══ */
 var _selRange=null;
 function openAdd(){
   if(isLamix()){ if(window.openAddLamix)window.openAddLamix(); return; }
   var ov=document.getElementById('pzAddOv');
   if(!ov){
     ov=document.createElement('div'); ov.id='pzAddOv'; ov.className='pz-ov';
-    ov.innerHTML='<div class="pz-card"><button class="pz-x" data-a="x">✕</button>'
+    ov.innerHTML='<div class="pz-card"><button class="pz-x">✕</button>'
       +'<div class="pz-t">Add Ranges — '+esc(label())+'</div>'
       +'<input class="pz-inp" id="pzQ" placeholder="Type range / country… e.g. Afghanistan" autocomplete="off">'
       +'<div class="pz-list" id="pzList"></div>'
@@ -184,6 +274,10 @@ function openAlloc(){
 }
 
 /* ═══ INIT ═══ */
-document.addEventListener('DOMContentLoaded',function(){ mountSwitcher(); applyGates(); });
-window.PANEL={ cur:cur, label:label, isLamix:isLamix, features:features, api:api, store:store, read:read, wipe:wipe, isFree:isFree, openAdd:openAdd, mountAllocBar:mountAllocBar, toast:toast, applyGates:applyGates, esc:esc };
+document.addEventListener('DOMContentLoaded',function(){
+  mountSwitcher(); applyGates();
+  var lb=document.getElementById('linkBtn'); if(lb) lb.onclick=doLink;
+  var ub=document.getElementById('unlinkBtn'); if(ub) ub.onclick=doUnlink;
+});
+window.PANEL={ cur:cur, label:label, isLamix:isLamix, features:features, api:api, store:store, read:read, wipe:wipe, isFree:isFree, openAdd:openAdd, mountAllocBar:mountAllocBar, toast:toast, applyGates:applyGates, esc:esc, switchTo:switchTo };
 })();
