@@ -55,11 +55,9 @@
         </div>
     </div>
 
-    <div class="header-right">
-        <!-- ═══ PANEL SWITCHER PILL (LaMix / Zyron / EVS) ═══ -->
-        <div class="panel-switch" id="panelSwitch"></div>
-
-        <button class="bell-btn" id="bellBtn" onclick="openNotifPanel()" aria-label="Notifications">
+   <div class="header-right">
+            <button class="panel-pill" id="panelPill" onclick="openDrawer()" title="Switch panel">LM</button>
+            <button class="bell-btn" id="bellBtn" onclick="openNotifPanel()" aria-label="Notifications">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
             <span class="bell-badge" id="bellBadge" style="display:none">0</span>
         </button>
@@ -354,6 +352,7 @@
     <div class="zdrawer-user-name" id="drawerUsername">User</div>
     <div id="drawerRolePill" style="margin-top:6px"></div>
   </div>
+  <div class="panel-switch" id="panelSwitch"></div>
     <!-- ═══ PANEL SWITCHER (LaMix / Zyron / EVS) ═══ -->
   <div class="panel-switch" id="panelSwitch"></div>
   <div class="zdrawer-sec">
