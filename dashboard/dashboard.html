@@ -45,30 +45,35 @@
 </head>
 <body>
 <header class="header">
-        <div class="header-left">
-            <button class="hamburger" onclick="openDrawer()" aria-label="Menu">
-                <span></span><span></span><span></span>
-            </button>
-            <div class="logo">
-                <img src="/branding/logo-dark.png" class="header-logo-svg header-logo-dark" alt="Logo">
-                <img src="/branding/logo-light.png" class="header-logo-svg header-logo-light" alt="Logo">
-            </div>
+    <div class="header-left">
+        <button class="hamburger" onclick="openDrawer()" aria-label="Menu">
+            <span></span><span></span><span></span>
+        </button>
+        <div class="logo">
+            <img src="/branding/logo-dark.png" class="header-logo-svg header-logo-dark" alt="Logo">
+            <img src="/branding/logo-light.png" class="header-logo-svg header-logo-light" alt="Logo">
         </div>
-       <div class="header-right">
-            <button class="bell-btn" id="bellBtn" onclick="openNotifPanel()" aria-label="Notifications">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
-              <span class="bell-badge" id="bellBadge" style="display:none">0</span>
-            </button>
-            <div class="profile-wrap">
-                <div class="profile-btn" onclick="openDrawer()">
-                    <div class="profile-avatar" id="profileAvatar">US</div>
-                    <div class="profile-text">
-                        <span class="profile-name" id="profileName">User</span>
-                    </div>
+    </div>
+
+    <div class="header-right">
+        <!-- ═══ PANEL SWITCHER PILL (LaMix / Zyron / EVS) ═══ -->
+        <div class="panel-switch" id="panelSwitch"></div>
+
+        <button class="bell-btn" id="bellBtn" onclick="openNotifPanel()" aria-label="Notifications">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            <span class="bell-badge" id="bellBadge" style="display:none">0</span>
+        </button>
+
+        <div class="profile-wrap">
+            <div class="profile-btn" onclick="openDrawer()">
+                <div class="profile-avatar" id="profileAvatar">US</div>
+                <div class="profile-text">
+                    <span class="profile-name" id="profileName">User</span>
                 </div>
             </div>
         </div>
-    </header>
+    </div>
+</header>
 
     <div class="app">
         <div class="container">
@@ -992,6 +997,21 @@ window.addEventListener('DOMContentLoaded', function(){
   setInterval(function(){ if(!document.hidden) load(false); }, 60000);
 })();
 </script>
+
+   <div class="pz-ov" id="noIdOv">
+  <div class="pz-card">
+    <button class="pz-x" onclick="closeNoIdPopup()">✕</button>
+    <div class="pz-t" id="noIdTitle">No ID on panel</div>
+    <div class="pz-body" id="noIdMsg" style="font-size:.76rem;color:var(--muted);line-height:1.5;margin:6px 0 4px"></div>
+    <a class="pz-wa" href="https://wa.me/qr/4M2BZRDAFE6DJ1" target="_blank" rel="noopener">💬 WhatsApp admin to create ID</a>
+    <div class="pz-link-box">
+      <div class="pz-sub">Have a different ID on this panel? Link it (must match exactly):</div>
+      <input class="pz-inp" id="linkInput" placeholder="Your exact ID on this panel">
+      <button class="pz-btn" id="linkBtn">Link ID</button>
+      <button class="pz-btn ghost" id="unlinkBtn" style="display:none">Unlink</button>
+    </div>
+  </div>
+</div> 
 </body>
     
 </html>
