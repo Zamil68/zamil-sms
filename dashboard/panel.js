@@ -90,6 +90,8 @@ var api = {
   leaderboard:function(r,cb){ isLamix() ? post('/api/leaderboard',{range:r},cb) : post('/api/p/leaderboard',{panel:cur(),range:r},cb); },
   earn:      function(cb){ isLamix() ? post('/api/earn/compute',{},cb)   : post('/api/p/earn/compute',{panel:cur()},cb); },
   addSearch: function(q,cb){ isLamix() ? post('/api/alloc/search-ranges',{query:q},cb) : post('/api/p/ranges-search',{panel:cur(),query:q},cb); },
+  freeRanges: function(cb){ post('/api/p/free-ranges',{panel:cur()},cb); },
+  freeNumbers: function(r,cb){ post('/api/p/free-numbers',{panel:cur(),rangeTitle:r.range},cb); },
   addExec:   function(o,cb){ isLamix() ? post('/api/alloc/allocate',o,cb) : post('/api/p/request-range',Object.assign({panel:cur()},o),cb); },
   allocateNumbers: function(o,cb){ post('/api/p/allocate-numbers',Object.assign({panel:cur()},o),cb); },
   clients:   function(cb){ isLamix() ? post('/api/clients/list',{},cb)   : post('/api/p/clients',{panel:cur()},cb); },
@@ -244,68 +246,73 @@ function openAddModal(){
     ov=document.createElement('div'); ov.id='pzAddOv'; ov.className='pz-ov';
     ov.innerHTML='<div class="pz-card"><button class="pz-x">✕</button>'
       +'<div class="pz-t">Allocate Numbers — '+esc(label())+'</div>'
-      +'<input class="pz-inp" id="pzQ" placeholder="Search country / range… e.g. tun" autocomplete="off">'
+      +'<input class="pz-inp" id="pzQ" placeholder="Filter country / range… (optional)" autocomplete="off">'
       +'<div class="pz-list" id="pzList"></div>'
-      +'<div id="pzForm" style="display:none">'
+      +'<div id="pzNumsWrap" style="display:none">'
         +'<div class="pz-res ok" id="pzSelInfo" style="display:none;margin:0 0 8px"></div>'
-        +'<div class="pz-frow"><div><label>Quantity</label><input class="pz-inp" type="number" id="pzQty" value="5" min="1"></div>'
+        +'<div class="pz-frow"><div><label>How many? (auto-ticks)</label><input class="pz-inp" type="number" id="pzQty" value="5" min="1"></div>'
         +'<div><label>Payterm</label><select id="pzPt">'+PAYTERMS.map(function(p){return '<option value="'+p[0]+'"'+(p[0]==='9'?' selected':'')+'>'+p[1]+'</option>';}).join('')+'</select></div></div>'
-        +'<div class="pz-frow"><div><label>Payout (USD)</label><input class="pz-inp" type="number" id="pzPay" step="0.0001" value="0.01"></div>'
+        +'<div id="pzNums" style="max-height:170px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:4px;font-family:ui-monospace,monospace;font-size:.72rem;margin-bottom:8px"></div>'
+        +'<div class="pz-frow"><div><label>Payout</label><input class="pz-inp" type="number" id="pzPay" step="0.0001" value="0.01"></div>'
         +'<div id="pzClWrap" style="display:none"><label>Allocate to</label><select id="pzCl" class="pz-inp"></select></div></div>'
         +'<button class="pz-btn" id="pzGo">Allocate Numbers</button></div>'
       +'<div class="pz-res" id="pzRes" style="display:none"></div></div>';
     document.body.appendChild(ov); bindAdd(ov);
   }
   ov.classList.add('show');
-  ov.querySelector('#pzQ').value=''; ov.querySelector('#pzList').innerHTML='';
-  ov.querySelector('#pzForm').style.display='none'; ov.querySelector('#pzRes').style.display='none';
+  ov.querySelector('#pzQ').value=''; ov.querySelector('#pzNumsWrap').style.display='none'; ov.querySelector('#pzRes').style.display='none';
+  ov.querySelector('#pzList').innerHTML='<div class="pz-res">Loading free ranges…</div>';
+  api.freeRanges(function(d){ ov._all=(d&&d.ranges)||[]; pzFilter(ov,''); });
   post('/api/auth/role',{},function(d){
     var role=(d&&d.role)||'none';
-    var wrap=ov.querySelector('#pzClWrap');
-    if(role==='super'||role==='admin'){
-      wrap.style.display='block';
-      api.clients(function(cd){
-        ov.querySelector('#pzCl').innerHTML=((cd&&cd.clients)||[]).map(function(c){return '<option value="'+esc(c.username)+'">'+esc(c.username)+'</option>';}).join('');
-      });
-    } else wrap.style.display='none';
+    if(role==='super'||role==='admin'){ ov.querySelector('#pzClWrap').style.display='block';
+      api.clients(function(cd){ ov.querySelector('#pzCl').innerHTML=((cd&&cd.clients)||[]).map(function(c){return '<option value="'+esc(c.username)+'">'+esc(c.username)+'</option>';}).join(''); });
+    } else ov.querySelector('#pzClWrap').style.display='none';
   });
   setTimeout(function(){ov.querySelector('#pzQ').focus();},80);
+}
+function pzFilter(ov,q){ /* local only */
+  q=(q||'').toLowerCase().replace(/\s+/g,'');
+  var list=(ov._all||[]).filter(function(r){ if(!q) return true; var hay=((r.country||'')+' '+(r.range||'')).toLowerCase().replace(/\s+/g,''); return hay.indexOf(q)>=0; });
+  var L=ov.querySelector('#pzList');
+  if(!list.length){ L.innerHTML='<div class="pz-res err">No free ranges.</div>'; return; }
+  L.innerHTML=list.slice(0,40).map(function(r){ return '<div class="pz-row"><div class="nm">'+(r.flag||'')+' '+esc(r.country)+' — '+esc(r.range)+'</div><span class="rt" style="color:var(--green)">'+r.available+' free</span><button data-range="'+esc(r.range)+'" data-avail="'+r.available+'">Select</button></div>'; }).join('');
+}
+function pzAutoTick(ov){
+  var n=Math.max(0,parseInt(ov.querySelector('#pzQty').value)||0);
+  var cbs=ov.querySelectorAll('.pz-cb');
+  for(var i=0;i<cbs.length;i++) cbs[i].checked = i<n;
 }
 function bindAdd(ov){
   ov.querySelector('.pz-x').onclick=function(){ov.classList.remove('show');};
   ov.addEventListener('click',function(e){ if(e.target===ov)ov.classList.remove('show'); });
-  var tm=null;
-  ov.querySelector('#pzQ').addEventListener('input',function(){
-    clearTimeout(tm); var v=this.value.trim();
-    if(v.length<2){ov.querySelector('#pzList').innerHTML='';return;}
-    tm=setTimeout(function(){
-      api.addSearch(v,function(d){
-        var L=ov.querySelector('#pzList');
-        if(!d||!d.ok||!d.ranges||!d.ranges.length){ L.innerHTML='<div class="pz-res err">No free numbers match "'+esc(v)+'".</div>'; return; }
-        L.innerHTML=d.ranges.slice(0,30).map(function(r){
-          return '<div class="pz-row"><div class="nm">'+(r.flag||'')+' '+esc(r.country)+' — '+esc(r.range)+'</div><span class="rt" style="color:var(--green)">'+r.available+' free</span><button data-range="'+esc(r.range)+'" data-country="'+esc(r.country)+'" data-avail="'+r.available+'">Select</button></div>';
-        }).join('');
-      });
-    },350);
-  });
+  ov.querySelector('#pzQ').addEventListener('input',function(){ pzFilter(ov,this.value.trim()); }); // local, no API
+  ov.querySelector('#pzQty').addEventListener('input',function(){ pzAutoTick(ov); });
   ov.querySelector('#pzList').addEventListener('click',function(e){
     var b=e.target.closest('button[data-range]'); if(!b)return;
-    _selRange={range:b.getAttribute('data-range'),country:b.getAttribute('data-country')};
+    _selRange={range:b.getAttribute('data-range')};
     var avail=parseInt(b.getAttribute('data-avail'))||1;
-    var info=ov.querySelector('#pzSelInfo'); info.style.display='block';
-    info.textContent=_selRange.country+' — '+_selRange.range+' · '+avail+' free (unallocated)';
-    var q=ov.querySelector('#pzQty'); q.value=Math.min(5,avail); q.max=avail;
-    ov.querySelector('#pzForm').style.display='block';
-    ov.querySelector('#pzRes').style.display='none';
+    var info=ov.querySelector('#pzSelInfo'); info.style.display='block'; info.textContent=_selRange.range+' · '+avail+' free';
+    ov.querySelector('#pzNumsWrap').style.display='block';
+    var N=ov.querySelector('#pzNums'); N.innerHTML='Loading…';
+    api.freeNumbers(_selRange,function(d){
+      var nums=(d&&d.numbers)||[];
+      if(!nums.length){ N.innerHTML='No free numbers.'; return; }
+      N.innerHTML=nums.slice(0,300).map(function(n){ return '<label style="display:flex;gap:6px;align-items:center"><input type="checkbox" class="pz-cb" value="'+esc(n.id)+'"> '+esc(n.number)+'</label>'; }).join('');
+      var q=ov.querySelector('#pzQty'); q.value=Math.min(parseInt(q.value)||5,nums.length); q.max=nums.length;
+      pzAutoTick(ov);
+    });
   });
   ov.querySelector('#pzGo').onclick=function(){
-    if(!_selRange)return;
+    var cbs=[].slice.call(ov.querySelectorAll('.pz-cb:checked'));
+    if(!cbs.length||!_selRange){ var R=ov.querySelector('#pzRes'); R.style.display='block'; R.className='pz-res err'; R.textContent='Enter how many numbers.'; return; }
     var btn=this; btn.disabled=true; btn.textContent='Allocating…';
     var cs=ov.querySelector('#pzCl');
-    api.addExec({ rangeTitle:_selRange.range, country:_selRange.country, qty:parseInt(ov.querySelector('#pzQty').value)||1, payterm:ov.querySelector('#pzPt').value, payout:parseFloat(ov.querySelector('#pzPay').value)||0.01, client:(cs&&cs.value)||'' }, function(d){
+    api.allocateNumbers({ ids:cbs.map(function(c){return c.value;}), client:(cs&&cs.value)||'', payterm:ov.querySelector('#pzPt').value, payout:parseFloat(ov.querySelector('#pzPay').value)||0.01, rangeTitle:_selRange.range }, function(d){
       btn.disabled=false; btn.textContent='Allocate Numbers';
       var R=ov.querySelector('#pzRes'); R.style.display='block';
-      if(d&&d.allocatedReal>0){ R.className='pz-res ok'; R.textContent='✅ '+d.allocatedReal+' numbers allocated to '+d.client+'.'; toast(d.allocatedReal+' numbers allocated','green'); }
+      if(d&&d.limitReached){ R.className='pz-res err'; R.textContent='🚫 '+d.message; return; }
+      if(d&&(d.allocatedReal>0||d.wellDone||d.okAlloc)){ R.className='pz-res ok'; R.textContent='✅ '+(d.allocatedReal||cbs.length)+' numbers allocated to '+d.client+'.'; if(window.loadRanges) setTimeout(function(){loadRanges(true);},900); }
       else { R.className='pz-res err'; R.textContent='⚠️ '+((d&&d.message)||(d&&d._server)||'Allocation failed.'); }
     });
   };
