@@ -1348,8 +1348,10 @@ if (req.body && req.body.session) {
           if (toks.length > 1 && toks.every(t => hay.includes(t))) return true;
           return false;
         });
-        const withAvail = filtered.filter(r => r.available > 0);
-        const result = withAvail.length ? withAvail : filtered; // always show the country (free first; else "not available" rows)
+       const scope = String(req.body.scope || 'mine');
+     if (scope === 'company' && !isAdminish(await getRole(user.username))) return error(res, 403, 'Company ranges are super-admin only.');
+     const withAvail = filtered.filter(r => r.available > 0);
+     const result = (scope === 'company') ? filtered : withAvail; // normal users only see ranges with FREE numbers
         const _debug = { query, qns, src: _src, totalMapped: mapped.length, rangesFound: filtered.length, withAvailable: withAvail.length, returned: result.length };
         if (result.length) _asCache.set(query, { ts: now, ranges: result, _debug });
         return ok(res, { ranges: result, _debug });
@@ -1925,7 +1927,20 @@ const r = await fetch(`${SUPABASE_URL}/rest/v1/alloc_events?username=${encodeURI
       const qtyCtl     = findCtl(/qty|quantity|each/i);
       const payoutCtl  = findCtl(/payout|price|rate/i);
 
-      const clientValue = String(user.clientId || '');
+      let clientValue = String(user.clientId || '');
+   const wantClient = String(req.body.clientId || '').trim();
+   if (wantClient && wantClient !== clientValue) {
+     const _r2 = await getRole(user.username);
+     if (!isAdminish(_r2)) return error(res, 403, 'You can only allocate numbers to yourself.');
+     const all = await getCachedClients(false);
+     const target = all.find(c => String(c.id) === wantClient || c.username.toLowerCase() === wantClient.toLowerCase());
+     if (!target) return error(res, 404, 'Client not found.');
+     if (_r2 !== 'super') {
+       const myPrefixes = prefixesFor(_r2, user.username, await supaGetPrefixes());
+       if (!myPrefixes.some(p => p.prefix && target.username.indexOf(p.prefix) === 0)) return error(res, 403, 'You can only allocate to your own team.');
+     }
+     clientValue = String(target.id);
+   }
 
       // payterm: never empty
       let paytermValue = '';
