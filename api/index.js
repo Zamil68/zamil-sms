@@ -2875,17 +2875,26 @@ if (url === '/notifs/list' && req.method === 'POST') {
   try {
     const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
     const role = await getRole(user.username);
-    if (!supaEnabled()) return ok(res, { notifs: [], role });
+    if (!supaEnabled()) return ok(res, { notifs: [], role, unread: 0 });
     const un = user.username.toLowerCase();
     const H = { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY };
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/app_notifs?or=${encodeURIComponent('(target.eq.*,target.eq.' + un + ')')}&order=created_at.desc&limit=30&select=*`, { headers: H });
-    const notifs = (await r.json()) || [];
-    const rr = await fetch(`${SUPABASE_URL}/rest/v1/app_notif_reads?select=username,notif_id`, { headers: H });
-    const reads = (await r.json()) || [];
+    let notifs = [];
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/app_notifs?or=${encodeURIComponent('(target.eq.*,target.eq.' + un + ')')}&order=created_at.desc&limit=30&select=*`, { headers: H });
+      const j = await r.json();
+      if (Array.isArray(j)) notifs = j;
+    } catch (e) {}
+    let reads = [];
+    try {
+      const rr = await fetch(`${SUPABASE_URL}/rest/v1/app_notif_reads?select=username,notif_id`, { headers: H });
+      const j2 = await rr.json();
+      if (Array.isArray(j2)) reads = j2;
+    } catch (e) {}
     const byNotif = {}; const mine = new Set();
     reads.forEach(x => { (byNotif[x.notif_id] = byNotif[x.notif_id] || []).push(x.username); if (x.username === un) mine.add(x.notif_id); });
-    return ok(res, { role, notifs: notifs.map(n => ({ id: n.id, type: n.type || 'info', title: n.title || '', body: n.body || '', at: n.created_at, by: n.created_by || '', read: mine.has(n.id), readBy: byNotif[n.id] || [] })) });
-  } catch (e) { return ok(res, { notifs: [], role: 'none' }); }
+    const list = notifs.map(n => ({ id: n.id, type: n.type || 'info', title: n.title || '', body: n.body || '', at: n.created_at, by: n.created_by || '', read: mine.has(n.id), readBy: byNotif[n.id] || [] }));
+    return ok(res, { role, notifs: list, unread: list.filter(n => !n.read).length });
+  } catch (e) { return ok(res, { notifs: [], role: 'none', unread: 0 }); }
 }
 if (url === '/notifs/mark-read' && req.method === 'POST') {
   try {
