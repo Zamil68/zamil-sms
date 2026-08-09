@@ -3125,27 +3125,29 @@ if (url === '/p/ranges-search' && req.method === 'POST') {
     const key = String(req.body.panel||'').toLowerCase();
     const P = PANELS[key]; if (!P || !P.base) return error(res, 400, 'Unknown panel');
     const query = String(req.body.query||'').toLowerCase().replace(/[\s\u00a0\u200b-\u200d\ufeff]+/g,' ').trim();
-    const role = await getRole(user.username);
-    const use = await getPanelDailyUse(user.username, key);
-    const data = await scrapePanel(key, 'res/data_smsranges.php', { sEcho:1, iColumns:10, iDisplayStart:0, iDisplayLength:5000, sSearch:'', bRegex:false, iSortCol_0:0, sSortDir_0:'asc', iSortingCols:1 }, P.base + 'SMSRanges');
-    let cat = parsePanelRangeCatalog(data);
+    const qns = query.replace(/\s+/g,'');
+    // ✅ ONLY My SMS Numbers with EMPTY client column (unallocated) — grouped by range
+    const data = await scrapePanel(key, 'res/data_smsnumbers.php', { frange:'', fclient:'', sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
+    const free = parsePanelNumbers(key, data).filter(n => isAvailableClient(n.client));
+    const map = new Map();
+    free.forEach(n => {
+      const country = n.country || _countryOfRange(n.range);
+      const k = country + ' -- ' + n.range;
+      if (!map.has(k)) map.set(k, { id: norm(country+'|'+n.range), range: n.range, country, flag: countryFlag(country), available: 0 });
+      map.get(k).available++;
+    });
+    let list = Array.from(map.values());
     if (query) {
-      const qns = query.replace(/\s+/g,'');
-      cat = cat.filter(r => {
-        const hay = (r.country + ' ' + r.range + ' ' + r.prefix).toLowerCase();
+      list = list.filter(r => {
+        const hay = (r.country + ' ' + r.range).toLowerCase();
         if (hay.includes(query) || hay.replace(/\s+/g,'').includes(qns)) return true;
         const toks = query.split(/\s+/).filter(Boolean);
         return toks.length > 1 && toks.every(t => hay.includes(t));
       });
     }
-    const ranges = cat.slice(0, 60).map(r => {
-      const rk = norm(r.country + '|' + r.range);
-      const used = use.byRange[rk] || 0;
-      const remaining = isAdminish(role) ? 999 : Math.max(0, P.limits.perRange - used);
-      return Object.assign({}, r, { id: rk, usedToday: used, remaining, rangesUsedToday: use.ranges.size, rangesLimit: isAdminish(role) ? 999 : P.limits.rangesPerDay });
-    });
-    return ok(res, { panel: key, ranges, total: cat.length });
-  } catch(e){ return error(res, 500, 'p/ranges-search: '+e.message); }
+    list.sort((a,b) => b.available - a.available);
+    return ok(res, { panel: key, ranges: list.slice(0, 60), total: list.length });
+  } catch (e) { return error(res, 500, 'p/ranges-search: ' + e.message); }
 }
 // ═══ PANEL ADD: request numbers (exact panel flow + shows panel's real answer) ═══
 if (url === '/p/request-range' && req.method === 'POST') {
@@ -3153,36 +3155,35 @@ if (url === '/p/request-range' && req.method === 'POST') {
     const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
     const key = String(req.body.panel||'').toLowerCase();
     const P = PANELS[key]; if (!P || !P.base) return error(res, 400, 'Unknown panel');
-    const role = await getRole(user.username);
-    const rid = String(req.body.rid||'').trim();
-    const qty = Math.max(1, parseInt(req.body.qty)||5);
-    const payterm = String(req.body.payterm||'2');
-    const rangeTitle = String(req.body.rangeTitle||'');
-    const rk = norm(String(req.body.country||_countryOfRange(rangeTitle)) + '|' + rangeTitle) || ('rid_'+rid);
-    if (!rid) return error(res, 400, 'Range ID missing — search again.');
-    // ── strict daily caps (admins exempt) ──
-    if (!isAdminish(role) && supaEnabled()) {
-      const use = await getPanelDailyUse(user.username, key);
-      const used = use.byRange[rk] || 0;
-      if (used + qty > P.limits.perRange) return ok(res, { limitReached:true, capType:'range', used, limit:P.limits.perRange, message:`${P.label}: max ${P.limits.perRange} numbers per range per day (already ${used}).` });
-      if (!use.ranges.has(rk) && use.ranges.size >= P.limits.rangesPerDay) return ok(res, { limitReached:true, capType:'ranges', used:use.ranges.size, limit:P.limits.rangesPerDay, message:`${P.label}: max ${P.limits.rangesPerDay} ranges per day.` });
+    const qty = Math.max(1, parseInt(req.body.qty || req.body.quantity) || 1);
+    const payterm = String(req.body.payterm || '9');            // default Monthly60
+    const payout = parseFloat(req.body.payout) || 0.01;         // default 0.01
+    const rangeTitle = String(req.body.rangeTitle||'').trim();
+    if (!rangeTitle) return error(res, 400, 'rangeTitle required');
+    const cmap = await getPanelClientMap(key);
+    let clientName = String(req.body.client||'').trim();
+    let clientId = clientName ? cmap[clientName.toLowerCase()] : null;
+    if (clientName && !clientId) return error(res, 400, 'Client "'+clientName+'" not found in '+P.label+'.');
+    if (!clientId) {                                             // → the user himself, automatically
+      const pc = await panelClientFor(user.username, key);
+      if (!pc) return error(res, 400, 'No ID on '+P.label+' — link one first.');
+      clientName = pc.client; clientId = cmap[clientName.toLowerCase()];
     }
-    // ── POST exactly like the panel modal ──
-    const body = new URLSearchParams({ rid, payterm, qty: String(qty) }).toString();
-    const postIt = () => axios.post(P.base + 'res/requestsmsnumberfinal.php', body, {
-      headers: Object.assign({}, panelHeaders(key, P.base + 'SMSRanges'), { 'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8', 'Origin': new URL(P.base).origin }),
-      transformRequest:[(d)=>d], maxRedirects:5, validateStatus:()=>true, timeout:25000 });
-    let resp = '', st = null;
-    try { let r = await postIt(); if (looksLikeLogin(r.data)) { await ensurePanelSession(key, true); r = await postIt(); } st = r.status; resp = String(typeof r.data==='string'?r.data:JSON.stringify(r.data||'')); }
-    catch(e){ return error(res, 500, P.label+' request failed: '+(e.code||e.message)); }
-    // ── parse panel answer: green = success (+numbers), anything else = show their message ──
-    const plain = resp.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
-    const isOk = /color=['"]?green/i.test(resp) || /allocated to your account successfully/i.test(plain);
-    const nums = (plain.match(/Numbers\s+([\d,\s]+?)\s+allocated/i) || [])[1];
-    const numbers = nums ? nums.split(',').map(s=>s.trim()).filter(Boolean) : [];
-    if (isOk && supaEnabled()) await supaInsertEvent({ username:user.username, country:_countryOfRange(rangeTitle), range_id:rk, range_title:rangeTitle, qty: numbers.length || qty, panel:key });
-    return ok(res, { allocated: isOk, numbers, count: numbers.length || (isOk?qty:0), message: plain.slice(0,300), status: st, panel: P.label });
-  } catch(e){ return error(res, 500, 'p/request-range: '+e.message); }
+    if (!clientId) return error(res, 400, 'Client not mapped.');
+    // mark N unallocated numbers from that range
+    const data = await scrapePanel(key, 'res/data_smsnumbers.php', { frange:'', fclient:'', sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
+    const rt = rangeTitle.toLowerCase();
+    const freeIds = parsePanelNumbers(key, data).filter(n => isAvailableClient(n.client) && (n.range||'').toLowerCase().includes(rt)).map(n => n.id).filter(Boolean);
+    if (!freeIds.length) return error(res, 400, 'No free numbers in '+rangeTitle+'.');
+    const ids = freeIds.slice(0, qty);
+    // exact panel allocate form (your screenshot): allocateall + cbarr + client + payterm + payout
+    const body = new URLSearchParams({ action:'allocateall', cbarr: ids.join(','), client: clientId, payterm, payout: String(payout), frange:'', fclient:'' }).toString();
+    const postIt = () => axios.post(P.base+'MySMSNumbers', body, { headers: Object.assign({}, panelHeaders(key, P.base+'MySMSNumbers'), { 'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8', 'Origin': new URL(P.base).origin }), transformRequest:[(d)=>d], maxRedirects:5, validateStatus:()=>true, timeout:20000 });
+    let st = null, resp = '';
+    try { let r = await postIt(); if (looksLikeLogin(r.data)) { await ensurePanelSession(key, true); r = await postIt(); } st = r.status; resp = String(typeof r.data==='string'?r.data:JSON.stringify(r.data)); } catch(e){ return error(res, 500, P.label+' request failed: '+(e.code||e.message)); }
+    const wellDone = /Well\s*Done![\s\S]*Allocated/i.test(resp);
+    return ok(res, { panel:key, allocated: ids.length, allocatedReal: wellDone ? ids.length : 0, wellDone, client: clientName, clientId, status: st, message: wellDone ? 'Allocated '+ids.length+' numbers to '+clientName : 'Panel did not confirm.', _server: resp.replace(/\s+/g,' ').slice(0,160) });
+  } catch (e) { return error(res, 500, 'p/request-range: ' + e.message); }
 }
 // ═══ PANEL EARNINGS (70% / full-rate engine, panel's own CDR + rates, linked-ID aware) ═══
 if (url === '/p/earn/compute' && req.method === 'POST') {
