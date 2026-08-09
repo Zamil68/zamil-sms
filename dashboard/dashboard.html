@@ -948,7 +948,7 @@ window.addEventListener('DOMContentLoaded', function(){
     }).join('');
   }
   function load(markRead){
-    npost('/notifs/list',{},function(d){
+    npost('/api/notifs/list',{},function(d){
       _role=(d&&d.role)||'none';
       _items=(d&&d.notifs)||[];
       badge(_items.filter(function(n){return !n.read;}).length);
@@ -956,7 +956,7 @@ window.addEventListener('DOMContentLoaded', function(){
       var comp=document.getElementById('notifCompose'); if(comp) comp.style.display=(_role==='super')?'block':'none';
       if(markRead){
         var ids=_items.filter(function(n){return !n.read;}).map(function(n){return n.id;});
-        if(ids.length) npost('/notifs/mark-read',{ids:ids},function(){ _items.forEach(function(n){n.read=true;}); badge(0); render(); });
+        if(ids.length) npost('/api/notifs/mark-read',{ids:ids},function(){ _items.forEach(function(n){n.read=true;}); badge(0); render(); });
       }
     });
   }
@@ -967,7 +967,7 @@ window.addEventListener('DOMContentLoaded', function(){
     if(target==='user'){ target=(document.getElementById('ncUser').value||'').trim(); if(!target){ toastMsg('Enter a username','red'); return; } }
     var body=(document.getElementById('ncBody').value||'').trim();
     if(!body){ toastMsg('Write a message first','red'); return; }
-    npost('/notifs/send',{target:target,type:document.getElementById('ncType').value,title:document.getElementById('ncTitle').value.trim(),body:body},function(d){
+    npost('/api/notifs/send',{target:target,type:document.getElementById('ncType').value,title:document.getElementById('ncTitle').value.trim(),body:body},function(d){
       if(d&&d.ok){ document.getElementById('ncBody').value=''; document.getElementById('ncTitle').value=''; toastMsg('Notification sent','green'); load(false); }
       else toastMsg((d&&d.error)||'Failed to send','red');
     });
@@ -976,7 +976,7 @@ window.addEventListener('DOMContentLoaded', function(){
     var b=e.target.closest('[data-del]'); if(!b)return;
     var id=b.getAttribute('data-del');
     if(!confirm('Delete this notification for everyone?'))return;
-    npost('/notifs/delete',{id:id},function(d){ if(d&&d.ok){ toastMsg('Notification deleted','green'); load(false);} });
+    npost('/api/notifs/delete',{id:id},function(d){ if(d&&d.ok){ toastMsg('Notification deleted','green'); load(false);} });
   });
   load(false);
   setInterval(function(){ if(!document.hidden) load(false); },60000);
