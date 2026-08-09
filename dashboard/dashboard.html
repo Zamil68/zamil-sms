@@ -150,6 +150,22 @@
         <div id="aClientInfo" class="alloc-client-info">Verifying...</div>
     </div>
 
+    <!-- ═══ ALLOCATE NUMBERS TO USER (all users) ═══ -->
+    <div class="alloc-card" id="allocUserCard">
+      <div class="alloc-card-title"><span class="alloc-step">1</span> Allocate Numbers <span class="badge" id="auCount" style="margin-left:auto">…</span></div>
+      <div id="auRangeList"><div class="empty"><div class="spinner"></div></div></div>
+      <div id="auForm" style="display:none">
+        <div class="alloc-client-info" id="auSelInfo" style="margin-bottom:10px"></div>
+        <div class="alloc-field"><label>Quantity (1–25)</label><input type="number" id="auQty" class="alloc-input" value="5" min="1" max="25"></div>
+        <div class="alloc-field" id="auClientField" style="display:none"><label>Allocate to</label><select id="auClient" class="alloc-input"></select></div>
+        <button class="btn btn-primary" id="auBtn" style="width:100%">Allocate Numbers</button>
+        <div id="auResult" class="alloc-result"></div>
+      </div>
+    </div>
+
+    <!-- ═══ SUPER ONLY: add ranges from company ═══ -->
+    <div id="companyFlow" style="display:none">
+    <button class="btn btn-ghost" style="width:100%;margin-bottom:10px" onclick="var c=document.getElementById('aSearchCard');c.style.display='block';this.style.display='none'">🏢 Search &amp; add company ranges</button>
     <div id="aSearchCard" class="alloc-card" style="display:none">
         <div class="alloc-card-title"><span class="alloc-step">2</span> Search Ranges</div>
         <div class="alloc-search-row">
@@ -174,8 +190,9 @@
                 Allocate Numbers
             </button>
         </div>
-        <div id="aAllocResult" class="alloc-result"></div>
+       <div id="aAllocResult" class="alloc-result"></div>
     </div>
+    </div><!-- /companyFlow -->
 </div>
 
             <!-- LEADERBOARD PAGE -->
@@ -996,6 +1013,69 @@ window.addEventListener('DOMContentLoaded', function(){
     </div>
   </div>
 </div> 
+
+<script>
+/* ═══ ADD v2: allocate-to-user (everyone) + company flow (super only) ═══ */
+(function(){
+  var _auRanges=[], _auSel=null;
+  function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded',fn); }
+  function sess(){ return localStorage.getItem('app_session'); }
+  function post(url,body,cb){ fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({session:sess()},body||{}))}).then(function(r){return r.json().catch(function(){return{ok:false};});}).then(cb).catch(function(){cb({ok:false});}); }
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function auLoad(){
+    var list=document.getElementById('auRangeList'); if(!list) return;
+    list.innerHTML='<div class="empty"><div class="spinner"></div></div>';
+    post('/api/alloc/search-ranges',{scope:'mine',query:''},function(d){
+      _auRanges=(d&&d.ranges)||[];
+      var c=document.getElementById('auCount'); if(c) c.textContent=_auRanges.length;
+      if(!_auRanges.length){ list.innerHTML='<div class="empty">No ranges with free numbers right now.<br>Ask your admin to add ranges.</div>'; return; }
+      list.innerHTML=_auRanges.map(function(r,i){
+        return '<div class="alloc-range-item" data-i="'+i+'"><div><div class="alloc-range-name">'+esc(r.country)+' — '+esc(r.title)+'</div><div class="alloc-range-id">'+esc(r.id)+'</div></div><span class="avail-ok">'+r.available+' free</span></div>';
+      }).join('');
+    });
+  }
+  function auAllocate(){
+    if(!_auSel) return;
+    var btn=document.getElementById('auBtn'); btn.disabled=true; btn.textContent='Allocating…';
+    var body={ rangeId:_auSel.id, rangeTitle:_auSel.title, quantity:parseInt(document.getElementById('auQty').value)||1, payout:0.01 };
+    var cf=document.getElementById('auClient'); if(cf && cf.value) body.clientId=cf.value;
+    post('/api/alloc/allocate',body,function(d){
+      btn.disabled=false; btn.textContent='Allocate Numbers';
+      var R=document.getElementById('auResult'); R.style.display='block';
+      if(d&&(d.allocatedReal>0||d.reason==='ALLOCATED_OK')){ R.className='alloc-result ok'; R.textContent='✅ Allocated '+(d.allocatedReal||body.quantity)+' numbers.'; auLoad(); }
+      else if(d&&d.limitReached){ R.className='alloc-result err'; R.textContent='🚫 '+d.message; }
+      else { R.className='alloc-result err'; R.textContent='⚠️ '+((d&&d.message)||(d&&d._server)||'Allocation failed.'); }
+    });
+  }
+  ready(function(){
+    post('/api/auth/role',{},function(d){
+      var role=(d&&d.role)||'none';
+      var isAdmin=(role==='super'||role==='admin');
+      var cf=document.getElementById('companyFlow'); if(cf) cf.style.display=(role==='super')?'block':'none';
+      if(isAdmin){
+        var f=document.getElementById('auClientField'); if(f) f.style.display='block';
+        post('/api/admin/my-clients',{},function(d){
+          var sel=document.getElementById('auClient'); if(!sel) return;
+          var opts=[]; ((d&&d.teams)||[]).forEach(function(t){ (t.clients||[]).forEach(function(c){ opts.push({id:c.id,u:c.username}); }); });
+          sel.innerHTML=opts.map(function(o){ return '<option value="'+esc(o.id)+'">'+esc(o.u)+'</option>'; }).join('');
+        });
+      }
+    });
+    document.addEventListener('click',function(e){
+      var it=e.target.closest('#auRangeList .alloc-range-item'); if(!it) return;
+      var r=_auRanges[parseInt(it.getAttribute('data-i'))]; if(!r) return;
+      _auSel=r;
+      document.getElementById('auForm').style.display='block';
+      document.getElementById('auSelInfo').textContent=r.country+' — '+r.title+' ('+r.available+' free)';
+      var q=document.getElementById('auQty'); q.value=Math.min(5,r.available||5); q.max=Math.min(25,r.available||25);
+    });
+    var b=document.getElementById('auBtn'); if(b) b.addEventListener('click',auAllocate);
+    function hook(){ if(typeof window.bnSwitch==='function' && !window.bnSwitch._au){ var _b=window.bnSwitch; window.bnSwitch=function(p){ if(p==='add') setTimeout(auLoad,300); return _b.apply(this,arguments); }; window.bnSwitch._au=1; } }
+    ready(hook); setTimeout(hook,1500); setTimeout(hook,3000);
+  });
+})();
+</script>
+    
 </body>
     
 </html>
