@@ -243,17 +243,33 @@ function openAddModal(){
   if(!ov){
     ov=document.createElement('div'); ov.id='pzAddOv'; ov.className='pz-ov';
     ov.innerHTML='<div class="pz-card"><button class="pz-x">✕</button>'
-      +'<div class="pz-t">Add Ranges — '+esc(label())+'</div>'
-      +'<input class="pz-inp" id="pzQ" placeholder="Type range / country… e.g. Afghanistan" autocomplete="off">'
+      +'<div class="pz-t">Allocate Numbers — '+esc(label())+'</div>'
+      +'<input class="pz-inp" id="pzQ" placeholder="Search country / range… e.g. tun" autocomplete="off">'
       +'<div class="pz-list" id="pzList"></div>'
-      +'<div id="pzForm" style="display:none"><div class="pz-frow"><div><label>Quantity</label><select id="pzQty"></select></div><div><label>Payterm</label><select id="pzPt">'+PAYTERMS.map(function(p){return '<option value="'+p[0]+'">'+p[1]+'</option>';}).join('')+'</select></div></div>'
-      +'<button class="pz-btn" id="pzGo">Request Numbers</button></div>'
+      +'<div id="pzForm" style="display:none">'
+        +'<div class="pz-res ok" id="pzSelInfo" style="display:none;margin:0 0 8px"></div>'
+        +'<div class="pz-frow"><div><label>Quantity</label><input class="pz-inp" type="number" id="pzQty" value="5" min="1"></div>'
+        +'<div><label>Payterm</label><select id="pzPt">'+PAYTERMS.map(function(p){return '<option value="'+p[0]+'"'+(p[0]==='9'?' selected':'')+'>'+p[1]+'</option>';}).join('')+'</select></div></div>'
+        +'<div class="pz-frow"><div><label>Payout (USD)</label><input class="pz-inp" type="number" id="pzPay" step="0.0001" value="0.01"></div>'
+        +'<div id="pzClWrap" style="display:none"><label>Allocate to</label><select id="pzCl" class="pz-inp"></select></div></div>'
+        +'<button class="pz-btn" id="pzGo">Allocate Numbers</button></div>'
       +'<div class="pz-res" id="pzRes" style="display:none"></div></div>';
     document.body.appendChild(ov); bindAdd(ov);
   }
   ov.classList.add('show');
-  var q=ov.querySelector('#pzQ'); q.value=''; ov.querySelector('#pzList').innerHTML=''; ov.querySelector('#pzForm').style.display='none'; ov.querySelector('#pzRes').style.display='none';
-  setTimeout(function(){q.focus();},80);
+  ov.querySelector('#pzQ').value=''; ov.querySelector('#pzList').innerHTML='';
+  ov.querySelector('#pzForm').style.display='none'; ov.querySelector('#pzRes').style.display='none';
+  post('/api/auth/role',{},function(d){
+    var role=(d&&d.role)||'none';
+    var wrap=ov.querySelector('#pzClWrap');
+    if(role==='super'||role==='admin'){
+      wrap.style.display='block';
+      api.clients(function(cd){
+        ov.querySelector('#pzCl').innerHTML=((cd&&cd.clients)||[]).map(function(c){return '<option value="'+esc(c.username)+'">'+esc(c.username)+'</option>';}).join('');
+      });
+    } else wrap.style.display='none';
+  });
+  setTimeout(function(){ov.querySelector('#pzQ').focus();},80);
 }
 function bindAdd(ov){
   ov.querySelector('.pz-x').onclick=function(){ov.classList.remove('show');};
@@ -265,37 +281,35 @@ function bindAdd(ov){
     tm=setTimeout(function(){
       api.addSearch(v,function(d){
         var L=ov.querySelector('#pzList');
-        if(!d||!d.ok||!d.ranges||!d.ranges.length){ L.innerHTML='<div class="pz-res err">No matching ranges on '+esc(label())+'.</div>'; return; }
-        L.innerHTML=d.ranges.slice(0,20).map(function(r){
-          var left=(r.remaining==null?999:r.remaining);
-          return '<div class="pz-row"><div class="nm">'+esc(r.country)+' — '+esc(r.range)+'</div><div class="rt">$'+(r.p11||0)+'</div><div class="rm">'+left+'/day left</div><button data-rid="'+esc(r.rid)+'" data-range="'+esc(r.range)+'" data-country="'+esc(r.country)+'" data-left="'+left+'" '+(left<=0?'disabled':'')+'>Request</button></div>';
+        if(!d||!d.ok||!d.ranges||!d.ranges.length){ L.innerHTML='<div class="pz-res err">No free numbers match "'+esc(v)+'".</div>'; return; }
+        L.innerHTML=d.ranges.slice(0,30).map(function(r){
+          return '<div class="pz-row"><div class="nm">'+(r.flag||'')+' '+esc(r.country)+' — '+esc(r.range)+'</div><span class="rt" style="color:var(--green)">'+r.available+' free</span><button data-range="'+esc(r.range)+'" data-country="'+esc(r.country)+'" data-avail="'+r.available+'">Select</button></div>';
         }).join('');
       });
     },350);
   });
   ov.querySelector('#pzList').addEventListener('click',function(e){
-    var b=e.target.closest('button[data-rid]'); if(!b||b.disabled)return;
-    _selRange={rid:b.getAttribute('data-rid'),range:b.getAttribute('data-range'),country:b.getAttribute('data-country')};
-    var left=parseInt(b.getAttribute('data-left'))||10;
-    var qs=[5,10,15,20,25,30,40,50,60,80,100].filter(function(n){return n<=left;});
-    if(!qs.length)qs=[Math.max(1,left)];
-    ov.querySelector('#pzQty').innerHTML=qs.map(function(n){return '<option value="'+n+'">'+n+'</option>';}).join('');
+    var b=e.target.closest('button[data-range]'); if(!b)return;
+    _selRange={range:b.getAttribute('data-range'),country:b.getAttribute('data-country')};
+    var avail=parseInt(b.getAttribute('data-avail'))||1;
+    var info=ov.querySelector('#pzSelInfo'); info.style.display='block';
+    info.textContent=_selRange.country+' — '+_selRange.range+' · '+avail+' free (unallocated)';
+    var q=ov.querySelector('#pzQty'); q.value=Math.min(5,avail); q.max=avail;
     ov.querySelector('#pzForm').style.display='block';
     ov.querySelector('#pzRes').style.display='none';
   });
   ov.querySelector('#pzGo').onclick=function(){
     if(!_selRange)return;
-    var btn=this; btn.disabled=true; btn.textContent='Requesting…';
-    api.addExec({ rid:_selRange.rid, rangeTitle:_selRange.range, country:_selRange.country, qty:parseInt(ov.querySelector('#pzQty').value)||5, payterm:ov.querySelector('#pzPt').value }, function(d){
-      btn.disabled=false; btn.textContent='Request Numbers';
+    var btn=this; btn.disabled=true; btn.textContent='Allocating…';
+    var cs=ov.querySelector('#pzCl');
+    api.addExec({ rangeTitle:_selRange.range, country:_selRange.country, qty:parseInt(ov.querySelector('#pzQty').value)||1, payterm:ov.querySelector('#pzPt').value, payout:parseFloat(ov.querySelector('#pzPay').value)||0.01, client:(cs&&cs.value)||'' }, function(d){
+      btn.disabled=false; btn.textContent='Allocate Numbers';
       var R=ov.querySelector('#pzRes'); R.style.display='block';
-      if(d&&d.limitReached){ R.className='pz-res err'; R.textContent='🚫 '+d.message; return; }
-      if(d&&d.allocated){ R.className='pz-res ok'; R.textContent='✅ '+(d.count||0)+' numbers allocated on '+label()+'. '+(d.message||'')+(d.numbers&&d.numbers.length?(' — first: '+d.numbers.slice(0,6).join(', ')+(d.numbers.length>6?'…':'')):''); toast((d.count||0)+' numbers requested','green'); }
-      else { R.className='pz-res err'; R.textContent='⚠️ '+((d&&d.message)||'Panel did not allocate — limit or no stock.'); }
+      if(d&&d.allocatedReal>0){ R.className='pz-res ok'; R.textContent='✅ '+d.allocatedReal+' numbers allocated to '+d.client+'.'; toast(d.allocatedReal+' numbers allocated','green'); }
+      else { R.className='pz-res err'; R.textContent='⚠️ '+((d&&d.message)||(d&&d._server)||'Allocation failed.'); }
     });
   };
 }
-
 /* ═══ CHECKBOX → ALLOCATE BAR (Zyron/EVS numbers page) ═══ */
 function mountAllocBar(){
   if(isLamix()||document.getElementById('pzAllocBar'))return;
