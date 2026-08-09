@@ -232,6 +232,13 @@ function applyGates(){
 var _selRange=null;
 function openAdd(){
   if(isLamix()){ if(window.openAddLamix)window.openAddLamix(); return; }
+  post('/api/auth/role',{},function(d){
+    var r=(d&&d.role)||'none';
+    if(r!=='super'){ toast('Open a range → tick numbers → Allocate','gold'); if(typeof bnSwitch==='function') bnSwitch('ranges'); return; }
+    openAddModal();
+  });
+}
+function openAddModal(){
   var ov=document.getElementById('pzAddOv');
   if(!ov){
     ov=document.createElement('div'); ov.id='pzAddOv'; ov.className='pz-ov';
