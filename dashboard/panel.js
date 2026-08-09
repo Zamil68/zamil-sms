@@ -50,6 +50,21 @@ function scopeZCacheToPanel(){
 }
 
 /* ═══ 🔁 FORCE FRESH FETCH after a switch-reload (kills the "must click Refresh" bug) ═══ */
+/* panel-owned SMS counter refresh — always paints the ACTIVE panel's count */
+function refreshPanelSms(){
+  try{
+    if(!sess()) return;
+    var u = isLamix() ? '/api/smscount' : '/api/p/smscount';
+    var b = isLamix() ? {} : { panel: cur() };
+    post(u, b, function(d){
+      if(!d || !d.ok || d.count==null) return;
+      var c = d.count;
+      ['smsBigNum','rangesOtpToday','bnSmsCount','smsMiniNum'].forEach(function(id){
+        var el=document.getElementById(id); if(el) el.textContent=c;
+      });
+    });
+  }catch(e){}
+}
 function scheduleForceRefresh(){
   try{
     var f = parseInt(localStorage.getItem('pz_force')||'0',10);
@@ -59,7 +74,7 @@ function scheduleForceRefresh(){
       setTimeout(function(){
         try{
           if(typeof window.loadRanges==='function') window.loadRanges(true);
-          if(typeof window.silentSmsRefresh==='function') window.silentSmsRefresh(true);
+          refreshPanelSms();
         }catch(e){}
       },t);
     });
@@ -329,7 +344,9 @@ document.addEventListener('DOMContentLoaded',function(){
   mountPill(); mountSwitcher(); applyGates();
   var lb=document.getElementById('linkBtn'); if(lb) lb.onclick=doLink;
   var ub=document.getElementById('unlinkBtn'); if(ub) ub.onclick=doUnlink;
-  scheduleForceRefresh();                     // 🔁 auto-refresh right after a switch
+  scheduleForceRefresh();
+  setTimeout(refreshPanelSms, 600);
+  setInterval(refreshPanelSms, 20000);
 });
 window.PANEL={ cur:cur, label:label, isLamix:isLamix, features:features, api:api, store:store, read:read, wipe:wipe, isFree:isFree, openAdd:openAdd, mountAllocBar:mountAllocBar, toast:toast, applyGates:applyGates, esc:esc, switchTo:switchTo, paintPill:paintPill };
 })();
