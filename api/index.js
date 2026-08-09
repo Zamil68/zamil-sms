@@ -1038,6 +1038,39 @@ async function getPanelDailyUse(username, key){
   } catch(e){ return { byRange:{}, ranges:new Set() }; }
 }
 
+// ═══ PANEL CLIENT RESOLUTION (exact match → manual link) ═══
+let _panelClientsCache = {};
+async function getPanelClientsCached(key, force){
+  const P = PANELS[key]; if (!P || !P.base) return [];
+  const c = _panelClientsCache[key];
+  if (!force && c && c.list && (Date.now()-c.ts) < 60000) return c.list;
+  const data = await scrapePanel(key, 'res/data_clients.php', { sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:1000, sSearch:'' });
+  let list = [];
+  if (data && data.aaData) list = data.aaData.map(r => String(r[1]||'').replace(/<[^>]*>/g,'').trim()).filter(Boolean);
+  _panelClientsCache[key] = { ts: Date.now(), list };
+  return list;
+}
+async function supaGetLink(username, panel){
+  if (!supaEnabled()) return null;
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/panel_links?username=eq.${encodeURIComponent(username.toLowerCase())}&panel=eq.${panel}&select=*&limit=1`, { headers:{ 'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY } });
+    const rows = await r.json();
+    return (Array.isArray(rows) && rows[0]) ? rows[0] : null;
+  } catch(e){ return null; }
+}
+async function panelClientFor(username, panel){
+  const clients = await getPanelClientsCached(panel);
+  const low = String(username||'').toLowerCase();
+  const exact = clients.find(c => c.toLowerCase() === low);
+  if (exact) return { client: exact, source: 'exact' };
+  const link = await supaGetLink(username, panel);
+  if (link && link.panel_client) {
+    const m = clients.find(c => c.toLowerCase() === String(link.panel_client).toLowerCase());
+    if (m) return { client: m, source: 'linked' };
+  }
+  return null;
+}
+
 module.exports = async (req, res) => {
 if (req.method === 'OPTIONS') return res.status(200).json({ ...corsHeaders });
 const url = req.url.replace(/^\/api/, '');
@@ -2912,9 +2945,11 @@ if (url === '/p/ranges' && req.method === 'POST') {
     const role = await getRole(user.username);
     const data = await scrapePanel(key, 'res/data_smsnumbers.php', { frange:'', fclient:'', sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
     let nums = parsePanelNumbers(key, data);
+    const pc = await panelClientFor(user.username, key);
     if (!isAdminish(role)) {
-      const t1=(user.clientName||'').toLowerCase().trim(), t2=(user.username||'').toLowerCase().trim();
-      nums = nums.filter(n => { const c=(n.client||'').toLowerCase().trim(); return c && (c===t1||c===t2||c.includes(t1)||c.includes(t2)); });
+      if (!pc) return ok(res, { panel:key, noId:true, numbers:[], ranges:[] });
+      const t1=(pc.client||'').toLowerCase().trim();
+      nums = nums.filter(n => { const c=(n.client||'').toLowerCase().trim(); return c && (c===t1||c.includes(t1)); });
     }
     const m = new Map();
     nums.forEach(n => {
@@ -2932,9 +2967,11 @@ if (url === '/p/numbers' && req.method === 'POST') {
     const role = await getRole(user.username);
     const data = await scrapePanel(key, 'res/data_smsnumbers.php', { frange:'', fclient:'', sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
     let nums = parsePanelNumbers(key, data);
+    const pc = await panelClientFor(user.username, key);
     if (!isAdminish(role)) {
-      const t1=(user.clientName||'').toLowerCase().trim(), t2=(user.username||'').toLowerCase().trim();
-      nums = nums.filter(n => { const c=(n.client||'').toLowerCase().trim(); return c && (c===t1||c===t2||c.includes(t1)||c.includes(t2)); });
+      if (!pc) return ok(res, { panel:key, noId:true, numbers:[], ranges:[] });
+      const t1=(pc.client||'').toLowerCase().trim();
+      nums = nums.filter(n => { const c=(n.client||'').toLowerCase().trim(); return c && (c===t1||c.includes(t1)); });
     }
     const reqTitle = String(req.body.rangeTitle||'').toLowerCase().trim();
     if (reqTitle) nums = nums.filter(n => { const r=(n.range||'').toLowerCase().trim(); return r.includes(reqTitle)||reqTitle.includes(r); });
@@ -2952,8 +2989,10 @@ if (url === '/p/smscount-range' && req.method === 'POST') {
     if (range==='week'){ from=dayBack(6)+' 00:00:00'; to=today+' 23:59:59'; }
     else if (range==='month'){ from=dayBack(29)+' 00:00:00'; to=today+' 23:59:59'; }
     const rows = await getPanelCachedCDR(key, from, to, range==='today'?5000:60000);
-    const t1=(user.clientName||'').toLowerCase().trim(), t2=(user.username||'').toLowerCase().trim();
-    const mine = rows.filter(r => { const c=(r.client||'').toLowerCase().trim(); return c && (c===t1||c===t2||c.includes(t1)||c.includes(t2)); });
+    const pc = await panelClientFor(user.username, key);
+    if (!pc && !isAdminish(await getRole(user.username))) return ok(res, { panel:key, noId:true, count:0, recent:[], byNumber:{}, byRange:{} });
+    const t1=((pc?pc.client:user.clientName)||'').toLowerCase().trim();
+    const mine = rows.filter(r => { const c=(r.client||'').toLowerCase().trim(); return c && (c===t1||c.includes(t1)); });
     const byNumber={}, byRange={};
     mine.forEach(r => { const n=(r.number||'').replace(/[^0-9]/g,''); if(n) byNumber[n]=(byNumber[n]||0)+1; if(r.range) byRange[r.range]=(byRange[r.range]||0)+1; });
     return ok(res, { panel:key, count: mine.length, byNumber, byRange });
@@ -3101,18 +3140,20 @@ if (url === '/p/request-range' && req.method === 'POST') {
     return ok(res, { allocated: isOk, numbers, count: numbers.length || (isOk?qty:0), message: plain.slice(0,300), status: st, panel: P.label });
   } catch(e){ return error(res, 500, 'p/request-range: '+e.message); }
 }
-// ═══ PANEL EARNINGS (same 70% / full-rate engine, panel's own CDR + rates) ═══
+// ═══ PANEL EARNINGS (70% / full-rate engine, panel's own CDR + rates, linked-ID aware) ═══
 if (url === '/p/earn/compute' && req.method === 'POST') {
   try {
     const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
     const key = String(req.body.panel||'').toLowerCase();
     const P = PANELS[key]; if (!P || !P.base) return error(res, 400, 'Unknown panel');
+    const _pc = await panelClientFor(user.username, key);
+    if (!_pc && !isAdminish(await getRole(user.username))) return ok(res, { panel:key, noId:true, me:{userNet:0,gross:0,perRange:{}}, perRange:[], leaderboard:[], pool:{grossTotal:0,userNetTotal:0} });
     const rc = await loadPanelRateMap(key, false);
     const deductions = await loadDeductions(false);
     const bd = businessDayPKT();
     const rows = await getPanelCachedCDR(key, bd.from, bd.to, 60000);
-    const my1 = String(user.clientName||'').toLowerCase().trim();
-    const my2 = String(user.username||'').toLowerCase().trim();
+    const my1 = String(_pc ? _pc.client : (user.clientName||'')).toLowerCase().trim();
+    const my2 = String(_pc ? _pc.client : (user.username||'')).toLowerCase().trim();
     const me = { userNet:0, gross:0, perRange:{} }; const board = {};
     let grossTotal = 0, userNetTotal = 0;
     (rows||[]).forEach(r => {
@@ -3144,15 +3185,16 @@ if (url === '/p/earn/compute' && req.method === 'POST') {
       pool: { grossTotal: rnd(grossTotal), userNetTotal: rnd(userNetTotal) } });
   } catch(e){ return error(res, 500, 'p/earn/compute: '+e.message); }
 }
-
   // ═══ PANEL: inbox / leaderboard / clients (Zyron & EVS) ═══
 if (url === '/p/smscount' && req.method === 'POST') {
   const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
   const key = String(req.body.panel||'').toLowerCase(); const P = PANELS[key]; if (!P || !P.base) return error(res, 400, 'Unknown panel');
   const bd = businessDayPKT();
   const rows = await getPanelCachedCDR(key, bd.from, bd.to, 5000);
-  const t1 = (user.clientName||'').toLowerCase().trim(), t2 = (user.username||'').toLowerCase().trim();
-  let mine = rows.filter(r => { const c=(r.client||'').toLowerCase().trim(); return c && (c===t1||c===t2||c.includes(t1)||c.includes(t2)); });
+  const pc = await panelClientFor(user.username, key);
+    if (!pc && !isAdminish(await getRole(user.username))) return ok(res, { panel:key, noId:true, count:0, recent:[], byNumber:{}, byRange:{} });
+    const t1=((pc?pc.client:user.clientName)||'').toLowerCase().trim();
+    const mine = rows.filter(r => { const c=(r.client||'').toLowerCase().trim(); return c && (c===t1||c.includes(t1)); });
   const num = String(req.body.number||'').replace(/[^0-9]/g,'');
   if (num) mine = mine.filter(r => { const n=(r.number||'').replace(/[^0-9]/g,''); return n===num||n.endsWith(num)||num.endsWith(n); });
   mine.sort((a,b)=>b.datetime.localeCompare(a.datetime));
@@ -3287,6 +3329,39 @@ if (url === '/p/limit-status' && req.method === 'POST') {
     rows.forEach(x=>{ const rk=x.range_id||x.range_title||'Unknown'; if(!byRange[rk]) byRange[rk]={rangeId:x.range_id||'',rangeTitle:x.range_title||rk,country:x.country||'',count:0,ids:[]}; byRange[rk].count++; byRange[rk].ids.push(x.id); const ck=x.country||'Unknown'; if(!byCountry[ck]) byCountry[ck]={country:ck,count:0,ids:[]}; byCountry[ck].count++; byCountry[ck].ids.push(x.id); });
     return ok(res, { username:target, panel:key, ranges:Object.values(byRange).filter(o=>o.count>=RANGE_CAP), countries:Object.values(byCountry).filter(o=>o.count>=COUNTRY_CAP) });
   } catch(e){ return error(res, 500, 'p/limit-status: '+e.message); }
+}
+
+if (url === '/p/check-id' && req.method === 'POST') {
+  try {
+    const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+    const key = String(req.body.panel||'').toLowerCase(); const P = PANELS[key]; if (!P || !P.base) return error(res, 400, 'Unknown panel');
+    const pc = await panelClientFor(user.username, key);
+    const link = await supaGetLink(user.username, key);
+    return ok(res, { panel:key, exists:!!pc, client:pc?pc.client:'', source:pc?pc.source:'', linked:!!link, linkedClient:link?link.panel_client:'' });
+  } catch(e){ return error(res, 500, 'check-id: '+e.message); }
+}
+if (url === '/p/link-set' && req.method === 'POST') {
+  try {
+    const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+    const key = String(req.body.panel||'').toLowerCase(); const P = PANELS[key]; if (!P || !P.base) return error(res, 400, 'Unknown panel');
+    const want = String(req.body.panelClient||'').trim();
+    if (!want) return error(res, 400, 'Enter your exact ID on this panel');
+    const clients = await getPanelClientsCached(key, true);
+    const m = clients.find(c => c.toLowerCase() === want.toLowerCase());
+    if (!m) return error(res, 400, 'ID "'+want+'" not found in '+P.label+'. It must match exactly.');
+    if (!supaEnabled()) return error(res, 400, 'Supabase required.');
+    await fetch(`${SUPABASE_URL}/rest/v1/panel_links`, { method:'POST', headers:{ 'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ username:user.username.toLowerCase(), panel:key, panel_client:m, linked_by:user.username, created_at:new Date().toISOString() }) });
+    return ok(res, { linked:true, client:m });
+  } catch(e){ return error(res, 500, 'link-set: '+e.message); }
+}
+if (url === '/p/link-del' && req.method === 'POST') {
+  try {
+    const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+    const key = String(req.body.panel||'').toLowerCase();
+    if (!supaEnabled()) return error(res, 400, 'Supabase required.');
+    await fetch(`${SUPABASE_URL}/rest/v1/panel_links?username=eq.${encodeURIComponent(user.username.toLowerCase())}&panel=eq.${key}`, { method:'DELETE', headers:{ 'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY } });
+    return ok(res, { unlinked:true });
+  } catch(e){ return error(res, 500, 'link-del: '+e.message); }
 }
   
  return error(res, 404, 'Route not found');
