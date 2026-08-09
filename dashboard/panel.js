@@ -1,4 +1,4 @@
-/* ═══ panel.js — Zamil SMS multi-panel engine (LaMix / Zyron / EVS) — FULL FINAL v4 ═══ */
+/* ═══ panel.js v5 — Zamil SMS multi-panel engine (LaMix / Zyron / EVS) — FULL ═══ */
 (function(){
 'use strict';
 var REG = {
@@ -6,7 +6,7 @@ var REG = {
   zyron: { label:'Zyron', short:'ZY', grad:'linear-gradient(135deg,#38bdf8,#6366f1)' },
   evs:   { label:'EVS',   short:'EV', grad:'linear-gradient(135deg,#fb923c,#ef4444)' }
 };
-window.EVS_READY = window.EVS_READY || false;   // flip true when EVS_BASE env is live
+window.EVS_READY = window.EVS_READY || false;
 var WA_LINK = 'https://wa.me/qr/4M2BZRDAFE6DJ1';
 var PAYTERMS = [['1','Daily'],['2','Weekly'],['3','Weekly7'],['4','BiWeekly'],['5','BiWeekly30'],['6','Monthly15'],['7','Monthly30'],['8','Monthly45'],['9','Monthly60']];
 
@@ -24,20 +24,46 @@ function post(url, body, cb){
     .then(function(d){ cb(d); })
     .catch(function(e){ clearTimeout(t); cb({ ok:false, error: e.name==='AbortError' ? 'Timed out — try again' : 'Network error' }); });
 }
-/* per-panel localStorage (auto-prefixed → switching never shows stale data) */
 function store(k,v){ try{ localStorage.setItem('pc_'+cur()+'_'+k, JSON.stringify(v)); }catch(e){} }
 function read(k){ try{ var s = localStorage.getItem('pc_'+cur()+'_'+k); return s ? JSON.parse(s) : null; }catch(e){ return null; } }
 function wipe(p){ var pre='pc_'+p+'_'; Object.keys(localStorage).forEach(function(k){ if(k.indexOf(pre)===0) localStorage.removeItem(k); }); }
 
-/* ═══ LOADER (universal dashboard overlay) ═══ */
 function showLoader(msg){ var ov=document.getElementById('loadingOverlay'), lt=document.getElementById('loadingText'); if(lt)lt.textContent=msg||'Loading…'; if(ov)ov.classList.add('show'); }
 function hideLoader(){ var ov=document.getElementById('loadingOverlay'); if(ov)ov.classList.remove('show'); }
 
-/* ═══ FULL CACHE KILL (zc_ + pc_ + sessionStorage + ownership tag) ═══ */
+/* ═══ FULL CACHE KILL ═══ */
 function killAllCaches(){
   try{ if(window.ZCache) window.ZCache.clearAll(); }catch(e){}
   try{ sessionStorage.clear(); }catch(e){}
   wipe('lamix'); wipe('zyron'); wipe('evs');
+}
+
+/* ═══ 🔑 PANEL-SCOPED ZCache — LaMix cache can NEVER paint on Zyron (and vice versa) ═══ */
+function scopeZCacheToPanel(){
+  try{
+    if(window.ZCache && !window.ZCache._pzScoped){
+      var _orig = window.ZCache._key;
+      window.ZCache._key = function(name){ return _orig.call(window.ZCache, cur() + '__' + name); };
+      window.ZCache._pzScoped = true;
+    }
+  }catch(e){}
+}
+
+/* ═══ 🔁 FORCE FRESH FETCH after a switch-reload (kills the "must click Refresh" bug) ═══ */
+function scheduleForceRefresh(){
+  try{
+    var f = parseInt(localStorage.getItem('pz_force')||'0',10);
+    if(!f || (Date.now()-f) > 20000) return;
+    localStorage.removeItem('pz_force');
+    [400,1800,4000].forEach(function(t){
+      setTimeout(function(){
+        try{
+          if(typeof window.loadRanges==='function') window.loadRanges(true);
+          if(typeof window.silentSmsRefresh==='function') window.silentSmsRefresh(true);
+        }catch(e){}
+      },t);
+    });
+  }catch(e){}
 }
 
 /* ═══ UNIFIED DATA API ═══ */
@@ -67,7 +93,7 @@ function toast(msg,color){
   t.classList.add('show'); if(_tT)clearTimeout(_tT); _tT=setTimeout(function(){t.classList.remove('show');},3200);
 }
 
-/* ═══ NO-ID POPUP (WhatsApp + manual link + unlink) ═══ */
+/* ═══ NO-ID POPUP ═══ */
 function buildNoIdOv(){
   var ov=document.getElementById('noIdOv');
   if(ov) return ov;
@@ -96,7 +122,7 @@ function openNoId(p,d){
   ov.classList.add('show');
 }
 window.closeNoIdPopup=function(){ var ov=document.getElementById('noIdOv'); if(ov)ov.classList.remove('show'); };
-window.openNoIdPopup=openNoId;   // panel-bridge calls this on any noId response
+window.openNoIdPopup=openNoId;
 
 function doLink(){
   var ov=document.getElementById('noIdOv'); if(!ov)return;
@@ -111,6 +137,7 @@ function doLink(){
       killAllCaches();
       localStorage.setItem('app_panel',p);
       localStorage.setItem('zc_panel',p);
+      localStorage.setItem('pz_force',String(Date.now()));
       showLoader('Fetching '+REG[p].label+' data…');
       setTimeout(function(){ location.reload(); },300);
     } else toast((d&&d.error)||'Link failed','red');
@@ -122,20 +149,19 @@ function doUnlink(){
   api.linkDel(p,function(d){ if(d&&d.ok){ toast('Unlinked','green'); var ub=document.getElementById('unlinkBtn'); if(ub)ub.style.display='none'; } });
 }
 
-/* ═══ SWITCH FLOW (ID check → wipe → fresh load) ═══ */
+/* ═══ SWITCH FLOW ═══ */
 function switchTo(p){
   if(p===cur()) return;
   if(p==='evs'&&!window.EVS_READY){ toast('EVS panel coming soon','gold'); return; }
-  // LaMix: direct switch
   if(p==='lamix'){
     killAllCaches();
     localStorage.setItem('app_panel',p);
     localStorage.setItem('zc_panel',p);
+    localStorage.setItem('pz_force',String(Date.now()));
     showLoader('Fetching LaMix data…');
     location.reload();
     return;
   }
-  // Zyron/EVS: verify ID first
   showLoader('Checking your ID on '+REG[p].label+'…');
   api.checkId(p,function(d){
     hideLoader();
@@ -144,6 +170,7 @@ function switchTo(p){
       killAllCaches();
       localStorage.setItem('app_panel',p);
       localStorage.setItem('zc_panel',p);
+      localStorage.setItem('pz_force',String(Date.now()));
       paintPill();
       showLoader('Fetching '+REG[p].label+' data…');
       location.reload();
@@ -153,7 +180,7 @@ function switchTo(p){
   });
 }
 
-/* ═══ HEADER PILL (tiny LM/ZY/EV indicator — tap opens drawer) ═══ */
+/* ═══ HEADER PILL ═══ */
 function paintPill(){
   var pill=document.getElementById('panelPill'); if(!pill)return;
   pill.textContent=REG[cur()].short;
@@ -166,7 +193,7 @@ function mountPill(){
   paintPill();
 }
 
-/* ═══ DRAWER SWITCHER (full LaMix/Zyron/EVS buttons) ═══ */
+/* ═══ DRAWER SWITCHER ═══ */
 function mountSwitcher(){
   var host=document.getElementById('panelSwitch'); if(!host||host._m)return; host._m=true;
   host.innerHTML=Object.keys(REG).map(function(k){
@@ -177,7 +204,8 @@ function mountSwitcher(){
     switchTo(b.getAttribute('data-p'));
   });
 }
-/* ═══ FEATURE GATES (data-pf="cli" / "withdrawal") ═══ */
+
+/* ═══ FEATURE GATES ═══ */
 function applyGates(){
   var f=features();
   var els=document.querySelectorAll('[data-pf]');
@@ -293,7 +321,7 @@ function openAlloc(){
 
 /* ═══ INIT ═══ */
 document.addEventListener('DOMContentLoaded',function(){
-  /* cache-ownership guard: if stored caches belong to another panel, kill them NOW */
+  scopeZCacheToPanel();                       // 🔑 caches become panel-specific
   try{
     var owner=localStorage.getItem('zc_panel');
     if(owner!==cur()){ if(window.ZCache)window.ZCache.clearAll(); localStorage.setItem('zc_panel',cur()); }
@@ -301,6 +329,7 @@ document.addEventListener('DOMContentLoaded',function(){
   mountPill(); mountSwitcher(); applyGates();
   var lb=document.getElementById('linkBtn'); if(lb) lb.onclick=doLink;
   var ub=document.getElementById('unlinkBtn'); if(ub) ub.onclick=doUnlink;
+  scheduleForceRefresh();                     // 🔁 auto-refresh right after a switch
 });
 window.PANEL={ cur:cur, label:label, isLamix:isLamix, features:features, api:api, store:store, read:read, wipe:wipe, isFree:isFree, openAdd:openAdd, mountAllocBar:mountAllocBar, toast:toast, applyGates:applyGates, esc:esc, switchTo:switchTo, paintPill:paintPill };
 })();
