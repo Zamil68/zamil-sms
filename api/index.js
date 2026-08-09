@@ -1288,8 +1288,10 @@ if (req.body && req.body.session) {
     }
 
     // 6. SEARCH RANGES (real ids + available counts)
-      if (url === '/alloc/search-ranges' && req.method === 'POST') {
-      // Self-contained caches on globalThis — idempotent, no separate declaration needed.
+     if (url === '/alloc/search-ranges' && req.method === 'POST') {
+   const user = getUserFromSession(req.body.session);
+   if (!user) return error(res, 401, 'Unauthorized');
+   // Self-contained caches on globalThis — idempotent, no separate declaration needed.
       // opts = range-id map (the SLOW part, cached 10 min); full = mapped range list (cached 30s).
       globalThis._ac = globalThis._ac || { opts: null, optsTs: 0, full: null, fullTs: 0 };
       const AC = globalThis._ac;
@@ -3080,7 +3082,9 @@ if (url === '/p/allocate-numbers' && req.method === 'POST') {
     const role = await getRole(user.username);
     const ids = (Array.isArray(req.body.ids)?req.body.ids:String(req.body.ids||'').split(',')).map(x=>String(x).trim()).filter(Boolean);
     if (!ids.length) return error(res, 400, 'Select at least one number');
-    const clientName = String(req.body.client||'').trim();
+    let clientName = String(req.body.client||'').trim();
+if (!clientName) { const _pc = await panelClientFor(user.username, key); if (_pc) clientName = _pc.client; }
+if (!clientName) return error(res, 400, 'No client ID on '+P.label+' — link one first.');
     const payterm = String(req.body.payterm||'2');
     const payout = parseFloat(req.body.payout)||0.01;
     const rangeTitle = String(req.body.rangeTitle||''); const rangeId = norm(rangeTitle);
@@ -3105,10 +3109,12 @@ if (url === '/p/allocate-numbers' && req.method === 'POST') {
     const postIt = () => axios.post(P.base+'MySMSNumbers', body, { headers: Object.assign({}, panelHeaders(key, P.base+'MySMSNumbers'), { 'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8', 'Origin': new URL(P.base).origin }), transformRequest:[(d)=>d], maxRedirects:5, validateStatus:()=>true, timeout:20000 });
     let st = null, resp = '';
     try { let r = await postIt(); if (looksLikeLogin(r.data)) { await ensurePanelSession(key, true); r = await postIt(); } st = r.status; resp = String(typeof r.data==='string'?r.data:JSON.stringify(r.data)); } catch(e){ return error(res, 500, P.label+' request failed: '+(e.code||e.message)); }
-    const after = parsePanelNumbers(key, await scrapePanel(key, 'res/data_smsnumbers.php', NP)).length;
-    const allocatedReal = Math.max(0, after - before);
-    if (allocatedReal > 0 && supaEnabled()) await supaInsertEvent({ username:user.username, country:_countryOfRange(rangeTitle), range_id:rangeId, range_title:rangeTitle, qty:ids.length, panel:key });
-    return ok(res, { allocated: ids.length, allocatedReal, before, after, client:clientName, clientId, status:st, _server: resp.replace(/\s+/g,' ').slice(0,160) });
+   const after = parsePanelNumbers(key, await scrapePanel(key, 'res/data_smsnumbers.php', NP)).length;
+const allocatedReal = Math.max(0, after - before);
+const wellDone = /Well\s*Done![\s\S]*Allocated/i.test(resp);   // panel's own success banner
+const okAlloc = wellDone || allocatedReal > 0;
+if (okAlloc && supaEnabled()) await supaInsertEvent({ username:user.username, country:_countryOfRange(rangeTitle), range_id:rangeId, range_title:rangeTitle, qty:ids.length, panel:key });
+return ok(res, { allocated: ids.length, allocatedReal, wellDone, okAlloc, before, after, client:clientName, clientId, status:st, _server: resp.replace(/\s+/g,' ').slice(0,160) });
   } catch(e){ return error(res, 500, 'allocate-numbers: '+e.message); }
 }
 
@@ -3400,6 +3406,31 @@ if (url === '/p/link-del' && req.method === 'POST') {
     await fetch(`${SUPABASE_URL}/rest/v1/panel_links?username=eq.${encodeURIComponent(user.username.toLowerCase())}&panel=eq.${key}`, { method:'DELETE', headers:{ 'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY } });
     return ok(res, { unlinked:true });
   } catch(e){ return error(res, 500, 'link-del: '+e.message); }
+}
+
+  // ═══ FREE NUMBERS (empty client column) — what the Add button shows ═══
+if (url === '/alloc/available-numbers' && req.method === 'POST') {
+  try {
+    const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+    const panel = String(req.body.panel || 'lamix').toLowerCase();
+    const rangeTitle = String(req.body.rangeTitle || '').trim().toLowerCase();
+    const rangeId = String(req.body.rangeId || '').trim();
+    let nums = [];
+    if (panel !== 'lamix' && PANELS[panel] && PANELS[panel].base) {
+      const data = await scrapePanel(panel, 'res/data_smsnumbers.php', { frange:'', fclient:'', sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
+      nums = parsePanelNumbers(panel, data).filter(n => isAvailableClient(n.client) && (!rangeTitle || (n.range||'').toLowerCase().includes(rangeTitle)));
+    } else {
+      const useFrange = rangeId && !/^alloc_\d+$/.test(rangeId);
+      const data = await scrapeAgentData('res/data_smsnumbers.php', { frange: useFrange ? rangeId : '', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
+      if (data && data.aaData) {
+        nums = data.aaData.map(row => {
+          const idm = String(row[0]||'').match(/value=["']?(\d+)["']?/);
+          return { id: idm ? idm[1] : '', range: String(row[1]||'').replace(/<[^>]*>/g,'').trim(), country: String(row[2]||'').replace(/<[^>]*>/g,'').trim(), number: String(row[3]||'').replace(/<[^>]*>/g,'').trim(), client: String(row[5]||'').replace(/<[^>]*>/g,'').trim() };
+        }).filter(n => isAvailableClient(n.client) && (!rangeTitle || (n.range||'').toLowerCase().includes(rangeTitle) || (n.country||'').toLowerCase().includes(rangeTitle)));
+      }
+    }
+    return ok(res, { panel, numbers: nums.slice(0, 200) });
+  } catch (e) { return error(res, 500, 'available-numbers: ' + e.message); }
 }
   
  return error(res, 404, 'Route not found');
