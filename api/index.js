@@ -1353,7 +1353,7 @@ if (req.body && req.body.session) {
        const scope = String(req.body.scope || 'mine');
      if (scope === 'company' && !isAdminish(await getRole(user.username))) return error(res, 403, 'Company ranges are super-admin only.');
      const withAvail = filtered.filter(r => r.available > 0);
-     const result = (scope === 'company') ? filtered : withAvail; // normal users only see ranges with FREE numbers
+  const result = (scope === 'company') ? filtered : (withAvail.length ? withAvail : filtered); // old behaviour: free first, else show the country rows
         const _debug = { query, qns, src: _src, totalMapped: mapped.length, rangesFound: filtered.length, withAvailable: withAvail.length, returned: result.length };
         if (result.length) _asCache.set(query, { ts: now, ranges: result, _debug });
         return ok(res, { ranges: result, _debug });
