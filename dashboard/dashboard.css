@@ -777,3 +777,11 @@ button,input{font-family:inherit}
 .nc-row textarea{min-height:54px;resize:vertical}
 .nc-send{border:0;border-radius:10px;padding:9px 16px;font:inherit;font-size:.76rem;font-weight:700;cursor:pointer;color:#06080F;background:linear-gradient(135deg,var(--accent),var(--accent2))}
 .nc-send:disabled{opacity:.5;cursor:not-allowed}
+
+.panel-switch{display:flex;gap:3px;padding:3px;border-radius:999px;background:var(--surface);border:1px solid var(--border);margin-right:8px}
+.panel-switch button{border:0;background:transparent;color:var(--muted);font:inherit;font-size:.6rem;font-weight:800;letter-spacing:.04em;padding:6px 9px;border-radius:999px;cursor:pointer;transition:all .18s}
+.panel-switch button.on{color:#06080f;background:var(--pg,linear-gradient(135deg,var(--accent),var(--accent2)))}
+.pz-wa{display:flex;align-items:center;justify-content:center;gap:8px;margin:12px 0 10px;padding:11px;border-radius:12px;background:linear-gradient(135deg,#25d366,#128c7e);color:#fff;font-weight:700;font-size:.8rem;text-decoration:none}
+.pz-link-box{border-top:1px solid var(--border);padding-top:12px}
+.pz-sub{font-size:.7rem;color:var(--muted);margin-bottom:8px}
+.pz-btn.ghost{background:var(--surface);color:var(--muted);border:1px solid var(--border);margin-top:8px}
