@@ -31,6 +31,9 @@ function fixBody(nu,b){
 function adapt(url,d){
   try{
     if(!d||typeof d!=='object') return d;
+    /* ▼▼▼ ADD THIS — any panel route returning noId → open the WhatsApp/link popup ▼▼▼ */
+    if(d.noId){ setTimeout(function(){ if(window.openNoIdPopup) window.openNoIdPopup(d.panel||cur(),{}); },50); }
+    /* ▲▲▲ end of added line ▲▲▲ */
     if(url.indexOf('/p/ranges-search')!==-1&&Array.isArray(d.ranges)){
       d.ranges=d.ranges.map(function(r){ var left=(r.remaining==null?0:r.remaining); return { id:String(r.rid), title:r.range, country:r.country, available:left, total:left, _z:r }; });
     }
