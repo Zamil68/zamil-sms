@@ -3179,8 +3179,18 @@ if (url === '/p/request-range' && req.method === 'POST') {
     if (!freeIds.length) return error(res, 400, 'No free numbers in '+rangeTitle+'.');
     const ids = freeIds.slice(0, qty);
     // exact panel allocate form (your screenshot): allocateall + cbarr + client + payterm + payout
-    const body = new URLSearchParams({ action:'allocateall', cbarr: ids.join(','), client: clientId, payterm, payout: String(payout), frange:'', fclient:'' }).toString();
-    const postIt = () => axios.post(P.base+'MySMSNumbers', body, { headers: Object.assign({}, panelHeaders(key, P.base+'MySMSNumbers'), { 'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8', 'Origin': new URL(P.base).origin }), transformRequest:[(d)=>d], maxRedirects:5, validateStatus:()=>true, timeout:20000 });
+    // ✅ FIXED: Posts to the correct Zyron bulk-assign endpoint
+const body = new URLSearchParams({ cbarr: ids.join(', '), client: clientId, payterm, payout: String(payout), frange:'', fclient:'' }).toString();
+const postIt = () => axios.post(P.base + 'res/assignallsmsnumber.php', body, { 
+    headers: Object.assign({}, panelHeaders(key, P.base+'MySMSNumbers'), { 
+        'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8', 
+        'Origin': new URL(P.base).origin 
+    }), 
+    transformRequest:[(d)=>d], 
+    maxRedirects:5, 
+    validateStatus:()=>true, 
+    timeout:20000 
+});
     let st = null, resp = '';
     try { let r = await postIt(); if (looksLikeLogin(r.data)) { await ensurePanelSession(key, true); r = await postIt(); } st = r.status; resp = String(typeof r.data==='string'?r.data:JSON.stringify(r.data)); } catch(e){ return error(res, 500, P.label+' request failed: '+(e.code||e.message)); }
     const wellDone = /Well\s*Done![\s\S]*Allocated/i.test(resp);
