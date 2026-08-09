@@ -2986,11 +2986,12 @@ if (url === '/p/ranges' && req.method === 'POST') {
     const data = await scrapePanel(key, 'res/data_smsnumbers.php', { frange:'', fclient:'', sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
     let nums = parsePanelNumbers(key, data);
     const pc = await panelClientFor(user.username, key);
-    if (!isAdminish(role)) {
-      if (!pc) return ok(res, { panel:key, noId:true, numbers:[], ranges:[] });
-      const t1=(pc.client||'').toLowerCase().trim();
-      nums = nums.filter(n => { const c=(n.client||'').toLowerCase().trim(); return c && (c===t1||c.includes(t1)); });
-    }
+    if (pc) {
+  const t1=(pc.client||'').toLowerCase().trim();
+  nums = nums.filter(n => { const c=(n.client||'').toLowerCase().trim(); return c && (c===t1||c.includes(t1)); });
+} else if (!isAdminish(role)) {
+  return ok(res, { panel:key, noId:true, numbers:[], ranges:[] });
+}
     const m = new Map();
     nums.forEach(n => {
       const k = (n.country||'') + ' -- ' + n.range;
@@ -3008,11 +3009,12 @@ if (url === '/p/numbers' && req.method === 'POST') {
     const data = await scrapePanel(key, 'res/data_smsnumbers.php', { frange:'', fclient:'', sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
     let nums = parsePanelNumbers(key, data);
     const pc = await panelClientFor(user.username, key);
-    if (!isAdminish(role)) {
-      if (!pc) return ok(res, { panel:key, noId:true, numbers:[], ranges:[] });
-      const t1=(pc.client||'').toLowerCase().trim();
-      nums = nums.filter(n => { const c=(n.client||'').toLowerCase().trim(); return c && (c===t1||c.includes(t1)); });
-    }
+    if (pc) {
+  const t1=(pc.client||'').toLowerCase().trim();
+  nums = nums.filter(n => { const c=(n.client||'').toLowerCase().trim(); return c && (c===t1||c.includes(t1)); });
+} else if (!isAdminish(role)) {
+  return ok(res, { panel:key, noId:true, numbers:[], ranges:[] });
+}
     const reqTitle = String(req.body.rangeTitle||'').toLowerCase().trim();
     if (reqTitle) nums = nums.filter(n => { const r=(n.range||'').toLowerCase().trim(); return r.includes(reqTitle)||reqTitle.includes(r); });
     return ok(res, { panel:key, numbers: nums });
@@ -3432,6 +3434,69 @@ if (url === '/alloc/available-numbers' && req.method === 'POST') {
     }
     return ok(res, { panel, numbers: nums.slice(0, 200) });
   } catch (e) { return error(res, 500, 'available-numbers: ' + e.message); }
+}
+
+  // ═══ FREE NUMBERS POOL (empty client column) — one scrape per 60s per panel ═══
+const _freePoolCache = {};
+async function getFreePool(key){
+  const ck = key || 'lamix';
+  const hit = _freePoolCache[ck];
+  if (hit && (Date.now()-hit.ts) < 60000) return hit.nums;
+  let nums = [];
+  if (ck === 'lamix') {
+    const data = await scrapeAgentData('res/data_smsnumbers.php', { frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
+    if (data && data.aaData) nums = data.aaData.map(row => {
+      const idm = String(row[0]||'').match(/value=["']?(\d+)["']?/);
+      return { id: idm? idm[1]:'', range: String(row[1]||'').replace(/<[^>]*>/g,'').trim(), country: String(row[2]||'').replace(/<[^>]*>/g,'').trim(), number: String(row[3]||'').replace(/<[^>]*>/g,'').trim(), client: String(row[5]||'').replace(/<[^>]*>/g,'').trim() };
+    });
+  } else if (PANELS[ck] && PANELS[ck].base) {
+    const data = await scrapePanel(ck, 'res/data_smsnumbers.php', { frange:'', fclient:'', sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
+    nums = parsePanelNumbers(ck, data);
+  }
+  nums = nums.filter(n => isAvailableClient(n.client));
+  _freePoolCache[ck] = { ts: Date.now(), nums };
+  return nums;
+}
+if ((url === '/alloc/free-ranges' || url === '/p/free-ranges') && req.method === 'POST') {
+  try {
+    const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+    const key = (url.indexOf('/p/') === 0) ? String(req.body.panel||'zyron').toLowerCase() : String(req.body.panel||'lamix').toLowerCase();
+    if (key !== 'lamix' && (!PANELS[key] || !PANELS[key].base)) return error(res, 400, 'Unknown panel');
+    const nums = await getFreePool(key);
+    const map = new Map();
+    nums.forEach(n => {
+      const country = n.country || _countryOfRange(n.range);
+      const k = country + ' -- ' + n.range;
+      if (!map.has(k)) map.set(k, { id: null, range: n.range, country, flag: countryFlag(country), available: 0 });
+      map.get(k).available++;
+    });
+    let list = Array.from(map.values());
+    if (key === 'lamix') { // map real LaMix range ids (cached 10 min)
+      const rangeOpts = await getCachedRangeOptions(false);
+      const optKeys = Array.from(rangeOpts.keys());
+      list.forEach(r => {
+        const cands = [norm(r.country+' - '+r.range), norm(r.range), norm(r.country+r.range)];
+        let id = null;
+        for (const c of cands) { if (c && rangeOpts.has(c)) { id = rangeOpts.get(c); break; } }
+        if (!id) { const nt = norm(r.range); for (const k of optKeys) { if (k && nt && (k.includes(nt) || nt.includes(k))) { id = rangeOpts.get(k); break; } } }
+        r.id = id || ('alloc_' + nt);
+      });
+    } else { list.forEach(r => { r.id = norm(r.country+'|'+r.range); }); }
+    list.sort((a,b) => b.available - a.available);
+    return ok(res, { panel: key, ranges: list.slice(0, 80), total: list.length });
+  } catch (e) { return error(res, 500, 'free-ranges: ' + e.message); }
+}
+if ((url === '/alloc/free-numbers' || url === '/p/free-numbers') && req.method === 'POST') {
+  try {
+    const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+    const key = (url.indexOf('/p/') === 0) ? String(req.body.panel||'zyron').toLowerCase() : String(req.body.panel||'lamix').toLowerCase();
+    if (key !== 'lamix' && (!PANELS[key] || !PANELS[key].base)) return error(res, 400, 'Unknown panel');
+    const nums = await getFreePool(key);
+    const rt = String(req.body.rangeTitle||'').toLowerCase().trim();
+    let list = nums.filter(n => (n.range||'').toLowerCase() === rt);
+    if (!list.length) list = nums.filter(n => ((n.country||'')+' '+(n.range||'')).toLowerCase().includes(rt));
+    return ok(res, { panel: key, numbers: list.slice(0, 300) });
+  } catch (e) { return error(res, 500, 'free-numbers: ' + e.message); }
 }
   
  return error(res, 404, 'Route not found');
