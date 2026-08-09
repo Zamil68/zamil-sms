@@ -1,10 +1,10 @@
-/* ═══ panel.js — Zamil SMS multi-panel engine (LaMix / Zyron / EVS) — FINAL ═══ */
+/* ═══ panel.js — Zamil SMS multi-panel engine (LaMix / Zyron / EVS) — FULL FINAL v4 ═══ */
 (function(){
 'use strict';
 var REG = {
-  lamix: { label:'LaMix', grad:'linear-gradient(135deg,var(--accent),var(--accent2))' },
-  zyron: { label:'Zyron', grad:'linear-gradient(135deg,#38bdf8,#6366f1)' },
-  evs:   { label:'EVS',   grad:'linear-gradient(135deg,#fb923c,#ef4444)' }
+  lamix: { label:'LaMix', short:'LM', grad:'linear-gradient(135deg,var(--accent),var(--accent2))' },
+  zyron: { label:'Zyron', short:'ZY', grad:'linear-gradient(135deg,#38bdf8,#6366f1)' },
+  evs:   { label:'EVS',   short:'EV', grad:'linear-gradient(135deg,#fb923c,#ef4444)' }
 };
 window.EVS_READY = window.EVS_READY || false;   // flip true when EVS_BASE env is live
 var WA_LINK = 'https://wa.me/qr/4M2BZRDAFE6DJ1';
@@ -32,6 +32,13 @@ function wipe(p){ var pre='pc_'+p+'_'; Object.keys(localStorage).forEach(functio
 /* ═══ LOADER (universal dashboard overlay) ═══ */
 function showLoader(msg){ var ov=document.getElementById('loadingOverlay'), lt=document.getElementById('loadingText'); if(lt)lt.textContent=msg||'Loading…'; if(ov)ov.classList.add('show'); }
 function hideLoader(){ var ov=document.getElementById('loadingOverlay'); if(ov)ov.classList.remove('show'); }
+
+/* ═══ FULL CACHE KILL (zc_ + pc_ + sessionStorage + ownership tag) ═══ */
+function killAllCaches(){
+  try{ if(window.ZCache) window.ZCache.clearAll(); }catch(e){}
+  try{ sessionStorage.clear(); }catch(e){}
+  wipe('lamix'); wipe('zyron'); wipe('evs');
+}
 
 /* ═══ UNIFIED DATA API ═══ */
 var api = {
@@ -101,10 +108,9 @@ function doLink(){
     btn.disabled=false; btn.textContent='Link ID';
     if(d&&d.ok){
       toast('Linked to '+d.client,'green'); closeNoIdPopup();
-      wipe(cur()); wipe(p);
-      try{ if(window.ZCache)window.ZCache.clearAll(); }catch(e){}
-      try{ sessionStorage.clear(); }catch(e){}
+      killAllCaches();
       localStorage.setItem('app_panel',p);
+      localStorage.setItem('zc_panel',p);
       showLoader('Fetching '+REG[p].label+' data…');
       setTimeout(function(){ location.reload(); },300);
     } else toast((d&&d.error)||'Link failed','red');
@@ -122,10 +128,9 @@ function switchTo(p){
   if(p==='evs'&&!window.EVS_READY){ toast('EVS panel coming soon','gold'); return; }
   // LaMix: direct switch
   if(p==='lamix'){
-    wipe(cur());
-    try{ if(window.ZCache)window.ZCache.clearAll(); }catch(e){}
-    try{ sessionStorage.clear(); }catch(e){}
+    killAllCaches();
     localStorage.setItem('app_panel',p);
+    localStorage.setItem('zc_panel',p);
     showLoader('Fetching LaMix data…');
     location.reload();
     return;
@@ -136,10 +141,10 @@ function switchTo(p){
     hideLoader();
     if(!d||!d.ok){ toast((d&&d.error)||'Could not verify ID','red'); return; }
     if(d.exists){
-      wipe(cur()); wipe(p);
-      try{ if(window.ZCache)window.ZCache.clearAll(); }catch(e){}
-      try{ sessionStorage.clear(); }catch(e){}
+      killAllCaches();
       localStorage.setItem('app_panel',p);
+      localStorage.setItem('zc_panel',p);
+      paintPill();
       showLoader('Fetching '+REG[p].label+' data…');
       location.reload();
     } else {
@@ -148,7 +153,20 @@ function switchTo(p){
   });
 }
 
-/* ═══ SWITCHER PILL ═══ */
+/* ═══ HEADER PILL (tiny LM/ZY/EV indicator — tap opens drawer) ═══ */
+function paintPill(){
+  var pill=document.getElementById('panelPill'); if(!pill)return;
+  pill.textContent=REG[cur()].short;
+  pill.style.setProperty('--pg',REG[cur()].grad);
+  pill.title='Current panel: '+REG[cur()].label+' — tap to switch';
+}
+function mountPill(){
+  var pill=document.getElementById('panelPill'); if(!pill||pill._m)return; pill._m=true;
+  pill.addEventListener('click',function(){ if(typeof openDrawer==='function') openDrawer(); });
+  paintPill();
+}
+
+/* ═══ DRAWER SWITCHER (full LaMix/Zyron/EVS buttons) ═══ */
 function mountSwitcher(){
   var host=document.getElementById('panelSwitch'); if(!host||host._m)return; host._m=true;
   host.innerHTML=Object.keys(REG).map(function(k){
@@ -275,9 +293,14 @@ function openAlloc(){
 
 /* ═══ INIT ═══ */
 document.addEventListener('DOMContentLoaded',function(){
-  mountSwitcher(); applyGates();
+  /* cache-ownership guard: if stored caches belong to another panel, kill them NOW */
+  try{
+    var owner=localStorage.getItem('zc_panel');
+    if(owner!==cur()){ if(window.ZCache)window.ZCache.clearAll(); localStorage.setItem('zc_panel',cur()); }
+  }catch(e){}
+  mountPill(); mountSwitcher(); applyGates();
   var lb=document.getElementById('linkBtn'); if(lb) lb.onclick=doLink;
   var ub=document.getElementById('unlinkBtn'); if(ub) ub.onclick=doUnlink;
 });
-window.PANEL={ cur:cur, label:label, isLamix:isLamix, features:features, api:api, store:store, read:read, wipe:wipe, isFree:isFree, openAdd:openAdd, mountAllocBar:mountAllocBar, toast:toast, applyGates:applyGates, esc:esc, switchTo:switchTo };
+window.PANEL={ cur:cur, label:label, isLamix:isLamix, features:features, api:api, store:store, read:read, wipe:wipe, isFree:isFree, openAdd:openAdd, mountAllocBar:mountAllocBar, toast:toast, applyGates:applyGates, esc:esc, switchTo:switchTo, paintPill:paintPill };
 })();
