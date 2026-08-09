@@ -153,10 +153,12 @@
     <!-- ═══ ALLOCATE NUMBERS TO USER (all users) ═══ -->
     <div class="alloc-card" id="allocUserCard">
       <div class="alloc-card-title"><span class="alloc-step">1</span> Allocate Numbers <span class="badge" id="auCount" style="margin-left:auto">…</span></div>
-      <div id="auRangeList"><div class="empty"><div class="spinner"></div></div></div>
-      <div id="auForm" style="display:none">
-        <div class="alloc-client-info" id="auSelInfo" style="margin-bottom:10px"></div>
-        <div class="alloc-field"><label>Quantity (1–25)</label><input type="number" id="auQty" class="alloc-input" value="5" min="1" max="25"></div>
+      <input class="alloc-input" id="auSearch" placeholder="Search country / range… e.g. tun" autocomplete="off" style="margin-bottom:10px">
+      <div id="auRangeList"><div class="empty">Type to search free numbers…</div></div>
+      <div id="auNumsWrap" style="display:none">
+        <div class="alloc-client-info" id="auSelInfo" style="margin:10px 0 6px"></div>
+        <div id="auNumsList" style="max-height:190px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:4px;font-family:ui-monospace,'SF Mono',monospace;font-size:.72rem"></div>
+        <div class="alloc-field" style="margin-top:8px"><label>Quantity (used when nothing ticked — LaMix)</label><input type="number" id="auQty" class="alloc-input" value="5" min="1" max="100"></div>
         <div class="alloc-field" id="auClientField" style="display:none"><label>Allocate to</label><select id="auClient" class="alloc-input"></select></div>
         <button class="btn btn-primary" id="auBtn" style="width:100%">Allocate Numbers</button>
         <div id="auResult" class="alloc-result"></div>
@@ -1015,37 +1017,62 @@ window.addEventListener('DOMContentLoaded', function(){
 </div> 
 
 <script>
-/* ═══ ADD v2: allocate-to-user (everyone) + company flow (super only) ═══ */
+/* ═══ ADD v3: allocate free numbers to user (everyone) · company flow = super only ═══ */
 (function(){
   var _auRanges=[], _auSel=null;
   function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded',fn); }
   function sess(){ return localStorage.getItem('app_session'); }
+  function panel(){ return (window.PANEL && PANEL.cur) ? PANEL.cur() : 'lamix'; }
   function post(url,body,cb){ fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({session:sess()},body||{}))}).then(function(r){return r.json().catch(function(){return{ok:false};});}).then(cb).catch(function(){cb({ok:false});}); }
   function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-  function auLoad(){
+  function auLoad(q){
     var list=document.getElementById('auRangeList'); if(!list) return;
     list.innerHTML='<div class="empty"><div class="spinner"></div></div>';
-    post('/api/alloc/search-ranges',{scope:'mine',query:''},function(d){
+    post('/api/alloc/search-ranges',{scope:'mine',query:q||''},function(d){
       _auRanges=(d&&d.ranges)||[];
       var c=document.getElementById('auCount'); if(c) c.textContent=_auRanges.length;
-      if(!_auRanges.length){ list.innerHTML='<div class="empty">No ranges with free numbers right now.<br>Ask your admin to add ranges.</div>'; return; }
+      var w=document.getElementById('auNumsWrap'); if(w) w.style.display='none';
+      if(!_auRanges.length){ list.innerHTML='<div class="empty">No ranges with free numbers'+(q?' for "'+esc(q)+'"':'')+'.</div>'; return; }
       list.innerHTML=_auRanges.map(function(r,i){
         return '<div class="alloc-range-item" data-i="'+i+'"><div><div class="alloc-range-name">'+esc(r.country)+' — '+esc(r.title)+'</div><div class="alloc-range-id">'+esc(r.id)+'</div></div><span class="avail-ok">'+r.available+' free</span></div>';
       }).join('');
     });
   }
+  function auSelect(r){
+    _auSel=r;
+    document.getElementById('auNumsWrap').style.display='block';
+    document.getElementById('auSelInfo').textContent=r.country+' — '+r.title+' ('+r.available+' free — empty client column)';
+    var L=document.getElementById('auNumsList'); L.innerHTML='<div class="empty"><div class="spinner"></div></div>';
+    post('/api/alloc/available-numbers',{panel:panel(),rangeTitle:r.title,rangeId:r.id},function(d){
+      var nums=(d&&d.numbers)||[];
+      if(!nums.length){ L.innerHTML='<div class="empty">No free numbers right now.</div>'; return; }
+      L.innerHTML=nums.slice(0,200).map(function(n){
+        return '<label style="display:flex;gap:6px;align-items:center"><input type="checkbox" class="au-cb" value="'+esc(n.id)+'"> '+esc(n.number)+' <span style="color:var(--muted)">'+esc(n.range)+'</span></label>';
+      }).join('');
+      var q=document.getElementById('auQty'); if(q) q.value=Math.min(5,nums.length);
+    });
+  }
   function auAllocate(){
     if(!_auSel) return;
+    var cbs=[].slice.call(document.querySelectorAll('.au-cb:checked'));
+    var clientSel=document.getElementById('auClient');
+    var client=(clientSel && clientSel.value) ? clientSel.value : '';
     var btn=document.getElementById('auBtn'); btn.disabled=true; btn.textContent='Allocating…';
-    var body={ rangeId:_auSel.id, rangeTitle:_auSel.title, quantity:parseInt(document.getElementById('auQty').value)||1, payout:0.01 };
-    var cf=document.getElementById('auClient'); if(cf && cf.value) body.clientId=cf.value;
-    post('/api/alloc/allocate',body,function(d){
+    var R=document.getElementById('auResult');
+    function done(d){
       btn.disabled=false; btn.textContent='Allocate Numbers';
-      var R=document.getElementById('auResult'); R.style.display='block';
-      if(d&&(d.allocatedReal>0||d.reason==='ALLOCATED_OK')){ R.className='alloc-result ok'; R.textContent='✅ Allocated '+(d.allocatedReal||body.quantity)+' numbers.'; auLoad(); }
-      else if(d&&d.limitReached){ R.className='alloc-result err'; R.textContent='🚫 '+d.message; }
+      R.style.display='block';
+      if(d&&d.limitReached){ R.className='alloc-result err'; R.textContent='🚫 '+d.message; return; }
+      if(d&&(d.allocatedReal>0||d.wellDone||d.reason==='ALLOCATED_OK')){ R.className='alloc-result ok'; R.textContent='✅ Allocated '+(d.allocatedReal||cbs.length||1)+' numbers.'; auLoad((document.getElementById('auSearch').value||'').trim()); }
       else { R.className='alloc-result err'; R.textContent='⚠️ '+((d&&d.message)||(d&&d._server)||'Allocation failed.'); }
-    });
+    }
+    if(panel()==='lamix'){
+      var qty=cbs.length||parseInt(document.getElementById('auQty').value)||1;
+      post('/api/alloc/allocate',{rangeId:_auSel.id,rangeTitle:_auSel.title,quantity:qty,payout:0.01,clientId:client,payterm:'2'},done);
+    } else {
+      if(!cbs.length){ btn.disabled=false; btn.textContent='Allocate Numbers'; R.style.display='block'; R.className='alloc-result err'; R.textContent='Tick at least one number.'; return; }
+      post('/api/p/allocate-numbers',{panel:panel(),ids:cbs.map(function(c){return c.value;}),client:client,payterm:'2',payout:0.01,rangeTitle:_auSel.title},done);
+    }
   }
   ready(function(){
     post('/api/auth/role',{},function(d){
@@ -1056,22 +1083,22 @@ window.addEventListener('DOMContentLoaded', function(){
         var f=document.getElementById('auClientField'); if(f) f.style.display='block';
         post('/api/admin/my-clients',{},function(d){
           var sel=document.getElementById('auClient'); if(!sel) return;
-          var opts=[]; ((d&&d.teams)||[]).forEach(function(t){ (t.clients||[]).forEach(function(c){ opts.push({id:c.id,u:c.username}); }); });
-          sel.innerHTML=opts.map(function(o){ return '<option value="'+esc(o.id)+'">'+esc(o.u)+'</option>'; }).join('');
+          var opts=[]; ((d&&d.teams)||[]).forEach(function(t){ (t.clients||[]).forEach(function(c){ opts.push(c.username); }); });
+          sel.innerHTML=opts.map(function(u){ return '<option value="'+esc(u)+'">'+esc(u)+'</option>'; }).join('');
         });
       }
     });
+    var tm=null;
+    var si=document.getElementById('auSearch');
+    if(si) si.addEventListener('input',function(){ clearTimeout(tm); var v=this.value.trim(); tm=setTimeout(function(){ auLoad(v); },350); });
     document.addEventListener('click',function(e){
       var it=e.target.closest('#auRangeList .alloc-range-item'); if(!it) return;
-      var r=_auRanges[parseInt(it.getAttribute('data-i'))]; if(!r) return;
-      _auSel=r;
-      document.getElementById('auForm').style.display='block';
-      document.getElementById('auSelInfo').textContent=r.country+' — '+r.title+' ('+r.available+' free)';
-      var q=document.getElementById('auQty'); q.value=Math.min(5,r.available||5); q.max=Math.min(25,r.available||25);
+      var r=_auRanges[parseInt(it.getAttribute('data-i'))]; if(r) auSelect(r);
     });
     var b=document.getElementById('auBtn'); if(b) b.addEventListener('click',auAllocate);
-    function hook(){ if(typeof window.bnSwitch==='function' && !window.bnSwitch._au){ var _b=window.bnSwitch; window.bnSwitch=function(p){ if(p==='add') setTimeout(auLoad,300); return _b.apply(this,arguments); }; window.bnSwitch._au=1; } }
+    function hook(){ if(typeof window.bnSwitch==='function' && !window.bnSwitch._au){ var _b=window.bnSwitch; window.bnSwitch=function(p){ if(p==='add') setTimeout(function(){ auLoad(''); },300); return _b.apply(this,arguments); }; window.bnSwitch._au=1; } }
     ready(hook); setTimeout(hook,1500); setTimeout(hook,3000);
+    setTimeout(function(){ auLoad(''); },600);
   });
 })();
 </script>
