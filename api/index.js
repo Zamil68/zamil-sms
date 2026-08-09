@@ -2870,41 +2870,55 @@ async function sendNotif(target, type, title, body, createdBy){
   try { await fetch(`${SUPABASE_URL}/rest/v1/app_notifs`, { method:'POST', headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
     body: JSON.stringify({ target:String(target||'*').toLowerCase(), type:type||'info', title:String(title||'').slice(0,120), body:String(body||'').slice(0,1000), created_by:createdBy||'system' }) }); } catch(e){}
 }
+// ═══ NOTIFICATIONS (bell) — read tracking + super delete ═══
 if (url === '/notifs/list' && req.method === 'POST') {
   try {
     const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
-    if (!supaEnabled()) return ok(res, { notifs: [], unread: 0 });
-    const un = String(user.username).toLowerCase();
-    const H = { 'apikey':SUPABASE_KEY, 'Authorization':'Bearer '+SUPABASE_KEY };
-    const nr = await fetch(`${SUPABASE_URL}/rest/v1/app_notifs?or=${encodeURIComponent(`(target.eq.*,target.eq.${un})`)}&order=created_at.desc&limit=30&select=*`, { headers: H });
-    const notifs = await nr.json();
-    const rr = await fetch(`${SUPABASE_URL}/rest/v1/app_notif_reads?username=eq.${encodeURIComponent(un)}&select=notif_id`, { headers: H });
-    const reads = await rr.json();
-    const readSet = new Set((Array.isArray(reads)?reads:[]).map(x=>x.notif_id));
-    const list = (Array.isArray(notifs)?notifs:[]).map(n=>({ id:n.id, type:n.type||'info', title:n.title||'', body:n.body||'', at:n.created_at, read:readSet.has(n.id) }));
-    return ok(res, { notifs:list, unread:list.filter(n=>!n.read).length });
-  } catch(e){ return ok(res, { notifs:[], unread:0 }); }
+    const role = await getRole(user.username);
+    if (!supaEnabled()) return ok(res, { notifs: [], role });
+    const un = user.username.toLowerCase();
+    const H = { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY };
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/app_notifs?or=${encodeURIComponent('(target.eq.*,target.eq.' + un + ')')}&order=created_at.desc&limit=30&select=*`, { headers: H });
+    const notifs = (await r.json()) || [];
+    const rr = await fetch(`${SUPABASE_URL}/rest/v1/app_notif_reads?select=username,notif_id`, { headers: H });
+    const reads = (await r.json()) || [];
+    const byNotif = {}; const mine = new Set();
+    reads.forEach(x => { (byNotif[x.notif_id] = byNotif[x.notif_id] || []).push(x.username); if (x.username === un) mine.add(x.notif_id); });
+    return ok(res, { role, notifs: notifs.map(n => ({ id: n.id, type: n.type || 'info', title: n.title || '', body: n.body || '', at: n.created_at, by: n.created_by || '', read: mine.has(n.id), readBy: byNotif[n.id] || [] })) });
+  } catch (e) { return ok(res, { notifs: [], role: 'none' }); }
 }
 if (url === '/notifs/mark-read' && req.method === 'POST') {
   try {
     const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
     if (!supaEnabled()) return ok(res);
-    const un = String(user.username).toLowerCase();
-    const ids = Array.isArray(req.body.ids)?req.body.ids:[];
-    for (const id of ids.slice(0,50)) {
-      await fetch(`${SUPABASE_URL}/rest/v1/app_notif_reads`, { method:'POST', headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'}, body: JSON.stringify({ username:un, notif_id:id }) });
+    const un = user.username.toLowerCase();
+    const ids = Array.isArray(req.body.ids) ? req.body.ids : [];
+    for (const id of ids.slice(0, 50)) {
+      await fetch(`${SUPABASE_URL}/rest/v1/app_notif_reads`, { method: 'POST', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ username: un, notif_id: id }) });
     }
     return ok(res);
-  } catch(e){ return ok(res); }
+  } catch (e) { return ok(res); }
 }
 if (url === '/notifs/send' && req.method === 'POST') {
   try {
     const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
     if ((await getRole(user.username)) !== 'super') return error(res, 403, 'Super admin only');
-    const body = String(req.body.body||'').trim(); if (!body) return error(res, 400, 'Message required');
-    await sendNotif(req.body.target||'*', req.body.type||'info', req.body.title||'', body, user.username);
-    return ok(res, { sent:true });
-  } catch(e){ return error(res, 500, 'notifs/send: '+e.message); }
+    const bodyText = String(req.body.body || '').trim(); if (!bodyText) return error(res, 400, 'Message required');
+    if (!supaEnabled()) return error(res, 400, 'Supabase required.');
+    await fetch(`${SUPABASE_URL}/rest/v1/app_notifs`, { method: 'POST', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' }, body: JSON.stringify({ type: req.body.type || 'info', title: req.body.title || '', body: bodyText, target: String(req.body.target || '*').toLowerCase(), created_by: user.username }) });
+    return ok(res, { pushed: true });
+  } catch (e) { return error(res, 500, 'notifs/send: ' + e.message); }
+}
+if (url === '/notifs/delete' && req.method === 'POST') {
+  try {
+    const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+    if ((await getRole(user.username)) !== 'super') return error(res, 403, 'Super admin only');
+    const id = parseInt(req.body.id); if (!id || isNaN(id)) return error(res, 400, 'Valid id required');
+    const H = { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY };
+    await fetch(`${SUPABASE_URL}/rest/v1/app_notif_reads?notif_id=eq.${id}`, { method: 'DELETE', headers: H });
+    await fetch(`${SUPABASE_URL}/rest/v1/app_notifs?id=eq.${id}`, { method: 'DELETE', headers: H });
+    return ok(res, { deleted: true });
+  } catch (e) { return error(res, 500, 'notifs/delete: ' + e.message); }
 }
 
 // ═══ ADMIN: withdrawal users summary (earnings − withdrawn = live) ═══
