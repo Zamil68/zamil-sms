@@ -19,12 +19,24 @@ function isFeatureLocked(feature){
 //  ZAMIL SMS — Main Script
 // ═══════════════════════════════════════════════════════════
 
+// ═══ PANEL-AWARE CACHE KEY HELPER ═══
+function _panelCacheKey(base) {
+  var p = (typeof ACTIVE_PROVIDER !== 'undefined' && ACTIVE_PROVIDER) ? ACTIVE_PROVIDER : 'lamix';
+  return p + '_' + base;
+}
+
 var ALL_NUMS = [], DISP_NUMS = [], STRIP_N = 0, CC_LEN = 0;
 var ACTIVE_RANGE = { id: "", title: "", count: 0 };
 var NEW_NUMS = new Set();
 function _otpToday(){ return new Date().toISOString().slice(0,10); } // UTC date flips at 05:00 PKT = the reset
-function _otpLoad(){ try { var o = JSON.parse(localStorage.getItem('zamil_otp_cache')||'null'); if (o && o.d === _otpToday() && o.c) return o.c; } catch(e){} return {}; }
-function _otpSave(){ try { localStorage.setItem('zamil_otp_cache', JSON.stringify({ d: _otpToday(), c: NUM_SMS_CACHE })); } catch(e){} }
+function _otpLoad(){ 
+  var key = _panelCacheKey('otp_cache');
+  try { var o = JSON.parse(localStorage.getItem(key)||'null'); if (o && o.d === _otpToday() && o.c) return o.c; } catch(e){} return {}; 
+}
+function _otpSave(){ 
+  var key = _panelCacheKey('otp_cache');
+  try { localStorage.setItem(key, JSON.stringify({ d: _otpToday(), c: NUM_SMS_CACHE })); } catch(e){}  
+}
 var NUM_SMS_CACHE = _otpLoad();
 var NUM_SMS_WATCHING = new Set();
 var NUM_SMS_PREV = {};
@@ -396,7 +408,7 @@ function unassignRange(rangeId,rangeTitle,count){
       hideLoad();
       if(!d||!d.ok){ showToast("Unassign failed: "+((d&&d.error)||"?"),"error"); return; }
       showToast("✓ Unassigned "+(d.removed||0)+" numbers","success");
-      try{ localStorage.removeItem(CACHE_KEY_RANGES); }catch(e){}
+      try{ localStorage.removeItem(_panelCacheKey('ranges_cache')); }catch(e){}
       loadRanges(true);
     });
   }
@@ -436,7 +448,7 @@ function fallbackCopy(n){
 // 🔥 UPDATED: Load ranges with proper user filtering
 function loadRanges(forceRefresh){
   var listEl=document.getElementById('rangesList');
-  var cached=cacheGet(CACHE_KEY_RANGES);
+  var cached=cacheGet(_panelCacheKey('ranges_cache'));
   if(cached && cached.data && cached.data.length){ renderRanges(cached.data); if(!forceRefresh && !cached.stale) return; }   // instant paint
   else if(!cached){ listEl.innerHTML='<div class="empty"><div class="spinner"></div><br/>Loading ranges…</div>'; showLoad('Fetching ranges…'); }
   apiCall('/api/ranges',{session:SESSION,forceRefresh:!!forceRefresh},function(d){
@@ -449,7 +461,7 @@ function loadRanges(forceRefresh){
     var fresh=d.ranges||[];
     if(!fresh.length){ if(cached && cached.data && cached.data.length){ renderRanges(cached.data); showMini('Live list empty · showing cached','info'); return; }   // ← never paint "No ranges" over good data
       listEl.innerHTML='<div class="empty"><div class="empty-icon">📭</div>No ranges found. Allocate numbers from the Add button.</div>'; return; }
-    cacheSet(CACHE_KEY_RANGES, fresh);
+    cacheSet(_panelCacheKey('ranges_cache'), fresh);
     renderRanges(fresh);
     if(forceRefresh) showToast('✓ '+fresh.length+' ranges loaded','success');
   });
@@ -1468,7 +1480,7 @@ function doAllocate(){
       var _ab1 = document.getElementById("aAllocBtn"); if (_ab1) _ab1.disabled = ((d.remaining||0) <= 0);
       
       // Auto-refresh ranges so newly assigned numbers show up immediately
-      try{ localStorage.removeItem(CACHE_KEY_RANGES); }catch(e){}
+      try{ localStorage.removeItem(_panelCacheKey('ranges_cache')); }catch(e){}
       try{ loadRanges(true); }catch(e){}
     } else {
       res.className = "alloc-result err"; 
