@@ -128,6 +128,22 @@ async function getSmartDOR() {
   }
 }
 
+// ═══ 5 AM BUSINESS DAY AUTO-RESET ═══
+// At 5:00 AM PKT (00:00 UTC), clear all Supabase caches for the old day
+// so the new business day starts fresh.
+let _lastResetDay = '';
+setInterval(() => {
+  const bd = businessDayPKT();
+  if (_lastResetDay && _lastResetDay !== bd.label) {
+    // Business day rolled over → clear old caches
+    console.log('[cache] Business day rolled: ' + _lastResetDay + ' → ' + bd.label + '. Clearing caches.');
+    _cdrCache.clear();
+    _panelCdrCache.clear();
+    supaCacheCleanup();   // remove Supabase caches older than 2 days
+  }
+  _lastResetDay = bd.label;
+}, 60000);   // check every minute
+
 // 🔥 Auto-renew the agent session every 10 minutes
 setInterval(() => { ensureAgentSession(true).catch(() => {}); }, 10 * 60 * 1000);
 
