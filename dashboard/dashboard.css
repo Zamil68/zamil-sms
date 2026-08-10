@@ -1,5 +1,4 @@
 .app{min-height:100vh}
-.container{max-width:700px;margin:0 auto;padding:0 13px 80px}
 .sms-mini-bar{display:none;align-items:center;gap:5px;padding:3px 10px;background:rgba(34,211,238,.08);border:1.5px solid rgba(34,211,238,.25);border-radius:16px;cursor:default;user-select:none}
 .sms-mini-icon{font-size:.78rem}
 .sms-mini-num{font-family:ui-monospace,"SF Mono","Cascadia Code",monospace;font-size:.82rem;font-weight:700;color:var(--accent)}
@@ -60,7 +59,6 @@
 .num-sms-badge.loading{opacity:.3}
 .num-new-tag{font-size:.54rem;font-weight:700;letter-spacing:.04em;color:var(--accent2);background:rgba(129,140,248,.1);border:1px solid rgba(129,140,248,.22);border-radius:5px;padding:1px 5px;flex-shrink:0;transition:opacity .3s,transform .3s}
 .num-new-tag-gone{opacity:0;transform:scale(.7)}
-.bottom-nav{position:fixed;bottom:0;left:0;right:0;height:58px;background:rgba(6,8,15,.97);border-top:1px solid var(--border);display:flex;align-items:stretch;z-index:500;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
 [data-theme="light"] .bottom-nav{background:rgba(240,244,250,.97)}
 .bn-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;border:none;background:none;color:var(--muted);font-family:inherit;font-size:.54rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;transition:color .15s;padding:5px 2px;position:relative;-webkit-tap-highlight-color:transparent}
 .bn-icon{font-size:1.1rem;line-height:1;transition:transform .15s}
@@ -238,7 +236,6 @@
 .sms-report-msg{font-size:.76rem;color:var(--text);margin-top:4px;line-height:1.4}
 .sms-report-range{font-size:.63rem;color:var(--accent);background:rgba(34,211,238,.06);border:1px solid rgba(34,211,238,.13);padding:1px 6px;border-radius:5px;display:inline-block;margin-top:3px;font-weight:600}
 @media(max-width:480px){.num-val{font-size:.92rem}.sms-big-num{font-size:2.5rem}.bn-sms-count{font-size:.53rem}.lb-thead,.lb-row{padding:7px 10px}.lb-th-streak,.lb-th-live,.lb-streak-cell,.lb-live-cell{display:none}.lb-th-vol{width:65px}.lb-vol{width:65px}}
-.container{max-width:1280px;padding:0 16px 90px}
 @media (max-width:600px){.container{padding:0 10px 80px}.section-title{font-size:1rem}.range-name{font-size:.88rem}.range-detail{font-size:.68rem}.range-count-num{font-size:.76rem}.range-flag{font-size:1.3rem;width:26px}.range-card{padding:10px 12px}.num-val{font-size:.95rem}.num-item{padding:9px 11px}.recent-msg{font-size:.86rem;line-height:1.5}.recent-num{font-size:.86rem}.recent-time{font-size:.72rem}.sms-counter-num{font-size:1.7rem}.sms-big-num{font-size:3.1rem}.sms-stat-num{font-size:1.7rem}}
 @media (min-width:768px){.ranges-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.range-card:hover{transform:translateY(-2px)}.num-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.sms-stats-row{grid-template-columns:repeat(4,1fr)}}
 @media (min-width:1024px){.ranges-list{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.num-list{grid-template-columns:repeat(3,minmax(0,1fr))}}
@@ -356,7 +353,6 @@ html{-webkit-text-size-adjust:100%}
 button,input{font-family:inherit}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}
-.bottom-nav{height:calc(58px + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom)}
 .container{padding-bottom:calc(80px + env(safe-area-inset-bottom))}
 .range-flag{width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:1.4rem;line-height:1;flex-shrink:0;border-radius:9px;overflow:hidden;background:rgba(34,211,238,.07);border:1px solid rgba(34,211,238,.14)}
 [data-theme="light"] .range-flag{background:rgba(8,145,178,.06);border-color:rgba(8,145,178,.12)}
@@ -365,8 +361,6 @@ button,input{font-family:inherit}
 @media (min-width:768px){.range-flag{width:38px;height:38px;font-size:1.55rem;border-radius:10px}}
 @media (max-width:767px){.btn,button{min-height:38px}.bn-item{min-height:56px}.search-bar,.alloc-input,.shr-input,.shr-search-input,.cpwModal input,#cpwOld,#cpwNew,#cpwConfirm{min-height:44px;font-size:16px}.range-card,.num-item,.alloc-range-item,.shr-range-item{min-height:44px}.panel-back{min-height:0;padding:5px 12px}}
 @media (max-width:380px){.profile-name{display:none}}
-.bn-item{padding:6px 2px}
-@media (min-width:768px){.bottom-nav{position:sticky;max-width:1280px;margin:0 auto;left:0;right:0;border-radius:16px 16px 0 0}.bn-item{font-size:.62rem}.bn-icon{font-size:1.25rem}}
 @media (max-width:600px){.shr-overlay,#numSmsModal{align-items:flex-end;padding:0}.shr-box{max-width:100%;width:100%;max-height:88vh;border-radius:20px 20px 0 0;animation:sheetUp .22s cubic-bezier(.2,.8,.3,1)}#numSmsModal .shr-box{border-radius:20px 20px 0 0}}
 @keyframes sheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
 @media (min-width:480px) and (max-width:767px){.ranges-list{display:grid;grid-template-columns:1fr;gap:8px}}
@@ -742,7 +736,6 @@ button,input{font-family:inherit}
 .bell-btn svg{width:18px;height:18px}
 .bell-badge{position:absolute;top:-5px;right:-5px;min-width:17px;height:17px;border-radius:9px;background:linear-gradient(135deg,#f87171,#ef4444);color:#fff;font-size:.6rem;font-weight:800;display:flex;align-items:center;justify-content:center;padding:0 4px;box-shadow:0 2px 8px rgba(239,68,68,.5);animation:bellPulse 2s infinite}
 @keyframes bellPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
-.ztoast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);z-index:970;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 20px;font-size:.78rem;font-weight:600;color:var(--text);box-shadow:0 12px 40px -8px rgba(0,0,0,.5);display:flex;align-items:center;gap:10px;transition:transform .35s cubic-bezier(.2,.8,.2,1),opacity .3s;opacity:0;pointer-events:none;max-width:90vw}
 .ztoast.show{transform:translateX(-50%) translateY(0);opacity:1}
 .zdot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .zdot.ok{background:var(--green)}.zdot.err{background:var(--red)}
@@ -795,3 +788,83 @@ button,input{font-family:inherit}
 .ni-del{width:24px;height:24px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center}
 .ni-del:hover{color:var(--red);border-color:var(--red)}
 .ni-del svg{width:12px;height:12px}
+
+/* ═══════════════════════════════════════════════════════════
+   ✅ FIXED: BOTTOM NAV & CONTAINER SPACING (Consolidated)
+   ═══════════════════════════════════════════════════════════ */
+
+/* 1. The Bottom Bar (Fixed for Mobile & Desktop) */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: calc(58px + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  background: rgba(6,8,15,.97);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: stretch;
+  z-index: 500;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+[data-theme="light"] .bottom-nav { background: rgba(240,244,250,.97); }
+
+/* Desktop: Keep it fixed, but center it properly without stretching */
+@media (min-width: 768px) {
+  .bottom-nav {
+    max-width: 1280px;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    margin: 0 auto;
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.1);
+  }
+}
+
+/* 2. Bottom Nav Items (Cleaned up padding/heights) */
+.bn-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: .54rem;
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  transition: color .15s;
+  padding: 6px 2px;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+}
+@media (max-width: 767px) { .bn-item { min-height: 56px; } }
+@media (min-width: 768px) { .bn-item { font-size: .62rem; } .bn-icon { font-size: 1.25rem; } }
+
+/* 3. Container Padding (Guarantees content never hides behind the nav) */
+.container {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 16px calc(90px + env(safe-area-inset-bottom));
+}
+@media (max-width: 600px) {
+  .container {
+    padding: 0 10px calc(80px + env(safe-area-inset-bottom)); /* ✅ FIXED: Safe-area preserved! */
+  }
+}
+
+/* 4. Floating Elements (Toasts & OTPs) adjusted to sit ABOVE the bottom nav */
+.ztoast { 
+  bottom: calc(80px + env(safe-area-inset-bottom)); /* ✅ FIXED: No longer overlaps the nav */
+}
+#otpFloat { 
+  bottom: calc(90px + env(safe-area-inset-bottom)); /* ✅ FIXED: Clears the nav perfectly */
+}
