@@ -487,9 +487,43 @@ async function getRole(username){
 }
 function isAdminish(role){ return role === 'super' || role === 'admin'; }
 let _statsCache = { ts: 0, data: null };
-const _rangesCache = new Map();   // username -> { ts, ranges }  (20s server cache)
+const _rangesCache = new Map();              // username -> { ts, ranges, lastUpdated }
+const RANGES_SOFT_TTL = 5 * 60 * 1000;      // 5 min → serve cache, refresh silently in background
+const RANGES_HARD_TTL = 60 * 60 * 1000;     // 1 hour → cache expires, must re-fetch
 const _asCache = new Map();   // per-query search cache (8s)
 const STATS_TTL = 60000; // 60s
+
+// ── RANGES: shared scrape logic ──
+async function scrapeUserRanges(user) {
+  const data = await scrapeAgentData('res/data_smsnumbers.php', {
+    frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8,
+    iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1
+  });
+  let ranges = [];
+  if (data && data.aaData) {
+    const allNumbers = parseNumbersData(data);
+    const t1 = (user.clientName||'').toLowerCase().trim();
+    const t2 = (user.username||'').toLowerCase().trim();
+    const userNumbers = allNumbers.filter(n => {
+      const c = (n.client||'').toLowerCase().trim();
+      return c && (c===t1 || c===t2 || c.includes(t1) || c.includes(t2));
+    });
+    const m = new Map();
+    userNumbers.forEach(n => {
+      const key = `${n.country} -- ${n.range}`;
+      if (!m.has(key)) m.set(key, { id: 'r_' + norm(n.country + '|' + n.range), title: n.range, country: n.country, count: 0 });
+      m.get(key).count++;
+    });
+    ranges = Array.from(m.values());
+  }
+  return ranges;
+}
+
+// ── RANGES: invalidate (called after allocation) ──
+function invalidateRangesCache(username) {
+  const ck = 'u:' + String(username).toLowerCase();
+  _rangesCache.delete(ck);
+}
 
 const COUNTRY_ISO = { 'pakistan':'PK','sri lanka':'LK','malaysia':'MY','myanmar':'MM','afghanistan':'AF','tajikistan':'TJ','tanzania':'TZ','kyrgyzstan':'KG','uzbekistan':'UZ','sudan':'SD','angola':'AO','algeria':'DZ','zimbabwe':'ZW','bolivia':'BO','india':'IN','bangladesh':'BD','nepal':'NP','indonesia':'ID','philippines':'PH','vietnam':'VN','thailand':'TH','cambodia':'KH','egypt':'EG','nigeria':'NG','kenya':'KE','uganda':'UG','ghana':'GH','south africa':'ZA','brazil':'BR','mexico':'MX','united states':'US','usa':'US','united kingdom':'GB','germany':'DE','france':'FR','spain':'ES','italy':'IT','russia':'RU','turkey':'TR','iran':'IR','iraq':'IQ','saudi arabia':'SA','united arab emirates':'AE','qatar':'QA','kuwait':'KW','jordan':'JO','lebanon':'LB','morocco':'MA','tunisia':'TN','libya':'LY','ethiopia':'ET','somalia':'SO','rwanda':'RW','zambia':'ZM','mozambique':'MZ','botswana':'BW','namibia':'NA','senegal':'SN','mali':'ML','niger':'NE','benin':'BJ','togo':'TG','burkina faso':'BF','guinea':'GN','ivory coast':'CI','cameroon':'CM','congo':'CG','gabon':'GA','madagascar':'MG','malawi':'MW','kazakhstan':'KZ','azerbaijan':'AZ','armenia':'AM','georgia':'GE','ukraine':'UA','poland':'PL','romania':'RO','greece':'GR','netherlands':'NL','belgium':'BE','switzerland':'CH','sweden':'SE','norway':'NO','denmark':'DK','finland':'FI','ireland':'IE','canada':'CA','australia':'AU','new zealand':'NZ','japan':'JP','south korea':'KR','china':'CN','singapore':'SG','argentina':'AR','chile':'CL','colombia':'CO','peru':'PE','venezuela':'VE','ecuador':'EC','paraguay':'PY','uruguay':'UY','panama':'PA','costa rica':'CR','guatemala':'GT','honduras':'HN','cuba':'CU','dominican republic':'DO','haiti':'HT','jamaica':'JM','portugal':'PT','austria':'AT','belarus':'BY','hungary':'HU','czechia':'CZ','slovakia':'SK','bulgaria':'BG','serbia':'RS','croatia':'HR','yemen':'YE','oman':'OM','bahrain':'BH','syria':'SY','mongolia':'MN','laos':'LA','bhutan':'BT','maldives':'MV','fiji':'FJ' };
 function isoToFlag(iso){ return String(iso||'').toUpperCase().replace(/./g, c => String.fromCodePoint(127397 + c.charCodeAt(0))); }
@@ -1042,31 +1076,47 @@ module.exports = async (req, res) => {
 
     // 3. RANGES
    if (url === '/ranges' && req.method === 'POST') {
-      const user = getUserFromSession(req.body.session);
-      if (!user) return error(res, 401, 'Unauthorized');
-      const force = !!req.body.forceRefresh;
-      const ck = 'u:' + String(user.username).toLowerCase();
-      const hit = _rangesCache.get(ck);
-      if (!force && hit && hit.ranges.length && (Date.now() - hit.ts) < 20000) return ok(res, { ranges: hit.ranges, cached: true });
+  const user = getUserFromSession(req.body.session);
+  if (!user) return error(res, 401, 'Unauthorized');
+  const force = !!req.body.forceRefresh;
+  const ck = 'u:' + String(user.username).toLowerCase();
+  const hit = _rangesCache.get(ck);
+  const age = hit ? (Date.now() - hit.ts) : Infinity;
 
-      const data = await scrapeAgentData('res/data_smsnumbers.php', { frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
-      let ranges = [];
-      if (data && data.aaData) {
-        const allNumbers = parseNumbersData(data);
-        const t1 = (user.clientName||'').toLowerCase().trim(), t2 = (user.username||'').toLowerCase().trim();
-        const userNumbers = allNumbers.filter(n => { const c=(n.client||'').toLowerCase().trim(); return c && (c===t1||c===t2||c.includes(t1)||c.includes(t2)); });
-        const m = new Map();
-        userNumbers.forEach(n => {
-          const key = `${n.country} -- ${n.range}`;
-          if (!m.has(key)) m.set(key, { id: 'r_' + norm(n.country + '|' + n.range), title: n.range, country: n.country, count: 0 }); // ← STABLE id
-          m.get(key).count++;
-        });
-        ranges = Array.from(m.values()).map(r => ({ ...r, minsAgo: Math.floor(Math.random()*60) }));
+  // ── 1. FRESH CACHE (under 5 min) → instant response ──
+  if (!force && hit && hit.ranges.length && age < RANGES_SOFT_TTL) {
+    return ok(res, { ranges: hit.ranges, cached: true, lastUpdated: hit.lastUpdated, ageSec: Math.round(age / 1000) });
+  }
+
+  // ── 2. STALE CACHE (5 min – 1 hour) → serve old data + silent background refresh ──
+  if (!force && hit && hit.ranges.length && age < RANGES_HARD_TTL) {
+    // Fire-and-forget background refresh (updates cache for next call)
+    scrapeUserRanges(user).then(ranges => {
+      if (ranges.length) {
+        _rangesCache.set(ck, { ts: Date.now(), ranges, lastUpdated: new Date().toISOString() });
       }
-      if (ranges.length) _rangesCache.set(ck, { ts: Date.now(), ranges });
-      else if (hit && hit.ranges.length) return ok(res, { ranges: hit.ranges, cached: true, _note: 'live scrape empty — using cache' });
-      return ok(res, { ranges });
+    }).catch(() => {});
+    return ok(res, { ranges: hit.ranges, cached: true, refreshing: true, lastUpdated: hit.lastUpdated, ageSec: Math.round(age / 1000) });
+  }
+
+  // ── 3. NO CACHE / EXPIRED / FORCE → full scrape (await) ──
+  try {
+    const ranges = await scrapeUserRanges(user);
+    if (ranges.length) {
+      const now = new Date().toISOString();
+      _rangesCache.set(ck, { ts: Date.now(), ranges, lastUpdated: now });
+      return ok(res, { ranges, cached: false, lastUpdated: now });
     }
+    // Scrape empty → fallback to old cache
+    if (hit && hit.ranges.length) {
+      return ok(res, { ranges: hit.ranges, cached: true, _note: 'live scrape empty — using cache', lastUpdated: hit.lastUpdated });
+    }
+    return ok(res, { ranges: [], cached: false });
+  } catch (e) {
+    if (hit && hit.ranges.length) return ok(res, { ranges: hit.ranges, cached: true, _note: 'scrape error — using cache' });
+    return ok(res, { ranges: [] });
+  }
+}
     
     // 4. NUMBERS
     if (url === '/numbers' && req.method === 'POST') {
@@ -1840,6 +1890,7 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
       else if (reason.indexOf('POSTED_') === 0) reason = 'POSTED_NOCHANGE_' + serverStatus;
       const looksSuccessful = allocatedReal > 0 || (serverStatus != null && serverStatus >= 200 && serverStatus < 400);
       if (looksSuccessful && supaEnabled()) await supaInsertEvent({ username: user.username, country: _country, range_id: rangeId, range_title: String(req.body.rangeTitle||''), qty: quantity });
+      if (looksSuccessful) invalidateRangesCache(user.username);  // ← force fresh ranges on next load
 
       let total = 0, available = 0;
       try { const d = await scrapeAgentData('res/data_smsnumbers.php', { frange: rangeId, fclient: '', totnum: 100000, sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1 }); if (d && d.aaData) { const ns = parseNumbersData(d); total = ns.length; available = ns.filter(n => isAvailableClient(n.client)).length; } } catch (e) {}
