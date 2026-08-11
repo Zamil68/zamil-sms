@@ -497,13 +497,6 @@ function teamOf(username, all) {
   return '';
 }
 
-function weekKey(dateStr){
-  const d = new Date(dateStr + 'T00:00:00Z');
-  const day = d.getUTCDay();
-  const diff = (day === 0 ? -6 : 1 - day);
-  return new Date(d.getTime() + diff * 86400000).toISOString().slice(0, 10);
-}
-
 // ═══ TEAM HELPERS ═══
 let _pinsCache = { ts: 0, map: null };
 async function getPinsMap() {
@@ -630,32 +623,6 @@ const CLI_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like 
 let _cliCookie = '', _cliCookieTs = 0, _cliLastLogin = 0;
 let _cliCredsCache = { ts: 0, user: null, pass: null };
 let _cliMem = null; // { day, ts, list, stats }
-
-function _parseUtc(s) {
-  if (!s) return 0;
-  const t = String(s).trim().replace(' ', 'T');
-  const d = new Date(t.endsWith('Z') ? t : t + 'Z');
-  const v = d.getTime();
-  return isFinite(v) ? v : 0;
-}
-// Canonical country (dedupes "Malaysia Celcom" / "Malaysia XOX" → malaysia)
-function _canonCountry(rangeText) {
-  const cn = _countryOfRange(rangeText || '');
-  const tryOn = (s) => {
-    s = ' ' + String(s || '').toLowerCase();
-    let best = '', bestLen = 0;
-    for (const k in COUNTRY_ISO) {
-      const re = new RegExp(' ' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![a-z])');
-      if (re.test(s) && k.length > bestLen) { best = k; bestLen = k.length; }
-    }
-    return best;
-  };
-  let key = tryOn(cn);
-  if (!key) key = tryOn(rangeText);
-  if (!key) return null;
-  const disp = key.replace(/\b\w/g, c => c.toUpperCase());
-  return { key, name: disp, flag: isoToFlag(COUNTRY_ISO[key]) };
-}
 async function getCliCreds() {
   if (_cliCredsCache.user && (Date.now() - _cliCredsCache.ts) < 60000) {
     return { username: _cliCredsCache.user, password: _cliCredsCache.pass };
