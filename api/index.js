@@ -11,6 +11,10 @@ const LAMIX_API_KEY = process.env.LAMIX_API_KEY || '';
 const LAMIX_API_URL = 'http://51.77.216.195/crapi/lamix/viewstats';
 
 const corsHeaders = {
+  // 🚨 LAMIX MAINTENANCE MODE (Global Kill Switch)
+// Set to true to instantly block ALL scraping requests to LaMix
+const LAMIX_PAUSED = true; 
+const MAINTENANCE_MSG = 'Zamil SMS is temporarily paused due to strict platform restrictions and anti-bot protections on our provider\'s side. Your data and balances are 100% secure. We are working to restore safe access shortly.';
   'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
   'Access-Control-Allow-Credentials': 'true',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -132,6 +136,7 @@ async function getSmartDOR() {
 setInterval(() => { ensureAgentSession(true).catch(() => {}); }, 10 * 60 * 1000);
 
 async function scrapeAgentData(endpoint, params = {}) {
+  if (LAMIX_PAUSED) return null; // 🚨 Kill switch
   await ensureAgentSession();
   const doReq = async () => (await axios.get(`${AGENT_BASE_URL}${endpoint}`, { params, headers: browserHeaders(), timeout: 15000, maxRedirects: 5, validateStatus: () => true })).data;
   try {
@@ -307,6 +312,7 @@ function businessDayPKT(){
 }
 
 async function scrapeCDR(dateFrom, dateTo, extra){
+  if (LAMIX_PAUSED) return []; // 🚨 Kill switch
   await ensureAgentSession();
   const mp = {};
   for (let i = 0; i < 9; i++){ mp['mDataProp_'+i] = i; mp['sSearch_'+i] = ''; mp['bRegex_'+i] = false; mp['bSearchable_'+i] = true; mp['bSortable_'+i] = (i !== 8); }
@@ -973,6 +979,21 @@ async function sendNotif(target, type, title, body, createdBy){
 module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).json({ ...corsHeaders });
   const url = req.url.replace(/^\/api/, '');
+  // 🚨 MAINTENANCE INTERCEPTOR (Stops LaMix traffic & triggers frontend modal)
+  if (LAMIX_PAUSED) {
+    const blockedRoutes = [
+      '/ranges', '/numbers', '/number-smscount', '/smscount', '/smscount-range', 
+      '/dor', '/alloc/', '/stats', '/leaderboard', '/clients/list', 
+      '/earn/rates', '/earn/compute', '/withdraw/balance', '/withdraw/submit',
+      '/admin/earnings-report', '/admin/range-deductions', '/cli/', '/p/'
+    ];
+    if (blockedRoutes.some(r => url.startsWith(r))) {
+      return res.status(503).json({ 
+        ok: false, error: 'maintenance', maintenance: true,
+        message: MAINTENANCE_MSG, ...corsHeaders 
+      });
+    }
+  }
 
   try {
     // ═══════════════════════════════════════════════════════════
