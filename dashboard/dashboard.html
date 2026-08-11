@@ -6,99 +6,32 @@
     <meta name="theme-color" content="#06080F">
     <title>Zamil SMS — Dashboard</title>
     <link rel="icon" type="image/x-icon" href="/branding/favicon.ico">
-    <link rel="stylesheet" href="common.css?v=20260808">
-    <link rel="stylesheet" href="/dashboard/dashboard.css?v=20260808">
-    <link rel="stylesheet" href="/dashboard/pages.css?v=20260808">
-    <script>
-(function(){
-  var FIXED = sessionStorage.getItem('cssfix');
-  function cssApplied(){
-    try{
-      var b = document.querySelector('.bottom-nav') || document.querySelector('.header');
-      if(!b) return true;                      // not a styled page
-      return getComputedStyle(b).position === 'fixed' ||
-             getComputedStyle(document.body).getPropertyValue('--accent').trim() !== '';
-    }catch(e){ return true; }
-  }
-  window.addEventListener('load', function(){
-    setTimeout(function(){
-      if(!cssApplied()){
-        if(!FIXED){                            // auto-fix once (no loop)
-          sessionStorage.setItem('cssfix','1');
-          var u = new URL(location.href);
-          u.searchParams.set('cb', Date.now()); // bust the poisoned cache
-          location.replace(u.toString());
-        }
-      } else {
-        sessionStorage.removeItem('cssfix');
-      }
-    }, 700);
-  });
-})();
-</script>
-    <script>
-    /* ══ Inactivity cache-killer: 1h idle → purge data caches + force fresh load ══ */
-    (function(){
-      var KEY='zamil_last_active', GAP=60*60*1000;
-      var now=Date.now(), last=0;
-      try{ last=parseInt(localStorage.getItem(KEY)||'0',10)||0; }catch(e){}
-      var freshReload=/[?&]fresh=\d+/.test(location.search);
-      if(last>0 && (now-last)>GAP && !freshReload){
-        try{
-          var KEEP={app_session:1,app_username:1,app_theme:1,app_client_id:1,app_client_name:1,app_panel_num:1,
-                    hydra_role:1,hydra_agent_token:1,zamil_last_active:1,notif_banner_dismissed:1,
-                    ranges_grouped:1,earn_cur:1,earn_pkr_rate:1};
-          var kill=[];
-          for(var i=0;i<localStorage.length;i++){
-            var k=localStorage.key(i); if(!k||KEEP[k])continue;
-            if(/cache|otp|sms|range|nums|numbers|lb_|dor|as_|zc_/i.test(k))kill.push(k);
-          }
-          kill.forEach(function(k){localStorage.removeItem(k);});
-        }catch(e){}
-        try{ sessionStorage.clear(); }catch(e){}
-        if(window.caches){try{caches.keys().then(function(ns){ns.forEach(function(n){caches.delete(n);});});}catch(e){}}
-        location.replace(location.pathname+(location.search?location.search+'&':'?')+'fresh='+now);
-        return;
-      }
-      if(freshReload&&history.replaceState){
-        try{history.replaceState(null,'',location.pathname+location.search.replace(/([?&])fresh=\d+&?/,'$1').replace(/[?&]$/,''));}catch(e){}
-      }
-      function touch(){try{localStorage.setItem(KEY,String(Date.now()));}catch(e){}}
-      ['pointerdown','keydown','touchstart','wheel'].forEach(function(ev){document.addEventListener(ev,touch,{passive:true});});
-      touch();
-    })();
-    </script>
+    <link rel="stylesheet" href="common.css">
+    <link rel="stylesheet" href="dashboard.css">
     <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
 <header class="header">
-    <div class="header-left">
-        <button class="hamburger" onclick="openDrawer()" aria-label="Menu">
-            <span></span><span></span><span></span>
-        </button>
-        <div class="logo">
-            <img src="/branding/logo-dark.png" class="header-logo-svg header-logo-dark" alt="Logo">
-            <img src="/branding/logo-light.png" class="header-logo-svg header-logo-light" alt="Logo">
+        <div class="header-left">
+            <button class="hamburger" onclick="openDrawer()" aria-label="Menu">
+                <span></span><span></span><span></span>
+            </button>
+            <div class="logo">
+                <img src="/branding/logo-dark.png" class="header-logo-svg header-logo-dark" alt="Logo">
+                <img src="/branding/logo-light.png" class="header-logo-svg header-logo-light" alt="Logo">
+            </div>
         </div>
-    </div>
-
-   <div class="header-right">
-            <button class="panel-pill" id="panelPill" onclick="openDrawer()" title="Switch panel">LM</button>
-            <button class="bell-btn" id="bellBtn" onclick="openNotifPanel()" aria-label="Notifications">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
-            <span class="bell-badge" id="bellBadge" style="display:none">0</span>
-        </button>
-
-        <div class="profile-wrap">
-            <div class="profile-btn" onclick="openDrawer()">
-                <div class="profile-avatar" id="profileAvatar">US</div>
-                <div class="profile-text">
-                    <span class="profile-name" id="profileName">User</span>
+        <div class="header-right">
+            <div class="profile-wrap">
+                <div class="profile-btn" onclick="openDrawer()">
+                    <div class="profile-avatar" id="profileAvatar">US</div>
+                    <div class="profile-text">
+                        <span class="profile-name" id="profileName">User</span>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
-</header>
+    </header>
 
     <div class="app">
         <div class="container">
@@ -113,11 +46,11 @@
                         <div class="otp-hero-num" id="rangesOtpToday">0</div>
                         <div class="otp-hero-sub"><span class="live-dot"></span> Live · auto-updating</div>
                       </div>
-                      <div class="otp-hero-refresh rbtn" onclick="if(typeof silentSmsRefresh==='function')silentSmsRefresh(true)" title="Refresh"><span class="r-ic">↻</span></div>
+                      <div class="otp-hero-refresh" onclick="if(typeof silentSmsRefresh==='function')silentSmsRefresh(true)" title="Refresh">↻</div>
                     </div>
                         <div class="section-hdr" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
                         <div class="section-title">📡 Your Ranges <span class="badge" id="rangesCount">0</span></div>
-                        <button class="btn btn-sm btn-ghost rbtn" onclick="loadRanges(true)" title="Force refresh ranges"><span class="r-ic">↻</span> Refresh</button>
+                        <button class="btn btn-sm btn-ghost" onclick="loadRanges(true)" title="Force refresh ranges">↻ Refresh</button>
                     </div>
                     <div class="search-bar">
                         <span class="search-ic">🔍</span>
@@ -128,11 +61,13 @@
 
                 <!-- NUMBERS PANEL -->
               <div id="numbersPanel">
-                    <div class="num-top-row">
-                        <button class="panel-back" onclick="showRanges()">← Back</button>
-                        <div class="num-top-title" id="panelTitle">Range Name</div>
-                        <span class="badge" id="numCount">0</span>
-                        <button class="btn btn-sm btn-ghost rbtn" id="btnRefreshNums" onclick="refreshNumbers()"><span class="r-ic">↻</span> Refresh</button>
+                    <button class="panel-back" onclick="showRanges()" style="margin-bottom:12px; font-size:0.95rem; font-weight:700; padding:8px 0;">
+                        ← Back to Ranges
+                    </button>
+
+                    <div class="section-hdr">
+                        <div class="section-title" id="panelTitle">Range Name</div>
+                        <button class="btn btn-sm btn-ghost" id="btnRefreshNums" onclick="refreshNumbers()">↻ Refresh</button>
                     </div>
                     <div class="strip-bar">
                         <span class="strip-label">View:</span>
@@ -159,53 +94,44 @@
                 </div>
             </div>
 
-           <!-- ADD NUMBERS PAGE -->
-<div id="addNumPage" style="display:none">
-    <div class="an-hdr">
-        <div class="an-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg> Add Numbers</div>
-        <div class="an-sub">Search &amp; allocate ranges</div>
-        <button class="an-info" onclick="toggleAnInfo()" title="Help &amp; contact"><span>i</span></button>
-    </div>
+            <!-- ADD NUMBERS PAGE -->
+            <div id="addNumPage" style="display:none">
+                <div class="an-header">
+                    <div class="an-title">➕ Add Numbers</div>
+                    <div class="an-subtitle">Search and allocate new ranges to your account</div>
+                    <div style="margin-top:8px;font-size:.78rem;color:var(--muted)">Need more numbers / extra functions? <a href="https://wa.me/qr/4M2BZRDAFE6DJ1" target="_blank" rel="noopener" style="color:var(--accent);font-weight:700;text-decoration:none">💬 WhatsApp admin</a></div>
+                </div>
+                <div class="alloc-card">
+                    <div class="alloc-card-title"><span class="alloc-step">1</span> Client Info</div>
+                    <div id="aClientInfo" class="alloc-client-info">Verifying...</div>
+                </div>
+                <div id="aSearchCard" class="alloc-card" style="display:none">
+                    <div class="alloc-card-title"><span class="alloc-step">2</span> Search Ranges</div>
+                    <div class="alloc-search-row">
+                        <input type="text" id="aCountryInput" class="alloc-input" placeholder="Country (e.g., Tunisia, Angola)">
+                        <button class="btn btn-primary" id="aSearchBtn" onclick="allocSearch()">🔍 Search</button>
+                    </div>
+                    <div id="aRangeList" class="alloc-range-list"></div>
+                </div>
+                <div id="aAllocCard" class="alloc-card" style="display:none">
+                    <div class="alloc-card-title"><span class="alloc-step">3</span> Allocate</div>
+                    <div class="alloc-client-info" style="margin-bottom:12px" id="aSelRangeInfo"></div>
+                    <div class="alloc-field">
+                        <label>Quantity (1–25)</label>
+                        <input type="number" id="aQtyInput" class="alloc-input" value="3" min="1" max="25">
+                    </div>
+                    <div id="aLimitBar" class="alloc-limit-bar"></div>
+                    <div style="display:flex;gap:8px;margin-top:12px">
+                        <button class="btn btn-ghost" onclick="aBackToSearch()">← Back</button>
+                        <button class="btn btn-primary" id="aAllocBtn" onclick="doAllocate()" style="flex:1">
+                            <span id="aAllocSpinner" class="spinner" style="display:none;width:14px;height:14px;border-width:2px"></span>
+                            Allocate Numbers
+                        </button>
+                    </div>
+                    <div id="aAllocResult" class="alloc-result"></div>
+                </div>
+            </div>
 
-    <div id="anInfoPanel" class="an-info-panel" style="display:none">
-        <div class="an-info-text">Search a country, pick a range with free numbers, and allocate them to your account. Need more numbers or extra functions? Contact the admin.</div>
-        <a class="an-wa" href="https://wa.me/qr/4M2BZRDAFE6DJ1" target="_blank" rel="noopener">💬 WhatsApp admin</a>
-    </div>
-
-    <div class="alloc-card an-client-card">
-        <div class="alloc-card-title"><span class="alloc-step">1</span> Client</div>
-        <div id="aClientInfo" class="alloc-client-info">Verifying...</div>
-    </div>
-
-    <div id="aSearchCard" class="alloc-card" style="display:none">
-        <div class="alloc-card-title"><span class="alloc-step">2</span> Search Ranges</div>
-        <div class="alloc-search-row">
-            <input type="text" id="aCountryInput" class="alloc-input" placeholder="Country (e.g., Tunisia, Angola)">
-            <button class="btn btn-primary" id="aSearchBtn" onclick="allocSearch()">🔍 Search</button>
-        </div>
-        <div id="aRangeList" class="alloc-range-list"></div>
-    </div>
-
-    <div id="aAllocCard" class="alloc-card" style="display:none">
-        <div class="alloc-card-title"><span class="alloc-step">3</span> Allocate</div>
-        <div class="alloc-client-info" style="margin-bottom:12px" id="aSelRangeInfo"></div>
-        <div class="alloc-field">
-            <label>Quantity (1–25)</label>
-            <input type="number" id="aQtyInput" class="alloc-input" value="3" min="1" max="25">
-        </div>
-        <div id="aLimitBar" class="alloc-limit-bar"></div>
-        <div style="display:flex;gap:8px;margin-top:12px">
-            <button class="btn btn-ghost" onclick="aBackToSearch()">← Back</button>
-            <button class="btn btn-primary" id="aAllocBtn" onclick="doAllocate()" style="flex:1">
-                <span id="aAllocSpinner" class="spinner" style="display:none;width:14px;height:14px;border-width:2px"></span>
-                Allocate Numbers
-            </button>
-        </div>
-        <div id="aAllocResult" class="alloc-result"></div>
-    </div>
-</div>
-
-            <!-- LEADERBOARD PAGE -->
             <!-- LEADERBOARD PAGE -->
             <div id="top10Page" style="display:none">
                 <div class="lb-hdr">
@@ -216,7 +142,7 @@
                             <div class="lb-sub">Top SMS Senders</div>
                         </div>
                     </div>
-                    <button class="btn btn-sm btn-ghost lb-refresh rbtn" id="lbSpin" style="display:none" title="Refresh leaderboard"><span class="r-ic">↻</span></button>
+                    <button class="btn btn-sm btn-ghost lb-refresh" id="lbSpin" style="display:none">↻</button>
                 </div>
                 <div class="lb-range-group" style="margin-bottom:16px">
                     <button class="lb-range-btn selected" data-range="today" onclick="loadLeaderboard('today')">Today</button>
@@ -248,7 +174,7 @@
                             <div class="sms-big-sub" id="smsBigSub"><span class="live-dot"></span> Updated just now</div>
                         </div>
                     </div>
-                    <button class="sms-big-refresh rbtn" onclick="if(typeof silentSmsRefresh==='function')silentSmsRefresh(true)" title="Refresh now"><span class="r-ic">↻</span></button>
+                    <button class="sms-big-refresh" onclick="if(typeof silentSmsRefresh==='function')silentSmsRefresh(true)" title="Refresh now">↻</button>
                 </div>
 
                 <div class="sms-stats-row" style="margin-bottom:16px">
@@ -270,9 +196,9 @@
               <!-- DOR PAGE -->
             <div id="dorPage" style="display:none">
                 <div class="dor-hdr">
-                   <div class="dor-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg> OTP Report</div>
+                    <div class="dor-title">📊 OTP Report</div>
                     <div class="dor-sub">Global · today</div>
-                    <button class="btn btn-sm btn-ghost rbtn" onclick="loadDOR()"><span class="r-ic">↻</span> Refresh</button>
+                    <button class="btn btn-sm btn-ghost" onclick="loadDOR()">↻ Refresh</button>
                 </div>
                 <div class="dor-card">
                     <div id="dorLoading" style="padding:18px;text-align:center;color:var(--muted);font-size:.8rem">Loading…</div>
@@ -298,9 +224,9 @@
             <span>Add</span>
         </button>
         <button class="bn-item" data-page="dor" onclick="bnSwitch('dor')">
-    <span class="bn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg></span>
-    <span>DOR</span>
-</button>
+            <span class="bn-icon">📊</span>
+            <span>DOR</span>
+        </button>
         <button class="bn-item" data-page="top10" onclick="bnSwitch('top10')">
             <span class="bn-icon">🏆</span>
             <span>Top 10</span>
@@ -367,83 +293,18 @@
         <div id="loadingText" class="loading-text">Loading…</div>
     </div>
 
-    <!-- ═══ LEFT DRAWER ═══ -->
-<div class="zdrawer-overlay" id="zdrawerOverlay" onclick="closeDrawer()"></div>
-<aside class="zdrawer" id="zdrawer">
-  <div class="zdrawer-hdr">
-    <img src="/branding/logo-dark.png" class="header-logo-dark" alt="Zamil SMS" style="height:26px;width:auto">
-    <img src="/branding/logo-light.png" class="header-logo-light" alt="Zamil SMS" style="height:26px;width:auto">
-    <button class="zdrawer-close" onclick="closeDrawer()" aria-label="Close">✕</button>
-  </div>
-  <div class="zdrawer-user">
-    <div class="zdrawer-user-label">Logged in as</div>
-    <div class="zdrawer-user-name" id="drawerUsername">User</div>
-    <div id="drawerRolePill" style="margin-top:6px"></div>
-  </div>
-  <div class="panel-switch" id="panelSwitch"></div>
-    <!-- ═══ PANEL SWITCHER (LaMix / Zyron / EVS) ═══ -->
-  <div class="panel-switch" id="panelSwitch"></div>
-  <div class="zdrawer-sec">
-  <div class="zdrawer-sec-title">⚡ Tools</div>
- <button class="drw-item" data-pf="cli" onclick="closeDrawer();openCliPage()">
-    <span>📡</span><span>CLI Insights</span>
-  </button>
-      <button class="drw-item" id="drawerTrackBtn" style="display:none" onclick="closeDrawer();openTrackPage()">
-  <span style="width:22px;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span><span>CLI Track</span>
-</button>
-  <button class="drw-item" id="drawerStatsBtn" style="display:none" onclick="closeDrawer();openStatsPage()">
-      <span>📊</span><span>Statistics</span>
-    </button>
-    <button class="drw-item" id="drawerAdminBtn" style="display:none" onclick="closeDrawer();openAdminPage()">
-      <span>🛡️</span><span>Admin Control</span>
-    </button>
-      <button class="drw-item" id="drawerLimitBtn" style="display:none" onclick="closeDrawer();openLimitPage()">
-      <span>🔓</span><span>Limit Increase</span>
-    </button>
-      <button class="drw-item" id="drawerTeamBtn" style="display:none" onclick="closeDrawer();openTeamPage()">
-      <span>👥</span><span>My Team</span>
-    </button>
-      <button class="drw-item" id="drawerReportBtn" style="display:none" onclick="closeDrawer();openTeamReport()">
-      <span>📈</span><span>Team Report</span>
-    </button>
-      <button class="drw-item" onclick="closeDrawer();openEarnPage()"><span>💰</span><span>Earnings</span></button>
-      <button class="drw-item" data-pf="withdrawal" onclick="closeDrawer();setTimeout(openWdPage,50)"><span>💸</span><span>Withdrawal</span></button>
-  </div>
-  <div class="zdrawer-sec" style="border-top:1px solid var(--border)">
-    <div class="zdrawer-sec-title">⚙️ Account</div>
-    <button class="drw-item" onclick="toggleTheme();syncDrawerTheme()">
-      <span id="drawerThemeIcon">☀️</span><span>Theme</span>
-    </button>
-    <button class="drw-item" onclick="closeDrawer();openChangePasswordModal()">
-      <span>🔑</span><span>Change Password</span>
-    </button>
-    <button class="drw-item danger" onclick="closeDrawer();doLogout()">
-      <span>🚪</span><span>Sign Out</span>
-    </button>
-  </div>
-  <span id="themeBtn" aria-hidden="true" style="display:none"></span>
-</aside>
-
-    <!-- ═══ 1. Panel engine FIRST (defines window.PANEL + switcher) ═══ -->
-    <script src="/dashboard/panel.js?v=20260809" defer></script>
-
     <script src="/dashboard/flags.js" defer></script>
     <script src="/login/providers.js" defer></script>
     <script src="/dashboard/utils.js" defer></script>
     <script src="/dashboard/api.js" defer></script>
-
-    <!-- ═══ 2. Bridge AFTER api.js (wraps fetch + apiCall), BEFORE app.js ═══ -->
-    <script src="/dashboard/panel-bridge.js?v=20260809" defer></script>
-
     <script src="/dashboard/auth.js" defer></script>
     <script src="/dashboard/app.js" defer></script>
     <script src="/dashboard/feature.js" defer></script>
     <script src="/dashboard/earning.js" defer></script>
     <script src="/dashboard/withdrawal.js" defer></script>
     <script src="/dashboard/cli.js"></script>
+    <script src="/dashboard/cli-search.js"></script>
     <script src="/dashboard/cli-track.js" defer></script>
-    <script src="/dashboard/notifs.js" defer></script>
-    
 
     <script>
     window.addEventListener('DOMContentLoaded', function(){
@@ -494,6 +355,31 @@
   var fm = document.getElementById('featMenu'); if (fm) fm.addEventListener('click', function(e){ e.stopPropagation(); });
 })();
 </script>
+
+    <style>
+#otpFloat{position:fixed;top:64px;left:50%;transform:translateX(-50%) translateY(-18px);
+  width:min(92vw,380px);z-index:650;display:none;opacity:0;
+  transition:opacity .25s ease, transform .25s ease;pointer-events:none}
+#otpFloat.show{display:block;opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
+.otp-float-card{background:var(--card);border:1px solid var(--border);border-left:4px solid var(--accent);
+  border-radius:14px;box-shadow:0 16px 40px rgba(0,0,0,.28);padding:12px 14px;cursor:pointer;
+  display:flex;flex-direction:column;gap:6px}
+.otp-float-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.otp-float-cli{font-size:.74rem;font-weight:800;color:var(--text);display:flex;align-items:center;gap:6px;min-width:0}
+.otp-float-cli b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.otp-float-time{font-size:.64rem;color:var(--muted);font-weight:700;flex-shrink:0}
+.otp-float-code{align-self:flex-start;font-size:1.5rem;font-weight:900;letter-spacing:.14em;
+  font-variant-numeric:tabular-nums;padding:4px 12px;border-radius:10px;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;
+  box-shadow:0 4px 14px rgba(34,211,238,.35)}
+.otp-float-num{font-size:.7rem;color:var(--muted);font-weight:700;font-variant-numeric:tabular-nums}
+.otp-float-msg{font-size:.72rem;color:var(--muted);line-height:1.35;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.otp-float-hint{font-size:.6rem;color:var(--accent);font-weight:700;text-align:right}
+.rsms-body .otp-code{display:inline-block;font-weight:900;letter-spacing:.1em;
+  font-variant-numeric:tabular-nums;padding:1px 8px;border-radius:7px;margin:0 2px;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-size:1.02em}
+</style>
 
 <script>
 /* ═══ ADD-ON 1 — Real-time floating OTP ═══ */
@@ -568,6 +454,63 @@
 })();
 </script>
 
+    <!-- ═══ LEFT DRAWER ═══ -->
+<div class="zdrawer-overlay" id="zdrawerOverlay" onclick="closeDrawer()"></div>
+<aside class="zdrawer" id="zdrawer">
+  <div class="zdrawer-hdr">
+    <img src="/branding/logo-dark.png" class="header-logo-dark" alt="Zamil SMS" style="height:26px;width:auto">
+    <img src="/branding/logo-light.png" class="header-logo-light" alt="Zamil SMS" style="height:26px;width:auto">
+    <button class="zdrawer-close" onclick="closeDrawer()" aria-label="Close">✕</button>
+  </div>
+  <div class="zdrawer-user">
+    <div class="zdrawer-user-label">Logged in as</div>
+    <div class="zdrawer-user-name" id="drawerUsername">User</div>
+    <div id="drawerRolePill" style="margin-top:6px"></div>
+  </div>
+  <div class="zdrawer-sec">
+  <div class="zdrawer-sec-title">⚡ Tools</div>
+  <button class="drw-item" onclick="closeDrawer();openCliPage()">
+    <span>📡</span><span>CLI Insights</span>
+  </button>
+  <button class="drw-item" onclick="closeDrawer();openCliSearchPage()">
+    <span>🔍</span><span>CLI Search</span>
+  </button>
+      <button class="drw-item" id="drawerTrackBtn" style="display:none" onclick="closeDrawer();openTrackPage()">
+  <span style="width:22px;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span><span>CLI Track</span>
+</button>
+  <button class="drw-item" id="drawerStatsBtn" style="display:none" onclick="closeDrawer();openStatsPage()">
+      <span>📊</span><span>Statistics</span>
+    </button>
+    <button class="drw-item" id="drawerAdminBtn" style="display:none" onclick="closeDrawer();openAdminPage()">
+      <span>🛡️</span><span>Admin Control</span>
+    </button>
+      <button class="drw-item" id="drawerLimitBtn" style="display:none" onclick="closeDrawer();openLimitPage()">
+      <span>🔓</span><span>Limit Increase</span>
+    </button>
+      <button class="drw-item" id="drawerTeamBtn" style="display:none" onclick="closeDrawer();openTeamPage()">
+      <span>👥</span><span>My Team</span>
+    </button>
+      <button class="drw-item" id="drawerReportBtn" style="display:none" onclick="closeDrawer();openTeamReport()">
+      <span>📈</span><span>Team Report</span>
+    </button>
+      <button class="drw-item" onclick="closeDrawer();openEarnPage()"><span>💰</span><span>Earnings</span></button>
+      <button class="drw-item" onclick="closeDrawer();setTimeout(openWdPage,50)"><span>💸</span><span>Withdrawal</span></button>
+  </div>
+  <div class="zdrawer-sec" style="border-top:1px solid var(--border)">
+    <div class="zdrawer-sec-title">⚙️ Account</div>
+    <button class="drw-item" onclick="toggleTheme();syncDrawerTheme()">
+      <span id="drawerThemeIcon">☀️</span><span>Theme</span>
+    </button>
+    <button class="drw-item" onclick="closeDrawer();openChangePasswordModal()">
+      <span>🔑</span><span>Change Password</span>
+    </button>
+    <button class="drw-item danger" onclick="closeDrawer();doLogout()">
+      <span>🚪</span><span>Sign Out</span>
+    </button>
+  </div>
+  <span id="themeBtn" aria-hidden="true" style="display:none"></span>
+</aside>
+
 <script>
 function openDrawer(){ var d=document.getElementById('zdrawer'),o=document.getElementById('zdrawerOverlay'); if(d)d.classList.add('open'); if(o)o.classList.add('open'); syncDrawerTheme(); }
 function closeDrawer(){ var d=document.getElementById('zdrawer'),o=document.getElementById('zdrawerOverlay'); if(d)d.classList.remove('open'); if(o)o.classList.remove('open'); }
@@ -581,6 +524,65 @@ function syncDrawerTheme() {
 document.addEventListener('DOMContentLoaded', syncDrawerTheme);
 </script>
 
+<style>
+.header-left{display:flex;align-items:center;min-width:0}
+.hamburger{display:flex;flex-direction:column;justify-content:center;gap:4px;width:34px;height:34px;padding:7px 6px;border:1px solid var(--border);border-radius:8px;background:var(--surface);cursor:pointer;flex-shrink:0;margin-right:8px}
+.hamburger span{display:block;width:100%;height:2px;background:var(--text);border-radius:2px}
+.hamburger span:nth-child(2){width:65%}
+.header-right .profile-text{display:flex;flex-direction:column;align-items:flex-end;gap:2px;min-width:0}
+.header-right .profile-wrap .profile-name,.header-right .profile-name{max-width:132px;font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.header-right .profile-text .role-pill{margin-left:0}
+.zdrawer-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:800;backdrop-filter:blur(2px)}
+.zdrawer-overlay.open{display:block}
+.zdrawer{position:fixed;top:0;left:0;height:100%;width:280px;max-width:84vw;background:var(--card);border-right:1px solid var(--border);z-index:801;transform:translateX(-100%);transition:transform .25s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column;overflow-y:auto}
+.zdrawer.open{transform:translateX(0)}
+.zdrawer-hdr{padding:15px 16px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.zdrawer-hdr .zdrawer-close{margin-left:auto;width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;font-size:.85rem}
+[data-theme="dark"] .zdrawer-hdr .header-logo-light{display:none}
+[data-theme="dark"] .zdrawer-hdr .header-logo-dark{display:block}
+[data-theme="light"] .zdrawer-hdr .header-logo-dark{display:none}
+[data-theme="light"] .zdrawer-hdr .header-logo-light{display:block}
+.zdrawer-user{padding:14px 16px;border-bottom:1px solid var(--border)}
+.zdrawer-user-label{font-size:.6rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.zdrawer-user-name{font-size:.98rem;font-weight:800;color:var(--text);word-break:break-all;line-height:1.2}
+.zdrawer-sec{padding:6px 0}
+.zdrawer-sec-title{padding:9px 16px 4px;font-size:.56rem;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.drw-item{display:flex;align-items:center;gap:11px;width:100%;padding:11px 16px;border:0;background:none;cursor:pointer;font-family:inherit;font-size:.86rem;font-weight:600;color:var(--text);text-align:left;-webkit-tap-highlight-color:transparent}
+.drw-item:active{background:var(--surface)}
+.drw-item.danger{color:#f87171}
+.drw-item>span:first-child{width:22px;text-align:center;font-size:1rem;flex-shrink:0}
+.drw-soon{margin-left:auto;font-size:.58rem;color:var(--muted);font-weight:700}
+.num-top-row{display:flex;align-items:center;gap:8px;padding:8px 0 10px}
+.num-top-row .panel-back{margin:0;padding:6px 11px;font-size:.8rem;font-weight:700;flex-shrink:0}
+.num-top-title{flex:1;min-width:0;font-weight:800;font-size:.92rem;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.num-top-row #btnRefreshNums{flex-shrink:0;white-space:nowrap}
+.dor-hdr{display:flex;align-items:center;gap:8px;padding:8px 0 10px}
+.dor-title{font-size:.98rem;font-weight:800;letter-spacing:-.01em}
+.dor-sub{font-size:.64rem;color:var(--muted);font-weight:600}
+.dor-hdr .btn{margin-left:auto;flex-shrink:0}
+.dor-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+#addNumPage .an-header{padding:6px 2px 8px}
+#addNumPage .an-title{font-size:1.05rem}
+#addNumPage .an-subtitle{font-size:.74rem;margin-top:2px}
+#addNumPage .alloc-card{padding:12px 13px;margin-bottom:10px;border-radius:12px}
+#addNumPage .alloc-card-title{font-size:.72rem;margin-bottom:9px}
+#addNumPage .alloc-client-info{font-size:.8rem}
+#addNumPage .alloc-input{padding:10px 12px;font-size:.85rem;border-radius:9px}
+#addNumPage .alloc-search-row{gap:8px}
+#addNumPage .alloc-search-row .btn{padding:10px 14px;font-size:.82rem;white-space:nowrap}
+#addNumPage .alloc-field label{font-size:.66rem}
+</style>
+
+   <style>
+.otp-float-close{position:absolute;top:6px;right:8px;width:22px;height:22px;border:0;border-radius:50%;
+  background:var(--surface);color:var(--muted);font-size:.8rem;cursor:pointer;line-height:1;
+  display:flex;align-items:center;justify-content:center}
+.otp-float-card{position:relative}
+.sms-big-refresh{position:absolute;top:12px;right:12px;width:34px;height:34px;border-radius:50%;
+  border:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:1rem;cursor:pointer;
+  display:flex;align-items:center;justify-content:center}
+</style>
+
 <script>
 /* ═══════════════════════════════════════════════════════════
    🟢 IMPROVED CACHE LAYER — User-specific keys + TTL + logout clear
@@ -589,6 +591,7 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
 (function(){
   'use strict';
 
+  // ── Centralized cache helper ──
   var ZCache = window.ZCache = {
     _uid: function(){
       try {
@@ -622,13 +625,14 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
     }
   };
 
-  var TTL_RANGES   = 5 * 60 * 1000;
-  var TTL_SMS      = 60 * 1000;
-  var TTL_DOR      = 3 * 60 * 1000;
-  var TTL_LB       = 5 * 60 * 1000;
-  var TTL_WEEK     = 5 * 60 * 1000;
-  var TTL_MONTH    = 10 * 60 * 1000;
-  var TTL_SEARCH   = 60 * 1000;
+  // ── TTL constants (ms) ──
+  var TTL_RANGES   = 5 * 60 * 1000;   // 5 min
+  var TTL_SMS      = 60 * 1000;        // 1 min
+  var TTL_DOR      = 3 * 60 * 1000;   // 3 min
+  var TTL_LB       = 5 * 60 * 1000;   // 5 min
+  var TTL_WEEK     = 5 * 60 * 1000;   // 5 min
+  var TTL_MONTH    = 10 * 60 * 1000;  // 10 min
+  var TTL_SEARCH   = 60 * 1000;        // 1 min
 
   function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
@@ -654,6 +658,7 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
 
   function _paintAlloc(ranges){ ASTATE.ranges=ranges; ASTATE.availCache={}; ranges.forEach(function(r){ ASTATE.availCache[r.id]={available:r.available||0,total:r.total||0}; }); if(typeof renderAllocRanges==='function') renderAllocRanges(); }
 
+  // ── Logout hook: clear all user cache ──
   function hookLogout(){
     if (typeof doLogout === 'function' && !doLogout._zcHook) {
       var _orig = doLogout;
@@ -665,6 +670,7 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
   function install(){
     hookLogout();
 
+    // ── renderRanges: save to user cache ──
     if(typeof renderRanges==='function' && !renderRanges._zw){
       var _rr=renderRanges;
       renderRanges=function(list){
@@ -673,6 +679,7 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
       }; renderRanges._zw=1;
     }
 
+    // ── loadRanges: fallback to user cache on failure ──
     if(typeof loadRanges==='function' && !loadRanges._zw){
       var _lr=loadRanges;
       loadRanges=function(force){
@@ -687,6 +694,7 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
       }; loadRanges._zw=1;
     }
 
+    // ── _applySmsResult: user-specific SMS cache + grace + dedupe ──
     if(typeof _applySmsResult==='function' && !_applySmsResult._zw){
       var _asr=_applySmsResult; window._zeroStreak=0; var _seeded=false;
       window._lastNonZeroSms = window._lastNonZeroSms || { count:0, ts:0, day:'' };
@@ -711,6 +719,7 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
       }; _applySmsResult._zw=1;
     }
 
+    // ── loadDOR: user cache ──
     if(typeof loadDOR==='function' && !loadDOR._zw){
       window.loadDOR=function(){
         var loading=document.getElementById('dorLoading'), list=document.getElementById('dorList');
@@ -725,6 +734,7 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
       }; loadDOR._zw=1;
     }
 
+    // ── Leaderboard: user cache ──
     if(typeof renderLeaderboard==='function' && !renderLeaderboard._zw){
       var _rlb=renderLeaderboard;
       renderLeaderboard=function(users){
@@ -740,6 +750,7 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
       }; loadLeaderboard._zw=1;
     }
 
+    // ── Week/Month counts: user cache ──
     if(typeof loadSmsRangeCounts==='function' && !loadSmsRangeCounts._zw){
       window.loadSmsRangeCounts=function(){
         if(typeof SESSION==='undefined'||!SESSION) return;
@@ -750,6 +761,7 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
       }; loadSmsRangeCounts._zw=1;
     }
 
+    // ── Alloc search: user cache ──
     if(typeof allocSearch==='function' && !allocSearch._zw){
       window.allocSearch=function(){
         var q=(document.getElementById('aCountryInput').value||'').trim();
@@ -769,12 +781,14 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
       }; allocSearch._zw=1;
     }
 
+    // ── Suppress redundant "+N new SMS!" toast ──
     if(typeof showToast==='function' && !showToast._zw){
       var _st=showToast;
       window.showToast=function(t,kind){ try{ if(typeof t==='string' && /new SMS!?\s*$/.test(t) && kind==='success') return; }catch(e){} return _st.apply(this,arguments); };
       showToast._zw=1;
     }
 
+    // ── Instant paint from cache on load ──
     try{
       if(localStorage.getItem('app_session')){
         var c=ZCache.get('sms', TTL_SMS);
@@ -796,6 +810,11 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
   setTimeout(function(){ if(typeof _applySmsResult!=='undefined' && !_applySmsResult._zw) install(); }, 1200);
 })();
 </script>
+
+<style>
+#otpFloat{ top:auto !important; bottom:84px !important; transform:translateX(-50%) translateY(18px); }
+#otpFloat.show{ transform:translateX(-50%) translateY(0); }
+</style>
 
     <script>
 /* ═══ RANGES INSTANT-CACHE — gentle background refresh (respects TTL) ═══ */
@@ -832,288 +851,5 @@ document.addEventListener('DOMContentLoaded', syncDrawerTheme);
 </script>
 
    <div id="featureRoot"></div>
-
-    <script>
-(function(){
-  function install(){
-    if(typeof loadLeaderboard!=='function'||loadLeaderboard._lbs)return;
-    var spin=document.getElementById('lbSpin');
-    var _llb=loadLeaderboard;
-    window.loadLeaderboard=function(){
-      if(spin)spin.classList.add('lb-loading');
-      var r=_llb.apply(this,arguments);
-      setTimeout(function(){if(spin)spin.classList.remove('lb-loading');},3000);
-      return r;
-    };
-    loadLeaderboard._lbs=1;
-    if(typeof renderLeaderboard==='function'&&!renderLeaderboard._lbs){
-      var _rlb=renderLeaderboard;
-      window.renderLeaderboard=function(){if(spin)spin.classList.remove('lb-loading');return _rlb.apply(this,arguments);};
-      renderLeaderboard._lbs=1;
-    }
-  }
-  if(document.readyState==='complete')install();else window.addEventListener('load',install);
-  setTimeout(function(){if(typeof loadLeaderboard!=='undefined'&&!loadLeaderboard._lbs)install();},1300);
-})();
-</script>
-
-    <script>
-function toggleAnInfo(){
-  var p=document.getElementById('anInfoPanel'); if(!p) return;
-  var b=document.querySelector('#addNumPage .an-info');
-  var open=p.style.display==='block';
-  p.style.display=open?'none':'block';
-  if(b) b.classList.toggle('on',!open);
-}
-window.toggleAnInfo=toggleAnInfo;
-</script>
-
-    <script>
-    /* ══ Universal loader + slow-load watchdog + numbers count sync ══ */
-    document.addEventListener('DOMContentLoaded',function(){
-      var ov=document.getElementById('loadingOverlay');
-      if(ov){var sp=ov.querySelector('.spinner');if(sp){var l=document.createElement('div');l.className='loader';sp.parentNode.replaceChild(l,sp);}}
-      var dor=document.getElementById('dorLoading');
-      if(dor&&dor.textContent.indexOf('Loading')>-1){dor.innerHTML='<div class="zload-wrap"><div class="loader"></div><div class="zload-msg">Fetching global OTP report…</div></div>';}
-      var seen={};
-      setInterval(function(){
-        ['loadingOverlay','dorLoading','lbComing'].forEach(function(id){
-          var el=document.getElementById(id);if(!el)return;
-          var vis=false;try{vis=getComputedStyle(el).display!=='none';}catch(e){}
-          if(vis){if(!seen[id])seen[id]=Date.now();
-            if(Date.now()-seen[id]>8000&&!el.querySelector('.zload-slow')){
-              var n=document.createElement('div');n.className='zload-slow';
-              n.textContent='Taking longer than usual — system busy, please wait…';el.appendChild(n);}
-          }else{seen[id]=null;var s=el.querySelector('.zload-slow');if(s)s.remove();}
-        });
-      },1000);
-      var tn=document.getElementById('totalNums'),nc=document.getElementById('numCount');
-      if(tn&&nc){setInterval(function(){var m=(tn.textContent||'').match(/\d+/);if(m)nc.textContent=m[0];},1000);}
-    });
-    </script>
-<script>
-window.addEventListener('DOMContentLoaded', function(){
-  if (typeof doLogout === 'function' && !doLogout._zl) {
-    var _o = doLogout;
-    window.doLogout = function(){
-      try{
-        var s = localStorage.getItem('app_session');
-        if (s) {
-          var payload = JSON.stringify({ session: s });
-          if (navigator.sendBeacon) {
-            navigator.sendBeacon('/api/auth/logout', new Blob([payload], {type:'application/json'}));
-          } else {
-            fetch('/api/auth/logout', { method:'POST', keepalive:true, headers:{'Content-Type':'application/json'}, body: payload }).catch(function(){});
-          }
-        }
-      }catch(e){}
-      return _o.apply(this, arguments);
-    };
-    doLogout._zl = 1;
-  }
-});
-</script>
-
-<div class="notif-overlay" id="notifOverlay" onclick="if(event.target===this)closeNotifPanel()">
-  <div class="notif-panel">
-    <div class="notif-head">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
-      <div class="notif-title">Notifications</div>
-      <button class="notif-x" onclick="closeNotifPanel()" aria-label="Close">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-      </button>
-    </div>
-    <div class="notif-list" id="notifList"><div class="notif-empty">Loading…</div></div>
-    <div class="notif-compose" id="notifCompose" style="display:none">
-      <div class="nc-row">
-        <select id="ncTarget" onchange="document.getElementById('ncUserWrap').style.display=this.value==='user'?'flex':'none'">
-          <option value="*">All users</option>
-          <option value="user">Specific user</option>
-        </select>
-        <span id="ncUserWrap" style="display:none;flex:1"><input type="text" id="ncUser" placeholder="username"></span>
-        <select id="ncType" style="max-width:110px">
-          <option value="info">Info</option>
-          <option value="success">Success</option>
-          <option value="warn">Warning</option>
-          <option value="money">Money</option>
-        </select>
-      </div>
-      <div class="nc-row"><input type="text" id="ncTitle" placeholder="Title (optional)"></div>
-      <div class="nc-row"><textarea id="ncBody" placeholder="Write your announcement…"></textarea></div>
-      <div class="nc-row"><button class="nc-send" onclick="sendNotifMsg()">Send notification</button></div>
-    </div>
-  </div>
-</div>
-<script>
-(function(){
-  function sess(){ return localStorage.getItem('app_session'); }
-  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-  function npost(url,body,cb){ fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({session:sess()},body||{}))}).then(function(r){return r.json().catch(function(){return{ok:false};});}).then(cb).catch(function(){cb({ok:false});}); }
-  var _items=[], _role='none';
-  function ago(iso){ if(!iso)return''; var s=Math.floor((Date.now()-new Date(iso).getTime())/1000); if(isNaN(s)||s<0)return''; if(s<60)return'just now'; var m=Math.floor(s/60); if(m<60)return m+'m ago'; var h=Math.floor(m/60); if(h<24)return h+'h ago'; return Math.floor(h/24)+'d ago'; }
-  var ICONS={
-    info:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>',
-    success:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>',
-    warn:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
-    money:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 100 4h4a2 2 0 110 4H8"/><path d="M12 6v2M12 16v2"/></svg>'
-  };
-  function badge(n){ var b=document.getElementById('bellBadge'); if(!b)return; if(n>0){ b.style.display='flex'; b.textContent=n>9?'9+':String(n);} else b.style.display='none'; }
-  function render(){
-    var el=document.getElementById('notifList'); if(!el)return;
-    if(!_items.length){ el.innerHTML='<div class="notif-empty">No notifications yet</div>'; return; }
-    el.innerHTML=_items.map(function(n){
-      var extra='';
-      if(_role==='super'){
-        extra='<div class="ni-side"><div class="ni-read" title="'+esc((n.readBy||[]).join(', '))+'">'+(n.readBy||[]).length+' read</div>'
-          +'<button class="ni-del" data-del="'+n.id+'" aria-label="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg></button></div>';
-      }
-      return '<div class="notif-item t-'+(n.type||'info')+(n.read?'':' unread')+'">'
-        +'<div class="ni-ic">'+(ICONS[n.type]||ICONS.info)+'</div>'
-        +'<div class="ni-body">'+(n.title?'<div class="ni-title">'+esc(n.title)+'</div>':'')
-        +'<div class="ni-text">'+esc(n.body)+'</div>'
-        +'<div class="ni-time">'+ago(n.at)+(n.by?' · by '+esc(n.by):'')+'</div></div>'+extra+'</div>';
-    }).join('');
-  }
-  function load(markRead){
-    npost('/api/notifs/list',{},function(d){
-      _role=(d&&d.role)||'none';
-      _items=(d&&d.notifs)||[];
-      badge(_items.filter(function(n){return !n.read;}).length);
-      render();
-      var comp=document.getElementById('notifCompose'); if(comp) comp.style.display=(_role==='super')?'block':'none';
-      if(markRead){
-        var ids=_items.filter(function(n){return !n.read;}).map(function(n){return n.id;});
-        if(ids.length) npost('/api/notifs/mark-read',{ids:ids},function(){ _items.forEach(function(n){n.read=true;}); badge(0); render(); });
-      }
-    });
-  }
-  window.openNotifPanel=function(){ var ov=document.getElementById('notifOverlay'); if(ov)ov.classList.add('show'); load(true); };
-  window.closeNotifPanel=function(){ var ov=document.getElementById('notifOverlay'); if(ov)ov.classList.remove('show'); };
-  window.sendNotifMsg=function(){
-    var target=document.getElementById('ncTarget').value;
-    if(target==='user'){ target=(document.getElementById('ncUser').value||'').trim(); if(!target){ toastMsg('Enter a username','red'); return; } }
-    var body=(document.getElementById('ncBody').value||'').trim();
-    if(!body){ toastMsg('Write a message first','red'); return; }
-    npost('/api/notifs/send',{target:target,type:document.getElementById('ncType').value,title:document.getElementById('ncTitle').value.trim(),body:body},function(d){
-      if(d&&d.ok){ document.getElementById('ncBody').value=''; document.getElementById('ncTitle').value=''; toastMsg('Notification sent','green'); load(false); }
-      else toastMsg((d&&d.error)||'Failed to send','red');
-    });
-  };
-  document.addEventListener('click',function(e){
-    var b=e.target.closest('[data-del]'); if(!b)return;
-    var id=b.getAttribute('data-del');
-    if(!confirm('Delete this notification for everyone?'))return;
-    npost('/api/notifs/delete',{id:id},function(d){ if(d&&d.ok){ toastMsg('Notification deleted','green'); load(false);} });
-  });
-  load(false);
-  setInterval(function(){ if(!document.hidden) load(false); },60000);
-})();
-</script>
-
-   <div class="pz-ov" id="noIdOv">
-  <div class="pz-card">
-    <button class="pz-x" onclick="closeNoIdPopup()">✕</button>
-    <div class="pz-t" id="noIdTitle">No ID on panel</div>
-    <div class="pz-body" id="noIdMsg" style="font-size:.76rem;color:var(--muted);line-height:1.5;margin:6px 0 4px"></div>
-    <a class="pz-wa" href="https://wa.me/qr/4M2BZRDAFE6DJ1" target="_blank" rel="noopener">💬 WhatsApp admin to create ID</a>
-    <div class="pz-link-box">
-      <div class="pz-sub">Have a different ID on this panel? Link it (must match exactly):</div>
-      <input class="pz-inp" id="linkInput" placeholder="Your exact ID on this panel">
-      <button class="pz-btn" id="linkBtn">Link ID</button>
-      <button class="pz-btn ghost" id="unlinkBtn" style="display:none">Unlink</button>
-    </div>
-  </div>
-</div> 
-
-<script>
-/* ═══ ADD v4: free ranges auto-load · local filter · qty auto-tick ═══ */
-(function(){
-  var _all=[], _sel=null;
-  function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded',fn); }
-  function sess(){ return localStorage.getItem('app_session'); }
-  function post(url,body,cb){ fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({session:sess()},body||{}))}).then(function(r){return r.json().catch(function(){return{ok:false};});}).then(cb).catch(function(){cb({ok:false});}); }
-  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-  function auLoadAll(){
-    var list=document.getElementById('auRangeList'); if(!list) return;
-    list.innerHTML='<div class="empty"><div class="spinner"></div></div>';
-    post('/api/alloc/free-ranges',{panel:'lamix'},function(d){
-      _all=(d&&d.ranges)||[];
-      var c=document.getElementById('auCount'); if(c) c.textContent=_all.length;
-      auFilter((document.getElementById('auSearch').value||'').trim());
-    });
-  }
-  function auFilter(q){ /* LOCAL only — no API */
-    q=(q||'').toLowerCase().replace(/\s+/g,'');
-    var list=_all.filter(function(r){ if(!q) return true; var hay=((r.country||'')+' '+(r.range||'')).toLowerCase().replace(/\s+/g,''); return hay.indexOf(q)>=0; });
-    var L=document.getElementById('auRangeList');
-    if(!list.length){ L.innerHTML='<div class="empty">No free ranges'+(q?' matching "'+esc(q)+'"':'')+'.</div>'; return; }
-    L.innerHTML=list.map(function(r,i){
-      return '<div class="alloc-range-item" data-i="'+i+'"><div><div class="alloc-range-name">'+(r.flag||'')+' '+esc(r.country)+' — '+esc(r.range)+'</div><div class="alloc-range-id">'+esc(r.id||'')+'</div></div><span class="avail-ok">'+r.available+' free</span></div>';
-    }).join('');
-    L._list=list;
-  }
-  function auAutoTick(){ /* qty → tick first N */
-    var n=Math.max(0,parseInt(document.getElementById('auQty').value)||0);
-    var cbs=document.querySelectorAll('#auNumsList .au-cb');
-    for(var i=0;i<cbs.length;i++) cbs[i].checked = i<n;
-  }
-  function auSelect(r){
-    _sel=r;
-    document.getElementById('auNumsWrap').style.display='block';
-    document.getElementById('auSelInfo').textContent=r.country+' — '+r.range+' · '+r.available+' free (empty client column)';
-    var L=document.getElementById('auNumsList'); L.innerHTML='<div class="empty"><div class="spinner"></div></div>';
-    post('/api/alloc/free-numbers',{panel:'lamix',rangeTitle:r.range},function(d){
-      var nums=(d&&d.numbers)||[];
-      if(!nums.length){ L.innerHTML='<div class="empty">No free numbers right now.</div>'; return; }
-      L.innerHTML=nums.map(function(n){ return '<label style="display:flex;gap:6px;align-items:center"><input type="checkbox" class="au-cb" value="'+esc(n.id)+'"> '+esc(n.number)+'</label>'; }).join('');
-      var q=document.getElementById('auQty'); q.value=Math.min(parseInt(q.value)||5, nums.length); q.max=nums.length;
-      auAutoTick();
-    });
-  }
-  function auAllocate(){
-    if(!_sel) return;
-    var cbs=[].slice.call(document.querySelectorAll('.au-cb:checked'));
-    var qty=cbs.length;
-    if(!qty){ var R=document.getElementById('auResult'); R.style.display='block'; R.className='alloc-result err'; R.textContent='Enter how many numbers to allocate.'; return; }
-    var btn=document.getElementById('auBtn'); btn.disabled=true; btn.textContent='Allocating…';
-    var cs=document.getElementById('auClient');
-    post('/api/alloc/allocate',{ rangeId:_sel.id, rangeTitle:_sel.range, quantity:qty, payout:0.01, clientId:(cs&&cs.value)||'', payterm:'2' },function(d){
-      btn.disabled=false; btn.textContent='Allocate Numbers';
-      var R=document.getElementById('auResult'); R.style.display='block';
-      if(d&&d.limitReached){ R.className='alloc-result err'; R.textContent='🚫 '+d.message; return; }
-      if(d&&(d.allocatedReal>0||d.reason==='ALLOCATED_OK')){ R.className='alloc-result ok'; R.textContent='✅ Allocated '+(d.allocatedReal||qty)+' numbers.'; setTimeout(function(){ auLoadAll(); if(window.loadRanges) loadRanges(true); },900); }
-      else { R.className='alloc-result err'; R.textContent='⚠️ '+((d&&d.message)||(d&&d._server)||'Allocation failed.'); }
-    });
-  }
-  ready(function(){
-    post('/api/auth/role',{},function(d){
-      var role=(d&&d.role)||'none';
-      if(role==='super'||role==='admin'){
-        var f=document.getElementById('auClientField'); if(f) f.style.display='block';
-        post('/api/admin/my-clients',{},function(d){
-          var sel=document.getElementById('auClient'); if(!sel) return;
-          var opts=[]; ((d&&d.teams)||[]).forEach(function(t){ (t.clients||[]).forEach(function(c){ opts.push(c.username); }); });
-          sel.innerHTML=opts.map(function(u){ return '<option value="'+esc(u)+'">'+esc(u)+'</option>'; }).join('');
-        });
-      }
-    });
-    var si=document.getElementById('auSearch');
-    if(si) si.addEventListener('input',function(){ auFilter(this.value.trim()); });   // local, no API
-    var sb=document.getElementById('auSearchBtn'); if(sb) sb.addEventListener('click',function(){ auFilter(si.value.trim()); });
-    document.addEventListener('click',function(e){
-      var it=e.target.closest('#auRangeList .alloc-range-item'); if(!it) return;
-      var r=(document.getElementById('auRangeList')._list||[])[parseInt(it.getAttribute('data-i'))]; if(r) auSelect(r);
-    });
-    var q=document.getElementById('auQty'); if(q) q.addEventListener('input',auAutoTick);
-    document.addEventListener('change',function(e){ if(e.target.classList&&e.target.classList.contains('au-cb')){ var n=document.querySelectorAll('.au-cb:checked').length; document.getElementById('auQty').value=n; } });
-    var b=document.getElementById('auBtn'); if(b) b.addEventListener('click',auAllocate);
-    function hook(){ if(typeof window.bnSwitch==='function' && !window.bnSwitch._au){ var _b=window.bnSwitch; window.bnSwitch=function(p){ if(p==='add') setTimeout(auLoadAll,300); return _b.apply(this,arguments); }; window.bnSwitch._au=1; } }
-    ready(hook); setTimeout(hook,1500); setTimeout(hook,3000);
-    setTimeout(auLoadAll,600);
-  });
-})();
-</script>
-    
 </body>
-    
 </html>
