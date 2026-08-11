@@ -147,8 +147,7 @@ function parseNumbersData(data) {
       range: (row[1] || '').replace(/<[^>]*>/g, '').trim(),
       country: (row[2] || '').replace(/<[^>]*>/g, '').trim(),
       number: (row[3] || '').replace(/<[^>]*>/g, '').trim(),
-myPayout: (row[4] || '').replace(/<[^>]*>/g, '').trim(),
-client: (row[5] || '').replace(/<[^>]*>/g, '').trim(),
+      client: (row[5] || '').replace(/<[^>]*>/g, '').trim(),
       payout: (row[6] || '$0.01').replace(/<[^>]*>/g, '').trim()
     }));
   }
@@ -159,8 +158,7 @@ const norm = s => String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g,
 const PAYTERM_VOCAB = ['daily','weekly','weekly7','biweekly','biweekly30','monthly15','monthly30','monthly45','monthly60'];
 
 async function getAllocForm() {
-if (_allocFormCache.form && (Date.now() - _allocFormCache.ts) < 600000) return _allocFormCache.form;
-await ensureAgentSession();
+  await ensureAgentSession();
   const fetchHtml = async () => (await axios.get(`${AGENT_BASE_URL}SMSBulkAllocations`, { headers: browserHeaders('http://51.210.208.26/ints/agent/SMSBulkAllocations'), timeout: 15000, maxRedirects: 5, validateStatus: () => true })).data;
   try {
     let html = await fetchHtml();
@@ -191,7 +189,7 @@ await ensureAgentSession();
       if (!name || t === 'submit' || t === 'button') return;
       controls.push({ name, type: t, label: labelFor(el), isSelect: false, value: $(el).attr('value') != null ? $(el).attr('value') : '' });
     });
-    _allocFormCache = { ts: Date.now(), form: { action, controls } }; return _allocFormCache.form;
+    return { action, controls };
   } catch (e) { console.error('getAllocForm error:', e.message); return null; }
 }
 
@@ -499,6 +497,13 @@ function teamOf(username, all) {
   return '';
 }
 
+function weekKey(dateStr){
+  const d = new Date(dateStr + 'T00:00:00Z');
+  const day = d.getUTCDay();
+  const diff = (day === 0 ? -6 : 1 - day);
+  return new Date(d.getTime() + diff * 86400000).toISOString().slice(0, 10);
+}
+
 // ═══ TEAM HELPERS ═══
 let _pinsCache = { ts: 0, map: null };
 async function getPinsMap() {
@@ -527,6 +532,12 @@ function resolveTeam(username, allPrefixes, pinsMap) {
   if (pin) { const m = allPrefixes.find(p => String(p.prefix || '').toLowerCase() === String(pin).toLowerCase()); if (m) return m.prefix; }
   return prefixTeam(username, allPrefixes);
 }
+function weekKey(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00Z');
+  const day = d.getUTCDay();
+  const diff = (day === 0 ? -6 : 1 - day);
+  return new Date(d.getTime() + diff * 86400000).toISOString().slice(0, 10);
+}
 
   // ═══════════════════════════════════════════════════════════
 // 💰 EARNINGS — self-contained block (helpers + routes)
@@ -535,13 +546,30 @@ let _ratesCache = { ts: 0, map: null, count: 0 };
 const RATES_TTL = 5 * 60 * 1000; // 5 min cache
 
 async function scrapeRangeRatesFromLamix() {
-  const rows = await getCachedNumbers(false);
-  const map = new Map();
-  rows.forEach(n => {
-    const rate = parseFloat(String(n.myPayout || '0').replace(/[^0-9.]/g, ''));
-    if (n.range && isFinite(rate) && rate > 0 && !map.has(norm(n.range))) map.set(norm(n.range), { rate, raw: n.range });
-  });
-  return map;
+  await ensureAgentSession();
+  const doReq = async () => (await axios.get(`${AGENT_BASE_URL}res/data_smsnumbers.php`, {
+    params: { frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 },
+    headers: browserHeaders('http://51.210.208.26/ints/agent/MySMSNumbers'),
+    timeout: 20000, maxRedirects: 5, validateStatus: () => true
+  })).data;
+  try {
+    let data = await doReq();
+    if (looksLikeLogin(data)) { await ensureAgentSession(true); data = await doReq(); }
+    if (!data || !data.aaData) return new Map();
+    const map = new Map();
+    data.aaData.forEach(row => {
+      const range = String(row[1] || '').replace(/<[^>]*>/g, '').trim();
+      const payout = parseFloat(String(row[4] || '0').replace(/<[^>]*>/g, '').replace(/[^0-9.]/g, ''));
+      if (range && isFinite(payout) && payout > 0 && !map.has(norm(range))) {
+        map.set(norm(range), { rate: payout, raw: range });
+      }
+    });
+    console.log('[rates] Scraped', map.size, 'unique range rates from Lamix');
+    return map;
+  } catch (e) {
+    console.error('[rates] Scrape error:', e.message);
+    return new Map();
+  }
 }
 
 async function loadRateMap(force) {
@@ -602,6 +630,32 @@ const CLI_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like 
 let _cliCookie = '', _cliCookieTs = 0, _cliLastLogin = 0;
 let _cliCredsCache = { ts: 0, user: null, pass: null };
 let _cliMem = null; // { day, ts, list, stats }
+
+function _parseUtc(s) {
+  if (!s) return 0;
+  const t = String(s).trim().replace(' ', 'T');
+  const d = new Date(t.endsWith('Z') ? t : t + 'Z');
+  const v = d.getTime();
+  return isFinite(v) ? v : 0;
+}
+// Canonical country (dedupes "Malaysia Celcom" / "Malaysia XOX" → malaysia)
+function _canonCountry(rangeText) {
+  const cn = _countryOfRange(rangeText || '');
+  const tryOn = (s) => {
+    s = ' ' + String(s || '').toLowerCase();
+    let best = '', bestLen = 0;
+    for (const k in COUNTRY_ISO) {
+      const re = new RegExp(' ' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![a-z])');
+      if (re.test(s) && k.length > bestLen) { best = k; bestLen = k.length; }
+    }
+    return best;
+  };
+  let key = tryOn(cn);
+  if (!key) key = tryOn(rangeText);
+  if (!key) return null;
+  const disp = key.replace(/\b\w/g, c => c.toUpperCase());
+  return { key, name: disp, flag: isoToFlag(COUNTRY_ISO[key]) };
+}
 async function getCliCreds() {
   if (_cliCredsCache.user && (Date.now() - _cliCredsCache.ts) < 60000) {
     return { username: _cliCredsCache.user, password: _cliCredsCache.pass };
@@ -683,10 +737,6 @@ async function scrapeCliCDR(dateFrom, dateTo) {
     return rows;
   } catch (e) { console.error('[cli] scrape err', e.message); return []; }
 }
-function _cliHasRanges(list){
-  try { const c = (list || [])[0]; return !!(c && c.countries && c.countries.length && c.countries[0].range); } catch (e) { return false; }
-}
-
 function buildCliList(rows) {
   const map = new Map(); const globalMap = new Map();
   (rows || []).forEach(r => {
@@ -695,13 +745,9 @@ function buildCliList(rows) {
     let e = map.get(key);
     if (!e) { e = { cli, count: 0, countries: new Map(), lastSeen: 0, samples: [] }; map.set(key, e); }
     e.count++;
-   const rk = String(r.range || '').trim() || 'Unknown';
     const ci = _canonCountry(r.range);
-    let o = e.countries.get(rk);
-    if (!o) { o = { name: ci ? ci.name : rk, flag: ci ? ci.flag : '🏳️', n: 0, range: rk, last: r.datetime || null }; e.countries.set(rk, o); }
-    o.n++;
-    if (r.datetime && (!o.last || r.datetime > o.last)) o.last = r.datetime;
     if (ci) {
+      let o = e.countries.get(ci.key); if (!o) { o = { name: ci.name, flag: ci.flag, n: 0 }; e.countries.set(ci.key, o); } o.n++;
       let g = globalMap.get(ci.key); if (!g) { g = { name: ci.name, flag: ci.flag, n: 0 }; globalMap.set(ci.key, g); } g.n++;
     }
     const ts = _parseUtc(r.datetime);
@@ -767,6 +813,28 @@ async function getCliRows(label) {
   if (stamped.length) _cliRowsMem = { day: win.label, ts: Date.now(), rows: stamped };
   return stamped.length ? stamped : (_cliRowsMem && _cliRowsMem.rows ? _cliRowsMem.rows : []);
 }
+function _parseUtc(s) {
+  if (!s) return 0;
+  const t = String(s).trim().replace(' ', 'T');
+  const d = new Date(t.endsWith('Z') ? t : t + 'Z');
+  return isFinite(d.getTime()) ? d.getTime() : 0;
+}
+function _canonCountry(rangeText) {
+  const cn = _countryOfRange(rangeText || '');
+  const tryOn = (s) => {
+    s = ' ' + String(s || '').toLowerCase();
+    let best = '', bestLen = 0;
+    for (const k in COUNTRY_ISO) {
+      const re = new RegExp(' ' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![a-z])');
+      if (re.test(s) && k.length > bestLen) { best = k; bestLen = k.length; }
+    }
+    return best;
+  };
+  let key = tryOn(cn);
+  if (!key) key = tryOn(rangeText);
+  if (!key) return null;
+  return { key, name: key.replace(/\b\w/g, c => c.toUpperCase()), flag: isoToFlag(COUNTRY_ISO[key]) };
+}
 async function cliIsRestricted(username) {
   if (!supaEnabled()) return { insights: false, search: false };
   try {
@@ -799,287 +867,70 @@ function _cliWindowDays(range) {
   return { start, today, label: range === 'week' ? 'Last 7 days' : range === 'month' ? 'Last 30 days' : 'Today' };
 }
 
-// ═══ CLOUD SESSIONS (Supabase auth_sessions) — revocable + expirable ═══
-function sha256(s){ return crypto.createHash('sha256').update(String(s||'')).digest('hex'); }
-const _sessCache = new Map();
-async function sessionRowValid(token){
-  const h = sha256(token);
-  const c = _sessCache.get(h);
-  if (c && (Date.now() - c.ts) < 30000) return c.ok;   // 30s memory cache → near-zero DB load
-  let okFlag = true;                                    // fail-open: Supabase down ≠ users locked out
-  try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/auth_sessions?token_hash=eq.${encodeURIComponent(h)}&select=expires_at&limit=1`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
-    if (r.ok) {
-      const rows = await r.json();
-      if (!Array.isArray(rows) || !rows[0]) okFlag = false;                      // no row
-      else okFlag = new Date(rows[0].expires_at).getTime() > Date.now();         // not expired
-    }
-  } catch (e) { okFlag = true; }
-  _sessCache.set(h, { ts: Date.now(), ok: okFlag });
-  if (_sessCache.size > 3000) _sessCache.clear();
-  return okFlag;
-}
-async function createSessionRow(user, token){
-  if (!supaEnabled()) return;
-  try {
-    await fetch(`${SUPABASE_URL}/rest/v1/auth_sessions`, { method: 'POST', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify({ token_hash: sha256(token), username: user.username, client_id: String(user.clientId||'0'), client_name: user.clientName||user.username, panel_num: user.panelNum||1, created_at: new Date().toISOString(), expires_at: new Date(Date.now()+7*86400000).toISOString(), last_seen: new Date().toISOString() }) });
-  } catch (e) {}
-}
-const PANELS = {};
-const _panelSessions = {};
-async function ensurePanelSession(key, force){
-  const P = PANELS[key]; if (!P || !P.base) return null;
-  const s = _panelSessions[key] || (_panelSessions[key] = { cookie:'', ts:0, lastTry:0 });
-  if (!force && s.cookie && (Date.now()-s.ts) < 20*60*1000) return s.cookie;
-  if (!force && (Date.now()-s.lastTry) < 60*1000) return s.cookie || null;
-  s.lastTry = Date.now();
-  for (const u of [P.loginBase+'signin', P.loginBase+'login', P.base]) {
-    try {
-      const res = await axios.post(u, new URLSearchParams({ username:P.user, password:P.pass }).toString(), {
-        headers:{ 'Content-Type':'application/x-www-form-urlencoded','User-Agent':UA,'Referer':P.loginBase+'login','Origin':new URL(P.base).origin },
-        maxRedirects:0, validateStatus:()=>true, timeout:10000 });
-      const sc = res.headers['set-cookie'];
-      if (sc) { const m = (Array.isArray(sc)?sc.join('; '):String(sc)).match(/PHPSESSID=([^;]+)/); if (m) { s.cookie='PHPSESSID='+m[1]; s.ts=Date.now(); return s.cookie; } }
-    } catch(e){}
-  }
-  return s.cookie || null;
-}
-function panelHeaders(key, referer){
-  const P = PANELS[key], s = _panelSessions[key];
-  return { 'Accept':'application/json, text/javascript, */*; q=0.01','Accept-Encoding':'gzip, deflate','Accept-Language':'en-US,en;q=0.9,ja;q=0.8','Connection':'keep-alive',
-    'Cookie': (s&&s.cookie)||'', 'Host': new URL(P.base).host, 'Referer': referer || (P.base+'MySMSNumbers'), 'User-Agent':UA, 'X-Requested-With':'XMLHttpRequest' };
-}
-async function scrapePanel(key, endpoint, params, referer){
-  const P = PANELS[key]; if (!P || !P.base) return null;
-  await ensurePanelSession(key);
-  const doReq = async () => (await axios.get(P.base+endpoint, { params, headers: panelHeaders(key, referer), timeout:20000, maxRedirects:5, validateStatus:()=>true })).data;
-  try { let d = await doReq(); if (looksLikeLogin(d)) { await ensurePanelSession(key, true); d = await doReq(); } return d; } catch(e){ return null; }
-}
-// Zyron columns: [checkbox(id), Range, Prefix, Number, MyPayout, Client, Payout, Limits]
-function parsePanelNumbers(key, data){
-  if (!data || !data.aaData) return [];
-  return data.aaData.map(row => {
-    const idm = String(row[0]||'').match(/value=["']?(\d+)["']?/);
-    const range = String(row[1]||'').replace(/<[^>]*>/g,'').trim();
-    return { id: idm?idm[1]:'', range, prefix: String(row[2]||'').replace(/<[^>]*>/g,'').trim(),
-      number: String(row[3]||'').replace(/<[^>]*>/g,'').trim(), myPayout: String(row[4]||'').replace(/<[^>]*>/g,'').trim(),
-      client: String(row[5]||'').replace(/<[^>]*>/g,'').trim(), payout: String(row[6]||'').replace(/<[^>]*>/g,'').trim(),
-      country: _countryOfRange(range) };
-  });
-}
-const _panelClientCache = {};
-async function getPanelClientMap(key, force){
-  const c = _panelClientCache[key];
-  if (!force && c && c.map && (Date.now()-c.ts) < 5*60*1000) return c.map;
-  const html = await scrapePanel(key, 'MySMSNumbers', {});
-  const map = {};
-  if (typeof html === 'string') {
-    const $ = cheerio.load(html);
-    $('select[name="fclient"] option').each((i,o)=>{ const v=$(o).attr('value'), t=$(o).text().trim(); if (v && t) map[t.toLowerCase()] = v; });
-  }
-  if (Object.keys(map).length) _panelClientCache[key] = { ts: Date.now(), map };
-  return _panelClientCache[key] ? _panelClientCache[key].map : map;
-}
-
-// ═══ PANEL RATES + CDR (Zyron/EVS) ═══
-const _panelRatesCache = {};   // key -> { ts, map }
-async function loadPanelRateMap(key, force){
-  const c = _panelRatesCache[key];
-  if (!force && c && c.map && (Date.now()-c.ts) < 5*60*1000) return c;
-  const data = await scrapePanel(key, 'res/data_smsnumbers.php', { frange:'', fclient:'', sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
-  const map = new Map();
-  parsePanelNumbers(key, data).forEach(n => {
-    const rate = parseFloat(String(n.myPayout||'0').replace(/[^0-9.]/g,''));
-    if (n.range && isFinite(rate) && rate > 0 && !map.has(norm(n.range))) map.set(norm(n.range), { rate, raw: n.range });
-  });
-  if (map.size) _panelRatesCache[key] = { ts: Date.now(), map };
-  return _panelRatesCache[key] || { ts:0, map: new Map() };
-}
-async function scrapePanelCDR(key, dateFrom, dateTo){
-  const mp = {};
-  for (let i = 0; i < 9; i++){ mp['mDataProp_'+i]=i; mp['sSearch_'+i]=''; mp['bRegex_'+i]=false; mp['bSearchable_'+i]=true; mp['bSortable_'+i]=(i!==8); }
-  const params = Object.assign({ fdate1:dateFrom, fdate2:dateTo, frange:'', fclient:'', fnum:'', fcli:'',
-    fgdate:'', fgmonth:'', fgrange:'', fgclient:'', fgnumber:'', fgcli:'', fg:0,
-    sEcho:1, iColumns:9, sColumns:',,,,,,,,', iDisplayStart:0, iDisplayLength:100000,
-    sSearch:'', bRegex:false, iSortCol_0:0, sSortDir_0:'desc', iSortingCols:1 }, mp);
-  const d = await scrapePanel(key, 'res/data_smscdr.php', params, PANELS[key].base + 'SMSCDRReports');
-  if (!d || !d.aaData) return [];
-  const rows = [];
-  d.aaData.forEach(r => {
-    if (!Array.isArray(r)) return;
-    const dt = String(r[0]||'');
-    if (!/^\d{4}-\d{2}-\d{2}/.test(dt)) return;
-    rows.push({ datetime: dt, date: dt.slice(0,10), time: dt.slice(11,19),
-      range: String(r[1]||'').replace(/<[^>]*>/g,'').trim(), number: String(r[2]||'').replace(/<[^>]*>/g,'').trim(),
-      cli: String(r[3]||'').replace(/<[^>]*>/g,'').trim(), client: String(r[4]||'').replace(/<[^>]*>/g,'').trim(),
-      message: String(r[5]||'').replace(/<[^>]*>/g,'').trim(), currency: String(r[6]||'').trim(), myPayout: r[7], clientPayout: r[8] });
-  });
-  return rows;
-}
-const _panelCdrCache = new Map();  // "panel|from|to"
-async function getPanelCachedCDR(key, from, to, ttl){
-  const ck = key + '|' + from + '|' + to;
-  const hit = _panelCdrCache.get(ck);
-  if (hit && (Date.now()-hit.ts) < (ttl || 60000)) return hit.rows;
-  const rows = await scrapePanelCDR(key, from, to);
-  _panelCdrCache.set(ck, { ts: Date.now(), rows });
-  if (_panelCdrCache.size > 15) { const now = Date.now(); for (const [k,v] of _panelCdrCache) if (now-v.ts > 180000) _panelCdrCache.delete(k); }
-  return rows;
-}
-// data_smsranges.php → [Range, Prefix, TestNumber, Currency, 1/1, 7/1, 7/7, 30/45, Memo, Action(info=RID)]
-function parsePanelRangeCatalog(data){
-  if (!data || !data.aaData) return [];
-  return data.aaData.map(row => {
-    const html = (row||[]).join(' ');
-    const rid = (html.match(/info=["']?(\d+)["']?/) || [])[1] || '';
-    const cl = i => String(row[i]||'').replace(/<[^>]*>/g,'').trim();
-    return { rid, range: cl(0), prefix: cl(1), testNumber: cl(2), currency: cl(3),
-      p11: parseFloat(String(row[4]||'').replace(/[^0-9.]/g,''))||0, p71: parseFloat(String(row[5]||'').replace(/[^0-9.]/g,''))||0,
-      p77: parseFloat(String(row[6]||'').replace(/[^0-9.]/g,''))||0, p3045: parseFloat(String(row[7]||'').replace(/[^0-9.]/g,''))||0,
-      memo: cl(8), country: _countryOfRange(cl(0)) };
-  }).filter(r => r.range);
-}
-async function getPanelDailyUse(username, key){
-  if (!supaEnabled()) return { byRange:{}, ranges:new Set() };
-  try {
-    const start = encodeURIComponent('gte.' + _todayStartUTC());
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/alloc_events?username=${encodeURIComponent('eq.'+username)}&panel=${encodeURIComponent('eq.'+key)}&created_at=${start}&select=range_id,qty`, { headers:{ 'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY } });
-    const rows = await res.json();
-    const list = Array.isArray(rows) ? rows : [];
-    const byRange = {}; const ranges = new Set();
-    list.forEach(x => { if (x.range_id){ byRange[x.range_id]=(byRange[x.range_id]||0)+(x.qty||1); ranges.add(x.range_id); } });
-    return { byRange, ranges };
-  } catch(e){ return { byRange:{}, ranges:new Set() }; }
-}
-
-// ═══ PANEL CLIENT RESOLUTION (exact match → manual link) ═══
-let _panelClientsCache = {};
-async function getPanelClientsCached(key, force){
-  const P = PANELS[key]; if (!P || !P.base) return [];
-  const c = _panelClientsCache[key];
-  if (!force && c && c.list && (Date.now()-c.ts) < 60000) return c.list;
-  const data = await scrapePanel(key, 'res/data_clients.php', { sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:1000, sSearch:'' });
-  let list = [];
-  if (data && data.aaData) list = data.aaData.map(r => String(r[1]||'').replace(/<[^>]*>/g,'').trim()).filter(Boolean);
-  _panelClientsCache[key] = { ts: Date.now(), list };
-  return list;
-}
-async function supaGetLink(username, panel){
-  if (!supaEnabled()) return null;
-  try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/panel_links?username=eq.${encodeURIComponent(username.toLowerCase())}&panel=eq.${panel}&select=*&limit=1`, { headers:{ 'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY } });
-    const rows = await r.json();
-    return (Array.isArray(rows) && rows[0]) ? rows[0] : null;
-  } catch(e){ return null; }
-}
-async function panelClientFor(username, panel){
-  const clients = await getPanelClientsCached(panel);
-  const low = String(username||'').toLowerCase();
-  const exact = clients.find(c => c.toLowerCase() === low);
-  if (exact) return { client: exact, source: 'exact' };
-  const link = await supaGetLink(username, panel);
-  if (link && link.panel_client) {
-    const m = clients.find(c => c.toLowerCase() === String(link.panel_client).toLowerCase());
-    if (m) return { client: m, source: 'linked' };
-  }
-  return null;
-}
-
-// ═══ SPEED: ONE LaMix numbers scrape per 30s, shared by ALL routes ═══
-let _numCache = { ts: 0, rows: null };
-const NUM_TTL = 30000;
-async function getCachedNumbers(force) {
-  if (!force && _numCache.rows && (Date.now() - _numCache.ts) < NUM_TTL) return _numCache.rows;
-  const data = await scrapeAgentData('res/data_smsnumbers.php', { frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
-  if (data && data.aaData) _numCache = { ts: Date.now(), rows: parseNumbersData(data) };
-  return _numCache.rows || [];
-}
-setInterval(() => { getCachedNumbers(true).catch(()=>{}); }, 30000);          // numbers always warm
-setInterval(() => { const bd = businessDayPKT(); scrapeCDR(bd.from, bd.to).then(rows => { _cdrCache.set(bd.from+'|'+bd.to, { ts: Date.now(), rows }); }).catch(()=>{}); }, 15000); // CDR always warm
-let _allocFormCache = { ts: 0, form: null };   // cache LaMix allocate form (HTML rarely changes)
-
 module.exports = async (req, res) => {
-if (req.method === 'OPTIONS') return res.status(200).json({ ...corsHeaders });
-const url = req.url.replace(/^\/api/, '');
-try {
-// ═══ CLOUD SESSION GATE — one check for every route (self-healing migration) ═══
-if (req.body && req.body.session) {
-  const sessOk = await sessionRowValid(req.body.session);
-  if (!sessOk) {
-    const payload = getUserFromSession(req.body.session);   // valid JWT but no row yet → create it (old users migrate automatically, nobody gets locked out)
-    if (payload) { await createSessionRow(payload, req.body.session); }
-    else return error(res, 401, 'Session expired');
-  }
-}
+  if (req.method === 'OPTIONS') return res.status(200).json({ ...corsHeaders });
+  const url = req.url.replace(/^\/api/, '');
+
+  try {
     // ═══════════════════════════════════════════════════════════
     // 1. LOGIN — dynamic LaMix lookup (username OR name) + fallback + self-healing cookie
     // ═══════════════════════════════════════════════════════════
    if (url === '/login' && req.method === 'POST') {
-   const rawUsername = (req.body.username || '').trim();
-   const password = (req.body.password || '').trim();
-   if (!rawUsername || !password) return error(res, 400, 'Username and password required');
-   const want = rawUsername.toLowerCase();
-   const fallback = {
-     'muzammil62': { clientId: '0', clientName: 'Agent', panelNum: 1 },
-     'zml_ahsan':  { clientId: '169269', clientName: 'ZML_Ahsan', panelNum: 1 },
-     'zml_anns':   { clientId: '169270', clientName: 'ZML_Anns', panelNum: 1 }
-   };
-   // Agent/fallback accounts
-   if (fallback[want]) {
-     if (supaEnabled()) {
-       const creds = await supaGetCreds(rawUsername);
-       if (creds && creds.pass_hash && !verifyPassword(password, creds.pass_hash)) return error(res, 401, 'Incorrect password.');
-     }
-     const u = fallback[want];
-     const token = jwt.sign({ username: rawUsername, clientId: u.clientId, clientName: u.clientName, panelNum: u.panelNum }, JWT_SECRET, { expiresIn: '7d' });
-     await createSessionRow({ username: rawUsername, clientId: u.clientId, clientName: u.clientName, panelNum: u.panelNum }, token);
-     return ok(res, { session: token, username: rawUsername, clientId: u.clientId, clientName: u.clientName, redirect: '/dashboard/dashboard.html' });
-   }
-   if (supaEnabled()) {
-     const creds = await supaGetCreds(rawUsername);
-     if (creds && creds.pass_hash) {
-       if (!verifyPassword(password, creds.pass_hash)) return error(res, 401, 'Incorrect password.');
-       const token = jwt.sign({ username: rawUsername, clientId: creds.client_id||'0', clientName: creds.client_name||rawUsername, panelNum: 1 }, JWT_SECRET, { expiresIn: '7d' });
-       await createSessionRow({ username: rawUsername, clientId: creds.client_id||'0', clientName: creds.client_name||rawUsername, panelNum: 1 }, token);
-       return ok(res, { session: token, username: rawUsername, clientId: creds.client_id||'0', clientName: creds.client_name||rawUsername, redirect: '/dashboard/dashboard.html' });
-     }
-     // First-time: confirm the username exists in LaMix, then ask them to set a password
-     const lamix = await lookupLaMixClient(rawUsername);
-     if (lamix) return ok(res, { firstLogin: true, username: rawUsername, clientId: lamix.clientId, clientName: lamix.clientName });
-     return res.status(401).json({ ok: false, error: 'Client not found in LaMix. Check the username.', ...corsHeaders });
-   }
-   // Supabase not configured → legacy LaMix-only
-   const lamix = await lookupLaMixClient(rawUsername);
-   if (lamix) {
-     const token = jwt.sign({ username: rawUsername, clientId: lamix.clientId, clientName: lamix.clientName, panelNum: 1 }, JWT_SECRET, { expiresIn: '7d' });
-     await createSessionRow({ username: rawUsername, clientId: lamix.clientId, clientName: lamix.clientName, panelNum: 1 }, token);
-     return ok(res, { session: token, username: rawUsername, clientId: lamix.clientId, clientName: lamix.clientName, redirect: '/dashboard/dashboard.html' });
-   }
-   return res.status(401).json({ ok: false, error: 'Client not found in LaMix. Check the username.', ...corsHeaders });
- }
- // 🔐 FIRST-LOGIN: set password + recovery code, then sign in
- if (url === '/auth/set-password' && req.method === 'POST') {
-   const { username, clientId, clientName, password, recovery } = req.body;
-   if (!username || !password || String(password).length < 6) return error(res, 400, 'Password must be at least 6 characters.');
-   if (!supaEnabled()) return error(res, 400, 'Password storage not configured.');
-   const recHash = (recovery && String(recovery).length >= 4) ? hashPassword(recovery) : null;
-   await supaUpsertCreds(username, hashPassword(password), clientId||'0', clientName||username, recHash);
-   const token = jwt.sign({ username, clientId: clientId||'0', clientName: clientName||username, panelNum: 1 }, JWT_SECRET, { expiresIn: '7d' });
-   await createSessionRow({ username, clientId: clientId||'0', clientName: clientName||username, panelNum: 1 }, token);
-   return ok(res, { session: token, username, clientId: clientId||'0', clientName: clientName||username, redirect: '/dashboard/dashboard.html' });
- }
- // 🔐 LOGOUT — kills the cloud session row (works on every device)
- if (url === '/auth/logout' && req.method === 'POST') {
-   try {
-     const t = String(req.body.session || '');
-     if (t && supaEnabled()) {
-       await fetch(`${SUPABASE_URL}/rest/v1/auth_sessions?token_hash=eq.${encodeURIComponent(sha256(t))}`, { method: 'DELETE', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
-       _sessCache.delete(sha256(t));
-     }
-     return ok(res, { message: 'Logged out' });
-   } catch (e) { return ok(res, { message: 'Logged out' }); }
- }
+      const rawUsername = (req.body.username || '').trim();
+      const password = (req.body.password || '').trim();
+      if (!rawUsername || !password) return error(res, 400, 'Username and password required');
+      const want = rawUsername.toLowerCase();
+
+      const fallback = {
+        'muzammil62': { clientId: '0', clientName: 'Agent', panelNum: 1 },
+        'zml_ahsan':  { clientId: '169269', clientName: 'ZML_Ahsan', panelNum: 1 },
+        'zml_anns':   { clientId: '169270', clientName: 'ZML_Anns', panelNum: 1 }
+      };
+
+      // Agent/fallback accounts (always reachable; verify hash only if one exists)
+      if (fallback[want]) {
+        if (supaEnabled()) {
+          const creds = await supaGetCreds(rawUsername);
+          if (creds && creds.pass_hash && !verifyPassword(password, creds.pass_hash)) return error(res, 401, 'Incorrect password.');
+        }
+        const u = fallback[want];
+        const token = jwt.sign({ username: rawUsername, clientId: u.clientId, clientName: u.clientName, panelNum: u.panelNum }, JWT_SECRET, { expiresIn: '7d' });
+        return ok(res, { session: token, username: rawUsername, clientId: u.clientId, clientName: u.clientName, redirect: '/dashboard/dashboard.html' });
+      }
+
+      if (supaEnabled()) {
+        const creds = await supaGetCreds(rawUsername);
+        if (creds && creds.pass_hash) {
+          if (!verifyPassword(password, creds.pass_hash)) return error(res, 401, 'Incorrect password.');
+          const token = jwt.sign({ username: rawUsername, clientId: creds.client_id||'0', clientName: creds.client_name||rawUsername, panelNum: 1 }, JWT_SECRET, { expiresIn: '7d' });
+          return ok(res, { session: token, username: rawUsername, clientId: creds.client_id||'0', clientName: creds.client_name||rawUsername, redirect: '/dashboard/dashboard.html' });
+        }
+        // First-time: confirm the username exists in LaMix, then ask them to set a password
+        const lamix = await lookupLaMixClient(rawUsername);
+        if (lamix) return ok(res, { firstLogin: true, username: rawUsername, clientId: lamix.clientId, clientName: lamix.clientName });
+        return res.status(401).json({ ok: false, error: 'Client not found in LaMix. Check the username.', ...corsHeaders });
+      }
+
+      // Supabase not configured → legacy LaMix-only (any password)
+      const lamix = await lookupLaMixClient(rawUsername);
+      if (lamix) {
+        const token = jwt.sign({ username: rawUsername, clientId: lamix.clientId, clientName: lamix.clientName, panelNum: 1 }, JWT_SECRET, { expiresIn: '7d' });
+        return ok(res, { session: token, username: rawUsername, clientId: lamix.clientId, clientName: lamix.clientName, redirect: '/dashboard/dashboard.html' });
+      }
+      return res.status(401).json({ ok: false, error: 'Client not found in LaMix. Check the username.', ...corsHeaders });
+    }
+
+    // 🔐 FIRST-LOGIN: set password + recovery code, then sign in
+    if (url === '/auth/set-password' && req.method === 'POST') {
+      const { username, clientId, clientName, password, recovery } = req.body;
+      if (!username || !password || String(password).length < 6) return error(res, 400, 'Password must be at least 6 characters.');
+      if (!supaEnabled()) return error(res, 400, 'Password storage not configured.');
+      const recHash = (recovery && String(recovery).length >= 4) ? hashPassword(recovery) : null;
+      await supaUpsertCreds(username, hashPassword(password), clientId||'0', clientName||username, recHash);
+      const token = jwt.sign({ username, clientId: clientId||'0', clientName: clientName||username, panelNum: 1 }, JWT_SECRET, { expiresIn: '7d' });
+      return ok(res, { session: token, username, clientId: clientId||'0', clientName: clientName||username, redirect: '/dashboard/dashboard.html' });
+    }
+
     // 🔐 CHANGE PASSWORD (profile)
     if (url === '/auth/change-password' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
@@ -1129,9 +980,10 @@ if (req.body && req.body.session) {
       const hit = _rangesCache.get(ck);
       if (!force && hit && hit.ranges.length && (Date.now() - hit.ts) < 20000) return ok(res, { ranges: hit.ranges, cached: true });
 
+      const data = await scrapeAgentData('res/data_smsnumbers.php', { frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
       let ranges = [];
-   {
-     const allNumbers = await getCachedNumbers(force);;
+      if (data && data.aaData) {
+        const allNumbers = parseNumbersData(data);
         const t1 = (user.clientName||'').toLowerCase().trim(), t2 = (user.username||'').toLowerCase().trim();
         const userNumbers = allNumbers.filter(n => { const c=(n.client||'').toLowerCase().trim(); return c && (c===t1||c===t2||c.includes(t1)||c.includes(t2)); });
         const m = new Map();
@@ -1151,8 +1003,9 @@ if (req.body && req.body.session) {
     if (url === '/numbers' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
-     const allNumbers = await getCachedNumbers(false);
-   if (!allNumbers.length) return ok(res, { numbers: [] });
+      const data = await scrapeAgentData('res/data_smsnumbers.php', { frange: '', fclient: '', totnum: 100000, sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1 });
+      if (!data || !data.aaData) return ok(res, { numbers: [] });
+      const allNumbers = parseNumbersData(data);
       const target1 = (user.clientName || '').toLowerCase().trim();
       const target2 = (user.username || '').toLowerCase().trim();
       const reqTitle = (req.body.rangeTitle || '').toLowerCase().trim();
@@ -1214,10 +1067,8 @@ if (req.body && req.body.session) {
     }
 
     // 6. SEARCH RANGES (real ids + available counts)
-     if (url === '/alloc/search-ranges' && req.method === 'POST') {
-   const user = getUserFromSession(req.body.session);
-   if (!user) return error(res, 401, 'Unauthorized');
-   // Self-contained caches on globalThis — idempotent, no separate declaration needed.
+      if (url === '/alloc/search-ranges' && req.method === 'POST') {
+      // Self-contained caches on globalThis — idempotent, no separate declaration needed.
       // opts = range-id map (the SLOW part, cached 10 min); full = mapped range list (cached 30s).
       globalThis._ac = globalThis._ac || { opts: null, optsTs: 0, full: null, fullTs: 0 };
       const AC = globalThis._ac;
@@ -1232,8 +1083,10 @@ if (req.body && req.body.session) {
         let mapped = null, _src = 'live';
         if (AC.full && (now - AC.fullTs) < 30000) { mapped = AC.full; _src = 'mapcache'; }
         else {
-         const allNumbers = await getCachedNumbers(false);
-       if (allNumbers.length) {
+          let data = await scrapeAgentData('res/data_smsnumbers.php', { frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
+          if (!data || !data.aaData) { await ensureAgentSession(true); data = await scrapeAgentData('res/data_smsnumbers.php', { frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 }); }
+          if (data && data.aaData) {
+            const allNumbers = parseNumbersData(data);
             const rangesMap = new Map();
             allNumbers.forEach(n => {
               const key = `${n.country} -- ${n.range}`;
@@ -1274,10 +1127,8 @@ if (req.body && req.body.session) {
           if (toks.length > 1 && toks.every(t => hay.includes(t))) return true;
           return false;
         });
-       const scope = String(req.body.scope || 'mine');
-     if (scope === 'company' && !isAdminish(await getRole(user.username))) return error(res, 403, 'Company ranges are super-admin only.');
-     const withAvail = filtered.filter(r => r.available > 0);
-  const result = (scope === 'company') ? filtered : (withAvail.length ? withAvail : filtered); // old behaviour: free first, else show the country rows
+        const withAvail = filtered.filter(r => r.available > 0);
+        const result = withAvail.length ? withAvail : filtered; // always show the country (free first; else "not available" rows)
         const _debug = { query, qns, src: _src, totalMapped: mapped.length, rangesFound: filtered.length, withAvailable: withAvail.length, returned: result.length };
         if (result.length) _asCache.set(query, { ts: now, ranges: result, _debug });
         return ok(res, { ranges: result, _debug });
@@ -1778,7 +1629,7 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
       if (!supaEnabled()) return error(res, 400, 'Supabase not configured');
       try {
         const start = encodeURIComponent('gte.' + _todayStartUTC());
-        const r = await fetch(`${SUPABASE_URL}/rest/v1/alloc_events?username=${encodeURIComponent('eq.' + target)}&created_at=${start}&select=id,country,range_id,range_title,created_at&order=created_at.asc`, ...
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/alloc_events?username=${encodeURIComponent('eq.' + target)}&created_at=${start}&select=id,country,range_id,range_title,created_at&order=created_at.asc`,
           { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
         const rows = await r.json();
         if (!Array.isArray(rows)) return ok(res, { username: target, ranges: [], countries: [] });
@@ -1852,20 +1703,7 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
       const qtyCtl     = findCtl(/qty|quantity|each/i);
       const payoutCtl  = findCtl(/payout|price|rate/i);
 
-      let clientValue = String(user.clientId || '');
-   const wantClient = String(req.body.clientId || '').trim();
-   if (wantClient && wantClient !== clientValue) {
-     const _r2 = await getRole(user.username);
-     if (!isAdminish(_r2)) return error(res, 403, 'You can only allocate numbers to yourself.');
-     const all = await getCachedClients(false);
-     const target = all.find(c => String(c.id) === wantClient || c.username.toLowerCase() === wantClient.toLowerCase());
-     if (!target) return error(res, 404, 'Client not found.');
-     if (_r2 !== 'super') {
-       const myPrefixes = prefixesFor(_r2, user.username, await supaGetPrefixes());
-       if (!myPrefixes.some(p => p.prefix && target.username.indexOf(p.prefix) === 0)) return error(res, 403, 'You can only allocate to your own team.');
-     }
-     clientValue = String(target.id);
-   }
+      const clientValue = String(user.clientId || '');
 
       // payterm: never empty
       let paytermValue = '';
@@ -2051,109 +1889,92 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
       } catch (e) { return error(res, 500, 'earn/push-notif: ' + e.message); }
     }
 
-  if (url === '/earn/compute' && req.method === 'POST') {
-try {
-  const user = getUserFromSession(req.body.session);
-  if (!user) return error(res, 401, 'Unauthorized');
-  const role = await getRole(user.username);
-  const adminish = isAdminish(role);
-  const rc = await loadRateMap(false);
-  const deductions = await loadDeductions(false);
-  const cfg = await getEarnSettings();
-  const win = _earnWindow(cfg);
-  const rows = await getCachedCDR(win.from, win.to, CDR_TTL_WIDE);
-  const allPrefixes = await supaGetPrefixes();
-  const pinsMap = await getPinsMap();
-  const eliModes = {};
-  if (supaEnabled()) { try { const er = await fetch(`${SUPABASE_URL}/rest/v1/admin_eligibility?select=username,mode`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }); const erows = await er.json(); if (Array.isArray(erows)) erows.forEach(x => { eliModes[String(x.username).toLowerCase()] = x.mode; }); } catch (e) {} }
-  const prefixAdminLow = new Set(allPrefixes.map(p => String(p.admin_username || '').toLowerCase()).filter(Boolean));
-  const adminSet = new Set(prefixAdminLow);
-  if (supaEnabled()) { try { const ar = await fetch(`${SUPABASE_URL}/rest/v1/user_roles?role=eq.admin&select=username`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }); const arows = await ar.json(); if (Array.isArray(arows)) arows.forEach(x => adminSet.add(String(x.username || '').toLowerCase())); } catch (e) {} }
-  // team weekly gross → auto eligibility ($50/week)
-  const today = businessDayPKT().label;
-  const wkFrom = new Date(new Date(today + 'T00:00:00Z').getTime() - 6 * 86400000).toISOString().slice(0, 10);
-  const wkRows = await getCachedCDR(wkFrom + ' 00:00:00', today + ' 23:59:59', CDR_TTL_WIDE);
-  const teamWeekGross = {};
-  (wkRows || []).forEach(r => {
-    const team = resolveTeam(String(r.client || ''), allPrefixes, pinsMap);
-    if (!team) return;
-    const adm = (allPrefixes.find(p => p.prefix === team) || {}).admin_username;
-    if (!adm) return;
-    const rt = rc.map ? rc.map.get(norm(r.range)) : null;
-    if (rt) { const k = String(adm).toLowerCase(); teamWeekGross[k] = (teamWeekGross[k] || 0) + rt.rate; }
-  });
-  const isEligible = low => { const m = eliModes[low]; if (m === 'on') return true; if (m === 'off') return false; return (teamWeekGross[low] || 0) >= 50; };
-  const me = { userNet: 0, gross: 0, commission: 0, total: 0, perRange: {} };
-  const board = {}; const teamOf = {}; const adminOwn = {}; const compRange = {};
-  let grossTotal = 0, userNetTotal = 0, companyTotal = 0, commissionTotal = 0, ownerNet = 0;
-  const my1 = String(user.clientName || '').toLowerCase().trim();
-  const my2 = String(user.username || '').toLowerCase().trim();
-  (rows || []).forEach(r => {
-    const rateObj = rc.map ? rc.map.get(norm(r.range)) : null;
-    if (!rateObj) return;
-    const G = rateObj.rate; grossTotal += G;
-    const ded = deductions.get(norm(r.range));
-    const isFull = ded ? ded.full : false;
-    const cli = String(r.client || '').trim();
-    const cl = cli.toLowerCase();
-    let uShare, cShare, mShare = 0, mTo = null, isAdminSelf = false;
-    if (cl && SUPER_ADMIN && (cl === SUPER_ADMIN || cl.includes(SUPER_ADMIN))) { uShare = 1; cShare = 0; ownerNet += G; }
-    else {
-      const team = resolveTeam(cli, allPrefixes, pinsMap);
-      const adm = team ? (allPrefixes.find(p => p.prefix === team) || {}).admin_username : null;
-      const admLow = adm ? String(adm).toLowerCase() : '';
-      isAdminSelf = !!(admLow && cl && (cl === admLow || (admLow.length >= 3 && cl.includes(admLow))));
-      const cand = isAdminSelf || adminSet.has(cl);
-      if (cand && isEligible(cl)) { uShare = 0.8; cShare = 0.2; isAdminSelf = true; }
-      else if (isFull) { uShare = 1; cShare = 0; }
-      else if (admLow && isEligible(admLow)) { uShare = 0.7; cShare = 0.2; mShare = 0.1; mTo = admLow; }
-      else { uShare = 0.7; cShare = 0.3; }
-    }
-    const uN = G * uShare, cN = G * cShare, mN = G * mShare;
-    userNetTotal += uN; companyTotal += cN; commissionTotal += mN;
-    if (cli) {
-      if (!board[cli]) board[cli] = { username: cli, userNet: 0, count: 0 };
-      board[cli].userNet += (isFull ? G : G * 0.7);   // ONE fair 70% formula for EVERYONE
-      board[cli].count++;
-    }
-    if (mTo) { if (!teamOf[mTo]) teamOf[mTo] = {}; if (!teamOf[mTo][cl]) teamOf[mTo][cl] = { username: cli, count: 0, userNet: 0, commission: 0 }; teamOf[mTo][cl].count++; teamOf[mTo][cl].userNet += uN; teamOf[mTo][cl].commission += mN; }
-    if (isAdminSelf) { if (!adminOwn[cl]) adminOwn[cl] = { username: cli, ownNet: 0, count: 0 }; adminOwn[cl].ownNet += uN; adminOwn[cl].count++; }
-    if (role === 'super') { const k = r.range || 'Unknown'; if (!compRange[k]) compRange[k] = { range: k, count: 0, gross: 0, userNet: 0, company: 0 }; compRange[k].count++; compRange[k].gross += G; compRange[k].userNet += uN; compRange[k].company += cN + mN; }
-    const isMe = cl && ((my2 && (cl === my2 || cl.includes(my2) || my2.includes(cl))) || (my1 && (cl === my1 || cl.includes(my1) || my1.includes(cl))));
-    if (isMe) {
-      me.userNet += uN; me.gross += G;
-      const k = r.range || 'Unknown';
-      if (!me.perRange[k]) me.perRange[k] = { range: k, count: 0, userNet: 0, gross: 0, isFull };
-      const pr = me.perRange[k]; pr.count++; pr.userNet += uN; pr.gross += G;
-    }
-    if (mTo && (mTo === my2 || mTo === my1)) me.commission += mN;
-  });
-  const rnd = v => Math.round(v * 10000) / 10000;
-  me.userNet = rnd(me.userNet); me.gross = rnd(me.gross); me.commission = rnd(me.commission);
-  me.total = rnd(me.userNet + me.commission);
-  Object.values(me.perRange).forEach(pr => { pr.userNet = rnd(pr.userNet); pr.gross = rnd(pr.gross); if (!adminish) delete pr.gross; });
-  Object.values(board).forEach(b => { b.userNet = rnd(b.userNet); });
-  const perRange = Object.values(me.perRange).sort((a, b) => b.userNet - a.userNet);
-  const leaderboard = Object.values(board).sort((a, b) => b.userNet - a.userNet).slice(0, 50);
-  const admMap = {};
-  const ensure = (low, name) => { if (!admMap[low]) admMap[low] = { username: name || low, ownNet: 0, commission: 0, total: 0, teamOtps: 0, weekGross: rnd(teamWeekGross[low] || 0), mode: eliModes[low] || 'auto', auto: (teamWeekGross[low] || 0) >= 50, eligible: isEligible(low) }; return admMap[low]; };
-  adminSet.forEach(low => ensure(low));
-  Object.values(adminOwn).forEach(a => { ensure(String(a.username).toLowerCase(), a.username).ownNet = rnd(a.ownNet); });
-  Object.keys(teamOf).forEach(low => { const ms = Object.values(teamOf[low]); const o = ensure(low, ms[0] ? ms[0].username : low); o.commission = rnd(ms.reduce((s, m) => s + m.commission, 0)); o.teamOtps = ms.reduce((s, m) => s + m.count, 0); });
-  const admins = Object.values(admMap).map(a => { a.total = rnd(a.ownNet + a.commission); return a; }).sort((a, b) => b.total - a.total);
-  let team = null;
-  const myKey = (my2 && teamOf[my2]) ? my2 : ((my1 && teamOf[my1]) ? my1 : null);
-  if (adminish && myKey) { const ms = Object.values(teamOf[myKey]).sort((a, b) => b.userNet - a.userNet).map(m => ({ username: m.username, count: m.count, userNet: rnd(m.userNet), commission: rnd(m.commission) })); team = { members: ms, totalMemberNet: rnd(ms.reduce((s, m) => s + m.userNet, 0)), totalCommission: rnd(ms.reduce((s, m) => s + m.commission, 0)), otps: ms.reduce((s, m) => s + m.count, 0) }; }
-  let company = null, overall = null;
-  if (role === 'super') {
-    company = { grossTotal: rnd(grossTotal), userNetTotal: rnd(userNetTotal), companyTotal: rnd(companyTotal), commissionTotal: rnd(commissionTotal), admins, perRange: Object.values(compRange).map(o => ({ range: o.range, count: o.count, gross: rnd(o.gross), userNet: rnd(o.userNet), company: rnd(o.company) })).sort((a, b) => b.gross - a.gross).slice(0, 80) };
-    overall = { ownerNet: rnd(ownerNet), adminsTotal: rnd(admins.reduce((s, a) => s + a.total, 0)), companyTotal: rnd(companyTotal), usersPool: rnd(userNetTotal), grossTotal: rnd(grossTotal) };
-  }
-  let eligibility = null;
-  if (adminish || prefixAdminLow.has(my2)) eligibility = { mode: eliModes[my2] || 'auto', auto: (teamWeekGross[my2] || 0) >= 50, weekGross: rnd(teamWeekGross[my2] || 0), eligible: isEligible(my2) };
-  if (supaEnabled()) { try { await fetch(`${SUPABASE_URL}/rest/v1/user_balance_cache`, { method: 'POST', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ username: user.username.toLowerCase(), total_earnings: me.total, updated_at: new Date().toISOString() }) }); } catch (e) {} }
-  return ok(res, { window: win, mode: cfg.mode, goal: Number(cfg.goal_usd) || 50, ratesLoaded: rc.count, role, me, leaderboard, team, company, overall, eligibility, pool: company });
-} catch (e) { return error(res, 500, 'earn/compute: ' + e.message); }
+    if (url === '/earn/compute' && req.method === 'POST') {
+  try {
+    const user = getUserFromSession(req.body.session);
+    if (!user) return error(res, 401, 'Unauthorized');
+    const role = await getRole(user.username);
+    const rc = await loadRateMap(false);
+    const deductions = await loadDeductions(false);
+    const cfg = await getEarnSettings();
+    const win = _earnWindow(cfg);
+    const rows = await getCachedCDR(win.from, win.to, CDR_TTL_WIDE);
+
+    const DEFAULT_DEDUCTION = 30;
+    const me = { userNet: 0, gross: 0, perRange: {} };
+    const board = {};
+    let grossTotal = 0, userNetTotal = 0;
+    const t1 = (user.clientName || '').toLowerCase().trim();
+    const t2 = (user.username || '').toLowerCase().trim();
+
+    (rows || []).forEach(r => {
+      const rn = norm(r.range);
+      const rateObj = rc.map ? rc.map.get(rn) : null;
+      if (!rateObj) return;
+      const grossRate = rateObj.rate;
+
+      // Per-range deduction
+      const ded = deductions.get(rn);
+      const isFull = ded ? ded.full : false;
+      const dedPct = ded ? ded.pct : DEFAULT_DEDUCTION;
+      const userRate = isFull ? grossRate : grossRate * (1 - dedPct / 100);
+
+      grossTotal += grossRate;
+      userNetTotal += userRate;
+
+      const cli = (r.client || '').trim();
+      if (cli) {
+        if (!board[cli]) board[cli] = { username: cli, userNet: 0, gross: 0, count: 0 };
+        board[cli].userNet += userRate;
+        board[cli].gross += grossRate;
+        board[cli].count++;
+      }
+
+      const c = (cli || '').toLowerCase();
+      const isMe = c && (c === t1 || c === t2 || c.includes(t1) || c.includes(t2));
+      if (isMe) {
+        me.userNet += userRate;
+        me.gross += grossRate;
+        const k = r.range || 'Unknown';
+        if (!me.perRange[k]) me.perRange[k] = { range: k, count: 0, userNet: 0, gross: 0, dedPct, isFull };
+        const pr = me.perRange[k];
+        pr.count++;
+        pr.userNet += userRate;
+        pr.gross += grossRate;
+      }
+    });
+
+    // Round
+    me.userNet = Math.round(me.userNet * 10000) / 10000;
+    me.gross = Math.round(me.gross * 10000) / 10000;
+    Object.values(me.perRange).forEach(pr => {
+      pr.userNet = Math.round(pr.userNet * 10000) / 10000;
+      pr.gross = Math.round(pr.gross * 10000) / 10000;
+    });
+    Object.values(board).forEach(b => {
+      b.userNet = Math.round(b.userNet * 10000) / 10000;
+      b.gross = Math.round(b.gross * 10000) / 10000;
+    });
+
+    const perRange = Object.values(me.perRange).sort((a, b) => b.userNet - a.userNet);
+    const leaderboard = Object.values(board).sort((a, b) => b.userNet - a.userNet).slice(0, 50);
+// Cache user's earnings for fast withdrawal balance lookup
+     if (supaEnabled()) {
+       try {
+         await fetch(`${SUPABASE_URL}/rest/v1/user_balance_cache`, {
+           method: 'POST',
+           headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+           body: JSON.stringify({ username: user.username.toLowerCase(), total_earnings: me.userNet, updated_at: new Date().toISOString() })
+         });
+       } catch(e) {}
+     }
+    return ok(res, {
+      window: win, mode: cfg.mode, goal: Number(cfg.goal_usd) || 50, ratesLoaded: rc.count,
+      me: { userNet: me.userNet, gross: me.gross, perRange },
+      leaderboard,
+      pool: (role === 'super') ? { grossTotal: Math.round(grossTotal * 10000) / 10000, userNetTotal: Math.round(userNetTotal * 10000) / 10000 } : null
+    });
+  } catch (e) { return error(res, 500, 'earn/compute: ' + e.message); }
 }
    // ==========================================
 // NEW VERIFIED EARNING SYSTEM (uses user_creds, NOT users)
@@ -2465,8 +2286,7 @@ if (url === '/withdraw/submit' && req.method === 'POST') {
         })
       });
     }
-    sendNotif(SUPER_ADMIN, 'money', 'New withdrawal request', user.username + ' requested $' + amt + ' via ' + method, user.username);
-return ok(res, { message: 'Submitted!' });
+    return ok(res, { message: 'Submitted!' });
   } catch (e) { return error(res, 500, 'submit: ' + e.message); }
 }
 
@@ -2534,9 +2354,8 @@ if (url === '/admin/withdraw/approve' && req.method === 'POST') {
     });
     const updated = await cr.json();
     if (!cr.ok) return error(res, 500, 'DB update failed: HTTP ' + cr.status + ' ' + JSON.stringify(updated).slice(0, 200));
-   if (!Array.isArray(updated) || updated.length === 0) return error(res, 404, 'Withdrawal #' + id + ' not found.');
-sendNotif(updated[0].username, 'success', 'Withdrawal Approved', 'Your withdrawal of $' + updated[0].amount_usd + ' has been approved. ' + String(req.body.message || ''), user.username);
-return ok(res, { message: 'Approved!', updated: updated.length });
+    if (!Array.isArray(updated) || updated.length === 0) return error(res, 404, 'Withdrawal #' + id + ' not found.');
+    return ok(res, { message: 'Approved!', updated: updated.length });
   } catch (e) { return error(res, 500, 'approve: ' + e.message); }
 }
 
@@ -2556,9 +2375,8 @@ if (url === '/admin/withdraw/reject' && req.method === 'POST') {
     });
     const updated = await cr.json();
     if (!cr.ok) return error(res, 500, 'DB update failed: HTTP ' + cr.status + ' ' + JSON.stringify(updated).slice(0, 200));
-   if (!Array.isArray(updated) || updated.length === 0) return error(res, 404, 'Withdrawal #' + id + ' not found.');
-sendNotif(updated[0].username, 'warn', 'Withdrawal Rejected', 'Your withdrawal of $' + updated[0].amount_usd + ' was rejected. ' + String(req.body.message || ''), user.username);
-return ok(res, { message: 'Rejected.', updated: updated.length });
+    if (!Array.isArray(updated) || updated.length === 0) return error(res, 404, 'Withdrawal #' + id + ' not found.');
+    return ok(res, { message: 'Rejected.', updated: updated.length });
   } catch (e) { return error(res, 500, 'reject: ' + e.message); }
 }
 
@@ -2589,46 +2407,47 @@ if (url === '/admin/withdraw/settings' && req.method === 'POST') {
     // ═══════════════════════════════════════════════════════════
     // 📡 CLI INSIGHTS — read = all users; creds config = super only
     // ═══════════════════════════════════════════════════════════
-   if (url === '/cli/analysis' && req.method === 'POST') {
-   try {
-     const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
-     const label = businessDayPKT().label;
-     // 1) in-memory cache (90s) — only v2 shape (carries exact ranges)
-     if (_cliMem && _cliMem.day === label && (Date.now() - _cliMem.ts) < 90000 && _cliHasRanges(_cliMem.list)) {
-       return ok(res, { day: label, list: _cliMem.list, stats: _cliMem.stats, cached: true });
-     }
-     // 2) Supabase fresh row (6 min) — v2 shape only
-     if (supaEnabled()) {
-       try {
-         const r = await fetch(`${SUPABASE_URL}/rest/v1/cli_daily?day=eq.${encodeURIComponent(label)}&select=payload,updated_at&limit=1`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
-         const rows = await r.json();
-         if (Array.isArray(rows) && rows[0] && rows[0].payload && _cliHasRanges(rows[0].payload.list)) {
-           const upd = new Date(rows[0].updated_at).getTime();
-           if ((Date.now() - upd) < 360000) {
-             const p = rows[0].payload;
-             _cliMem = { day: label, ts: Date.now(), list: p.list || [], stats: p.stats || {} };
-             return ok(res, { day: label, list: p.list || [], stats: p.stats || {}, cached: true });
-           }
-         }
-       } catch (e) {}
-     }
-     // 3) scrape now (buildCliList now emits exact ranges)
-     const res2 = await cliRefreshInternal(label);
-     if (res2.ok) return ok(res, { day: label, list: res2.list, stats: res2.stats, total: res2.total });
-     // 4) stale fallback so the page never breaks
-     if (supaEnabled()) {
-       try {
-         const r = await fetch(`${SUPABASE_URL}/rest/v1/cli_daily?day=eq.${encodeURIComponent(label)}&select=payload&limit=1`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
-         const rows = await r.json();
-         if (Array.isArray(rows) && rows[0] && rows[0].payload) {
-           const p = rows[0].payload; _cliMem = { day: label, ts: Date.now(), list: p.list || [], stats: p.stats || {} };
-           return ok(res, { day: label, list: p.list || [], stats: p.stats || {}, stale: true, reason: res2.reason });
-         }
-       } catch (e) {}
-     }
-     return ok(res, { day: label, list: [], stats: { totalSms: 0, totalCli: 0 }, reason: res2.reason || 'no_data' });
-   } catch (e) { return error(res, 500, 'cli/analysis: ' + e.message); }
- }
+    if (url === '/cli/analysis' && req.method === 'POST') {
+      try {
+        const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+        const label = businessDayPKT().label;
+        // 1) in-memory cache (90s)
+        if (_cliMem && _cliMem.day === label && (Date.now() - _cliMem.ts) < 90000) {
+          return ok(res, { day: label, list: _cliMem.list, stats: _cliMem.stats, cached: true });
+        }
+        // 2) Supabase fresh row (6 min)
+        if (supaEnabled()) {
+          try {
+            const r = await fetch(`${SUPABASE_URL}/rest/v1/cli_daily?day=eq.${encodeURIComponent(label)}&select=payload,updated_at&limit=1`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+            const rows = await r.json();
+            if (Array.isArray(rows) && rows[0] && rows[0].payload) {
+              const upd = new Date(rows[0].updated_at).getTime();
+              if ((Date.now() - upd) < 360000) {
+                const p = rows[0].payload;
+                _cliMem = { day: label, ts: Date.now(), list: p.list || [], stats: p.stats || {} };
+                return ok(res, { day: label, list: p.list || [], stats: p.stats || {}, cached: true });
+              }
+            }
+          } catch (e) {}
+        }
+        // 3) scrape now
+        const res2 = await cliRefreshInternal(label);
+        if (res2.ok) return ok(res, { day: label, list: res2.list, stats: res2.stats, total: res2.total });
+        // 4) stale fallback so the page never breaks
+        if (supaEnabled()) {
+          try {
+            const r = await fetch(`${SUPABASE_URL}/rest/v1/cli_daily?day=eq.${encodeURIComponent(label)}&select=payload&limit=1`, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
+            const rows = await r.json();
+            if (Array.isArray(rows) && rows[0] && rows[0].payload) {
+              const p = rows[0].payload; _cliMem = { day: label, ts: Date.now(), list: p.list || [], stats: p.stats || {} };
+              return ok(res, { day: label, list: p.list || [], stats: p.stats || {}, stale: true, reason: res2.reason });
+            }
+          } catch (e) {}
+        }
+        return ok(res, { day: label, list: [], stats: { totalSms: 0, totalCli: 0 }, reason: res2.reason || 'no_data' });
+      } catch (e) { return error(res, 500, 'cli/analysis: ' + e.message); }
+    }
+
     if (url === '/cli/refresh' && req.method === 'POST') {
       try {
         const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
@@ -2790,203 +2609,7 @@ if (url === '/admin/withdraw/settings' && req.method === 'POST') {
         return ok(res, { message: 'Restriction saved', username });
       } catch (e) { return error(res, 500, 'admin/cli/restrict: ' + e.message); }
     }
-
-    if (url === '/admin/eligibility-set' && req.method === 'POST') {
-  try {
-    const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
-    if ((await getRole(user.username)) !== 'super') return error(res, 403, 'Super admin only');
-    if (!supaEnabled()) return error(res, 400, 'Supabase required.');
-    const target = String(req.body.username || '').trim().toLowerCase();
-    const mode = req.body.mode === 'on' ? 'on' : req.body.mode === 'off' ? 'off' : 'auto';
-    if (!target) return error(res, 400, 'username required');
-    await fetch(`${SUPABASE_URL}/rest/v1/admin_eligibility`, { method: 'POST', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ username: target, mode, updated_by: user.username, updated_at: new Date().toISOString() }) });
-    return ok(res, { message: target + ' → ' + mode });
-  } catch (e) { return error(res, 500, 'eligibility-set: ' + e.message); }
-}
-
-// ═══ GLOBAL NOTIFICATIONS ═══
-async function sendNotif(target, type, title, body, createdBy){
-  if (!supaEnabled()) return;
-  try { await fetch(`${SUPABASE_URL}/rest/v1/app_notifs`, { method:'POST', headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
-    body: JSON.stringify({ target:String(target||'*').toLowerCase(), type:type||'info', title:String(title||'').slice(0,120), body:String(body||'').slice(0,1000), created_by:createdBy||'system' }) }); } catch(e){}
-}
-// ═══ NOTIFICATIONS (bell) — read tracking + super delete ═══
-if (url === '/notifs/list' && req.method === 'POST') {
-  try {
-    const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
-    const role = await getRole(user.username);
-    if (!supaEnabled()) return ok(res, { notifs: [], role, unread: 0 });
-    const un = user.username.toLowerCase();
-    const H = { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY };
-    let notifs = [];
-    try {
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/app_notifs?or=${encodeURIComponent('(target.eq.*,target.eq.' + un + ')')}&order=created_at.desc&limit=30&select=*`, { headers: H });
-      const j = await r.json();
-      if (Array.isArray(j)) notifs = j;
-    } catch (e) {}
-    let reads = [];
-    try {
-      const rr = await fetch(`${SUPABASE_URL}/rest/v1/app_notif_reads?select=username,notif_id`, { headers: H });
-      const j2 = await rr.json();
-      if (Array.isArray(j2)) reads = j2;
-    } catch (e) {}
-    const byNotif = {}; const mine = new Set();
-    reads.forEach(x => { (byNotif[x.notif_id] = byNotif[x.notif_id] || []).push(x.username); if (x.username === un) mine.add(x.notif_id); });
-    const list = notifs.map(n => ({ id: n.id, type: n.type || 'info', title: n.title || '', body: n.body || '', at: n.created_at, by: n.created_by || '', read: mine.has(n.id), readBy: byNotif[n.id] || [] }));
-    return ok(res, { role, notifs: list, unread: list.filter(n => !n.read).length });
-  } catch (e) { return ok(res, { notifs: [], role: 'none', unread: 0 }); }
-}
-if (url === '/notifs/mark-read' && req.method === 'POST') {
-  try {
-    const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
-    if (!supaEnabled()) return ok(res);
-    const un = user.username.toLowerCase();
-    const ids = Array.isArray(req.body.ids) ? req.body.ids : [];
-    for (const id of ids.slice(0, 50)) {
-      await fetch(`${SUPABASE_URL}/rest/v1/app_notif_reads`, { method: 'POST', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ username: un, notif_id: id }) });
-    }
-    return ok(res);
-  } catch (e) { return ok(res); }
-}
-if (url === '/notifs/send' && req.method === 'POST') {
-  try {
-    const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
-    if ((await getRole(user.username)) !== 'super') return error(res, 403, 'Super admin only');
-    const bodyText = String(req.body.body || '').trim(); if (!bodyText) return error(res, 400, 'Message required');
-    if (!supaEnabled()) return error(res, 400, 'Supabase required.');
-    await fetch(`${SUPABASE_URL}/rest/v1/app_notifs`, { method: 'POST', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' }, body: JSON.stringify({ type: req.body.type || 'info', title: req.body.title || '', body: bodyText, target: String(req.body.target || '*').toLowerCase(), created_by: user.username }) });
-    return ok(res, { pushed: true });
-  } catch (e) { return error(res, 500, 'notifs/send: ' + e.message); }
-}
-if (url === '/notifs/delete' && req.method === 'POST') {
-  try {
-    const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
-    if ((await getRole(user.username)) !== 'super') return error(res, 403, 'Super admin only');
-    const id = parseInt(req.body.id); if (!id || isNaN(id)) return error(res, 400, 'Valid id required');
-    const H = { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY };
-    await fetch(`${SUPABASE_URL}/rest/v1/app_notif_reads?notif_id=eq.${id}`, { method: 'DELETE', headers: H });
-    await fetch(`${SUPABASE_URL}/rest/v1/app_notifs?id=eq.${id}`, { method: 'DELETE', headers: H });
-    return ok(res, { deleted: true });
-  } catch (e) { return error(res, 500, 'notifs/delete: ' + e.message); }
-}
-
-// ═══ ADMIN: withdrawal users summary (earnings − withdrawn = live) ═══
-if (url === '/admin/withdraw/users' && req.method === 'POST') {
-  try {
-    const user = getUserFromSession(req.body.session);
-    if (!user) return error(res, 401, 'Unauthorized');
-    if (!isAdminish(await getRole(user.username))) return error(res, 403, 'Admins only');
-    if (!supaEnabled()) return ok(res, { users: [] });
-    const H = { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY };
-    const er = await fetch(`${SUPABASE_URL}/rest/v1/user_balance_cache?select=username,total_earnings&limit=2000`, { headers: H });
-    const earnings = await er.json();
-    const wr = await fetch(`${SUPABASE_URL}/rest/v1/withdrawals?status=in.(approved,pending)&select=username,amount_usd&limit=5000`, { headers: H });
-    const wrows = await wr.json();
-    const map = {};
-    (Array.isArray(earnings) ? earnings : []).forEach(e => { map[String(e.username).toLowerCase()] = { username: e.username, earnings: parseFloat(e.total_earnings) || 0, withdrawn: 0 }; });
-    (Array.isArray(wrows) ? wrows : []).forEach(w => {
-      const u = String(w.username || '').toLowerCase();
-      if (!map[u]) map[u] = { username: w.username, earnings: 0, withdrawn: 0 };
-      map[u].withdrawn += parseFloat(w.amount_usd) || 0;
-    });
-    const users = Object.values(map).map(u => ({
-      username: u.username,
-      earnings: Math.round(u.earnings * 10000) / 10000,
-      withdrawn: Math.round(u.withdrawn * 10000) / 10000,
-      live: Math.max(0, Math.round((u.earnings - u.withdrawn) * 10000) / 10000)
-    })).sort((a, b) => b.withdrawn - a.withdrawn);
-    return ok(res, { users });
-  } catch (e) { return error(res, 500, 'withdraw/users: ' + e.message); }
-}
-
-  // ═══ FREE NUMBERS (empty client column) — what the Add button shows ═══
-if (url === '/alloc/available-numbers' && req.method === 'POST') {
-  try {
-    const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
-    const panel = String(req.body.panel || 'lamix').toLowerCase();
-    const rangeTitle = String(req.body.rangeTitle || '').trim().toLowerCase();
-    const rangeId = String(req.body.rangeId || '').trim();
-    let nums = [];
-    if (panel !== 'lamix' && PANELS[panel] && PANELS[panel].base) {
-      const data = await scrapePanel(panel, 'res/data_smsnumbers.php', { frange:'', fclient:'', sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
-      nums = parsePanelNumbers(panel, data).filter(n => isAvailableClient(n.client) && (!rangeTitle || (n.range||'').toLowerCase().includes(rangeTitle)));
-    } else {
-      const useFrange = rangeId && !/^alloc_\d+$/.test(rangeId);
-      const data = await scrapeAgentData('res/data_smsnumbers.php', { frange: useFrange ? rangeId : '', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
-      if (data && data.aaData) {
-        nums = data.aaData.map(row => {
-          const idm = String(row[0]||'').match(/value=["']?(\d+)["']?/);
-          return { id: idm ? idm[1] : '', range: String(row[1]||'').replace(/<[^>]*>/g,'').trim(), country: String(row[2]||'').replace(/<[^>]*>/g,'').trim(), number: String(row[3]||'').replace(/<[^>]*>/g,'').trim(), client: String(row[5]||'').replace(/<[^>]*>/g,'').trim() };
-        }).filter(n => isAvailableClient(n.client) && (!rangeTitle || (n.range||'').toLowerCase().includes(rangeTitle) || (n.country||'').toLowerCase().includes(rangeTitle)));
-      }
-    }
-    return ok(res, { panel, numbers: nums.slice(0, 200) });
-  } catch (e) { return error(res, 500, 'available-numbers: ' + e.message); }
-}
-
-  // ═══ FREE NUMBERS POOL (empty client column) — one scrape per 60s per panel ═══
-const _freePoolCache = {};
-async function getFreePool(key){
-  const ck = key || 'lamix';
-  const hit = _freePoolCache[ck];
-  if (hit && (Date.now()-hit.ts) < 60000) return hit.nums;
-  let nums = [];
-  if (ck === 'lamix') {
-    const data = await scrapeAgentData('res/data_smsnumbers.php', { frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
-    if (data && data.aaData) nums = data.aaData.map(row => {
-      const idm = String(row[0]||'').match(/value=["']?(\d+)["']?/);
-      return { id: idm? idm[1]:'', range: String(row[1]||'').replace(/<[^>]*>/g,'').trim(), country: String(row[2]||'').replace(/<[^>]*>/g,'').trim(), number: String(row[3]||'').replace(/<[^>]*>/g,'').trim(), client: String(row[5]||'').replace(/<[^>]*>/g,'').trim() };
-    });
-  } else if (PANELS[ck] && PANELS[ck].base) {
-    const data = await scrapePanel(ck, 'res/data_smsnumbers.php', { frange:'', fclient:'', sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
-    nums = parsePanelNumbers(ck, data);
-  }
-  nums = nums.filter(n => isAvailableClient(n.client));
-  _freePoolCache[ck] = { ts: Date.now(), nums };
-  return nums;
-}
-if ((url === '/alloc/free-ranges' || url === '/p/free-ranges') && req.method === 'POST') {
-  try {
-    const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
-    const key = (url.indexOf('/p/') === 0) ? String(req.body.panel||'zyron').toLowerCase() : String(req.body.panel||'lamix').toLowerCase();
-    if (key !== 'lamix' && (!PANELS[key] || !PANELS[key].base)) return error(res, 400, 'Unknown panel');
-    const nums = await getFreePool(key);
-    const map = new Map();
-    nums.forEach(n => {
-      const country = n.country || _countryOfRange(n.range);
-      const k = country + ' -- ' + n.range;
-      if (!map.has(k)) map.set(k, { id: null, range: n.range, country, flag: countryFlag(country), available: 0 });
-      map.get(k).available++;
-    });
-    let list = Array.from(map.values());
-    if (key === 'lamix') { // map real LaMix range ids (cached 10 min)
-      const rangeOpts = await getCachedRangeOptions(false);
-      const optKeys = Array.from(rangeOpts.keys());
-      list.forEach(r => {
-        const cands = [norm(r.country+' - '+r.range), norm(r.range), norm(r.country+r.range)];
-        let id = null;
-        for (const c of cands) { if (c && rangeOpts.has(c)) { id = rangeOpts.get(c); break; } }
-        if (!id) { const nt = norm(r.range); for (const k of optKeys) { if (k && nt && (k.includes(nt) || nt.includes(k))) { id = rangeOpts.get(k); break; } } }
-        r.id = id || ('alloc_' + nt);
-      });
-    } else { list.forEach(r => { r.id = norm(r.country+'|'+r.range); }); }
-    list.sort((a,b) => b.available - a.available);
-    return ok(res, { panel: key, ranges: list.slice(0, 80), total: list.length });
-  } catch (e) { return error(res, 500, 'free-ranges: ' + e.message); }
-}
-if ((url === '/alloc/free-numbers' || url === '/p/free-numbers') && req.method === 'POST') {
-  try {
-    const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
-    const key = (url.indexOf('/p/') === 0) ? String(req.body.panel||'zyron').toLowerCase() : String(req.body.panel||'lamix').toLowerCase();
-    if (key !== 'lamix' && (!PANELS[key] || !PANELS[key].base)) return error(res, 400, 'Unknown panel');
-    const nums = await getFreePool(key);
-    const rt = String(req.body.rangeTitle||'').toLowerCase().trim();
-    let list = nums.filter(n => (n.range||'').toLowerCase() === rt);
-    if (!list.length) list = nums.filter(n => ((n.country||'')+' '+(n.range||'')).toLowerCase().includes(rt));
-    return ok(res, { panel: key, numbers: list.slice(0, 300) });
-  } catch (e) { return error(res, 500, 'free-numbers: ' + e.message); }
-}
-  
+    
  return error(res, 404, 'Route not found');
   } catch (err) {
     console.error('API Error:', err.message);
