@@ -337,18 +337,69 @@ async function scrapeCDR(dateFrom, dateTo, extra){
     return rows;
   } catch(e){ console.error('scrapeCDR:', e.message); return []; }
 }
-const _cdrCache = new Map();   // key(from|to) -> { ts, rows }  — multi-window, no thrashing
-const CDR_TTL = 5000;          // 5s  for "today" (inbox / DOR / per-number)
-const CDR_TTL_WIDE = 60000;    // 60s for week/month (heavy, changes slowly)
-async function getCachedCDR(from, to, ttl){
+const _cdrCache = new Map();      // key -> { ts, rows }
+const _cdrInflight = new Map();   // key -> Promise  ← ONE scrape per key
+const CDR_TTL = 5000;
+const CDR_TTL_WIDE = 60000;
+
+async function getCachedCDR(from, to, ttl) {
   const key = from + '|' + to;
+  const useTtl = ttl || CDR_TTL;
   const hit = _cdrCache.get(key);
-  if (hit && (Date.now() - hit.ts) < (ttl || CDR_TTL)) return hit.rows;
-  const rows = await scrapeCDR(from, to);
-  _cdrCache.set(key, { ts: Date.now(), rows });
-  if (_cdrCache.size > 12) { const now = Date.now(); for (const [k, v] of _cdrCache) if (now - v.ts > 120000) _cdrCache.delete(k); }
-  return rows;
+
+  // ✅ 1. Fresh cache → return immediately
+  if (hit && hit.rows.length > 0 && (Date.now() - hit.ts) < useTtl) {
+    return hit.rows;
+  }
+
+  // ✅ 2. DEDUPLICATE: if a scrape is already running for this key, await IT
+  if (_cdrInflight.has(key)) {
+    try { return await _cdrInflight.get(key); } catch (e) { return hit ? hit.rows : []; }
+  }
+
+  // ✅ 3. Start ONE scrape, share the promise with all concurrent callers
+  const scrapePromise = (async () => {
+    try {
+      const rows = await scrapeCDR(from, to);
+
+      if (rows.length > 0) {
+        // ✅ 4. ONLY cache successful scrapes
+        _cdrCache.set(key, { ts: Date.now(), rows });
+      }
+      // ✅ 5. Empty scrape → DON'T cache, DON'T overwrite good data
+
+      return rows.length > 0 ? rows : (hit ? hit.rows : []);
+    } catch (e) {
+      console.error('getCachedCDR scrape failed:', e.message);
+      return hit ? hit.rows : [];  // ✅ fallback to stale data
+    } finally {
+      _cdrInflight.delete(key);
+    }
+  })();
+
+  _cdrInflight.set(key, scrapePromise);
+  return scrapePromise;
 }
+// ✅ Pre-warm today + week + month on startup and every 45s
+async function _prewarmCDR() {
+  try {
+    const bd = businessDayPKT();
+    const today = bd.label;
+    const dayBack = (n) => new Date(new Date(today + 'T00:00:00Z').getTime() - n * 86400000).toISOString().slice(0, 10);
+
+    await Promise.allSettled([
+      getCachedCDR(bd.from, bd.to, CDR_TTL),
+      getCachedCDR(dayBack(6) + ' 00:00:00', today + ' 23:59:59', CDR_TTL_WIDE),
+      getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59', CDR_TTL_WIDE)
+    ]);
+  } catch (e) {}
+}
+
+// Run once 3s after cold start, then every 45s
+setTimeout(_prewarmCDR, 3000);
+setInterval(_prewarmCDR, 45 * 1000);
+
+
 function isMine(client, user){
   const c = (client||'').toLowerCase().trim();
   const t1 = (user.clientName||'').toLowerCase().trim(), t2 = (user.username||'').toLowerCase().trim();
