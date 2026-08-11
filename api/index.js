@@ -128,22 +128,6 @@ async function getSmartDOR() {
   }
 }
 
-// ═══ 5 AM BUSINESS DAY AUTO-RESET ═══
-// At 5:00 AM PKT (00:00 UTC), clear all Supabase caches for the old day
-// so the new business day starts fresh.
-let _lastResetDay = '';
-setInterval(() => {
-  const bd = businessDayPKT();
-  if (_lastResetDay && _lastResetDay !== bd.label) {
-    // Business day rolled over → clear old caches
-    console.log('[cache] Business day rolled: ' + _lastResetDay + ' → ' + bd.label + '. Clearing caches.');
-    _cdrCache.clear();
-    _panelCdrCache.clear();
-    supaCacheCleanup();   // remove Supabase caches older than 2 days
-  }
-  _lastResetDay = bd.label;
-}, 60000);   // check every minute
-
 // 🔥 Auto-renew the agent session every 10 minutes
 setInterval(() => { ensureAgentSession(true).catch(() => {}); }, 10 * 60 * 1000);
 
@@ -353,95 +337,16 @@ async function scrapeCDR(dateFrom, dateTo, extra){
     return rows;
   } catch(e){ console.error('scrapeCDR:', e.message); return []; }
 }
-const  _cdrCache = new Map();   // key(from|to) -> { ts, rows }  — L1 hot cache
-const CDR_TTL = 5000;          // 5s  for  "today " (inbox / DOR / per-number)
+const _cdrCache = new Map();   // key(from|to) -> { ts, rows }  — multi-window, no thrashing
+const CDR_TTL = 5000;          // 5s  for "today" (inbox / DOR / per-number)
 const CDR_TTL_WIDE = 60000;    // 60s for week/month (heavy, changes slowly)
-
-// ═══════════════════════════════════════════════════════════
-// 🔥 SUPABASE PERSISTENT CACHE ENGINE (L2 — survives cold starts)
-// ═══════════════════════════════════════════════════════════
-const _SUPA_CACHE_CONCURRENCY = {};   // prevent duplicate writes per key
-
-async function supaCacheGet(table, keyObj) {
-  if (!supaEnabled()) return null;
-  try {
-    const params = Object.entries(keyObj).map(([k,v]) => `${k}=eq.${encodeURIComponent(v)}`).join('&');
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}&select=*&limit=1`,
-      { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
-    const rows = await r.json();
-    if (Array.isArray(rows) && rows[0]) return rows[0];
-  } catch(e) {}
-  return null;
-}
-
-async function supaCacheSet(table, keyObj, dataObj) {
-  if (!supaEnabled()) return;
-  const dedupeKey = table + '|' + JSON.stringify(keyObj);
-  if (_SUPA_CACHE_CONCURRENCY[dedupeKey]) return;   // skip duplicate writes
-  _SUPA_CACHE_CONCURRENCY[dedupeKey] = true;
-  try {
-    await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
-      method: 'POST',
-      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY,
-                 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify(Object.assign({}, keyObj, dataObj, { updated_at: new Date().toISOString() }))
-    });
-  } catch(e) {}
-  finally { setTimeout(() => { delete _SUPA_CACHE_CONCURRENCY[dedupeKey]; }, 2000); }
-}
-
-// Get the current panel from request (defaults to 'lamix')
-function reqPanel(req) {
-  return String(req.body.panel || req.headers['x-panel'] || 'lamix').toLowerCase();
-}
-
-// Auto-cleanup: remove caches older than 2 business days
-async function supaCacheCleanup() {
-  if (!supaEnabled()) return;
-  const bd = businessDayPKT();
-  const cutoffDate = new Date(new Date(bd.label + 'T00:00:00Z').getTime() - 2 * 86400000).toISOString().slice(0, 10);
-  const tables = ['sms_cache', 'leaderboard_cache', 'inbox_cache'];
-  for (const t of tables) {
-    try {
-      await fetch(`${SUPABASE_URL}/rest/v1/${t}?biz_date=lt.${encodeURIComponent(cutoffDate)}`,
-        { method: 'DELETE', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });
-    } catch(e) {}
-  }
-}
-// Run cleanup once per warm instance, every 6 hours
-setInterval(supaCacheCleanup, 6 * 60 * 60 * 1000);
-async function getCachedCDR(from, to, ttl, panel){
-  const p = panel || 'lamix';
-  const bd = businessDayPKT();
-  const key = p + '|' + from + '|' + to;
-
-  // L1: in-memory hot cache (5s)
+async function getCachedCDR(from, to, ttl){
+  const key = from + '|' + to;
   const hit = _cdrCache.get(key);
   if (hit && (Date.now() - hit.ts) < (ttl || CDR_TTL)) return hit.rows;
-
-  // L2: Supabase persistent cache — read first, scrape only if stale
-  const isToday = from === bd.from && to === bd.to;
-  if (isToday && supaEnabled()) {
-    const cached = await supaCacheGet('sms_cache', { panel: p, biz_date: bd.label });
-    if (cached && cached.rows && cached.rows.length) {
-      const age = Date.now() - new Date(cached.updated_at).getTime();
-      if (age < (ttl || CDR_TTL)) {
-        _cdrCache.set(key, { ts: Date.now() - age, rows: cached.rows });
-        return cached.rows;
-      }
-    }
-  }
-
-  // L3: scrape panel (only when cache is truly stale)
   const rows = await scrapeCDR(from, to);
   _cdrCache.set(key, { ts: Date.now(), rows });
   if (_cdrCache.size > 12) { const now = Date.now(); for (const [k, v] of _cdrCache) if (now - v.ts > 120000) _cdrCache.delete(k); }
-
-  // Write back to Supabase (fire-and-forget)
-  if (isToday && rows.length) {
-    supaCacheSet('sms_cache', { panel: p, biz_date: bd.label }, { rows: rows, total: rows.length });
-  }
-
   return rows;
 }
 function isMine(client, user){
@@ -1099,32 +1004,13 @@ async function scrapePanelCDR(key, dateFrom, dateTo){
 }
 const _panelCdrCache = new Map();  // "panel|from|to"
 async function getPanelCachedCDR(key, from, to, ttl){
-const ck = key + '|' + from + '|' + to;
-const hit = _panelCdrCache.get(ck);
-if (hit && (Date.now()-hit.ts) < (ttl || 60000)) return hit.rows;
-
-// Try Supabase sms_cache for this panel
-const bd = businessDayPKT();
-if (from === bd.from && to === bd.to && supaEnabled()) {
-  const cached = await supaCacheGet('sms_cache', { panel: key, biz_date: bd.label });
-  if (cached && cached.rows && cached.rows.length) {
-    const age = Date.now() - new Date(cached.updated_at).getTime();
-    if (age < (ttl || 60000)) {
-      _panelCdrCache.set(ck, { ts: Date.now() - age, rows: cached.rows });
-      return cached.rows;
-    }
-  }
-}
-
-const rows = await scrapePanelCDR(key, from, to);
-_panelCdrCache.set(ck, { ts: Date.now(), rows });
-if (_panelCdrCache.size > 15) { const now = Date.now(); for (const [k,v] of _panelCdrCache) if (now-v.ts > 180000) _panelCdrCache.delete(k); }
-
-// Write back to Supabase
-if (from === bd.from && to === bd.to && rows.length) {
-  supaCacheSet('sms_cache', { panel: key, biz_date: bd.label }, { rows, total: rows.length });
-}
-return rows;
+  const ck = key + '|' + from + '|' + to;
+  const hit = _panelCdrCache.get(ck);
+  if (hit && (Date.now()-hit.ts) < (ttl || 60000)) return hit.rows;
+  const rows = await scrapePanelCDR(key, from, to);
+  _panelCdrCache.set(ck, { ts: Date.now(), rows });
+  if (_panelCdrCache.size > 15) { const now = Date.now(); for (const [k,v] of _panelCdrCache) if (now-v.ts > 180000) _panelCdrCache.delete(k); }
+  return rows;
 }
 // data_smsranges.php → [Range, Prefix, TestNumber, Currency, 1/1, 7/1, 7/7, 30/45, Memo, Action(info=RID)]
 function parsePanelRangeCatalog(data){
@@ -1311,8 +1197,7 @@ if (req.body && req.body.session) {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
       const force = !!req.body.forceRefresh;
-      const panel = reqPanel(req);
-const ck = panel + ':u:' + String(user.username).toLowerCase();   // 🔥 panel-aware key
+      const ck = 'u:' + String(user.username).toLowerCase();
       const hit = _rangesCache.get(ck);
       if (!force && hit && hit.ranges.length && (Date.now() - hit.ts) < 20000) return ok(res, { ranges: hit.ranges, cached: true });
 
@@ -1369,33 +1254,15 @@ const ck = panel + ':u:' + String(user.username).toLowerCase();   // 🔥 panel-
     }
 
     if (url === '/smscount' && req.method === 'POST') {
-   const user = getUserFromSession(req.body.session);
-   if (!user) return error(res, 401, 'Unauthorized');
-   const panel = reqPanel(req);   // 🔥 panel-aware
-   const bd = businessDayPKT();
-
-   // Try inbox cache first (instant for repeat polls within 3s)
-   if (supaEnabled()) {
-     const ic = await supaCacheGet('inbox_cache', { panel, username: user.username, biz_date: bd.label });
-     if (ic && ic.recent) {
-       const age = Date.now() - new Date(ic.updated_at).getTime();
-       if (age < CDR_TTL) {
-         return ok(res, { count: ic.count, recent: ic.recent, cached: true });
-       }
-     }
-   }
-
-   const rows = await getCachedCDR(bd.from, bd.to, CDR_TTL, panel);
-   const mine = rows.filter(r => isMine(r.client, user));
-   mine.sort((a,b) => b.datetime.localeCompare(a.datetime));
-   const result = { count: mine.length, recent: mine.slice(0,50).map(r => ({ time: r.time, datetime: r.datetime, number: r.number, cli: r.cli, message: r.message, range: r.range })) };
-
-   // Write inbox cache (so next poll is instant)
-   supaCacheSet('inbox_cache', { panel, username: user.username, biz_date: bd.label },
-     { count: result.count, recent: result.recent });
-
-   return ok(res, result);
- }
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      const bd = businessDayPKT();
+      const rows = await getCachedCDR(bd.from, bd.to);
+      const mine = rows.filter(r => isMine(r.client, user));
+      mine.sort((a,b) => b.datetime.localeCompare(a.datetime));
+      return ok(res, { count: mine.length, recent: mine.slice(0,50).map(r => ({ time: r.time, datetime: r.datetime, number: r.number, cli: r.cli, message: r.message, range: r.range })) });
+    }
+    
         if (url === '/smscount-range' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
@@ -1414,24 +1281,11 @@ const ck = panel + ':u:' + String(user.username).toLowerCase();   // 🔥 panel-
     }
 
         if (url === '/dor' && req.method === 'POST') {
-   const panel = reqPanel(req);
-   const bd = businessDayPKT();
-
-   // Try Supabase cache first (zero scrape)
-   if (supaEnabled()) {
-     const cached = await supaCacheGet('sms_cache', { panel, biz_date: bd.label });
-     if (cached && cached.rows && cached.rows.length) {
-       const rows = cached.rows.slice().sort((a, b) => b.datetime.localeCompare(a.datetime));
-       return ok(res, { date: bd.label, total: rows.length, cached: true,
-         recent: rows.slice(0, 200).map(r => ({ time: r.time, datetime: r.datetime, number: r.number, cli: r.cli, client: r.client, message: r.message, range: r.range })) });
-     }
-   }
-
-   // Fallback: scrape only if Supabase has nothing yet
-   const rows = await getCachedCDR(bd.from, bd.to, CDR_TTL, panel);
-   rows.sort((a, b) => b.datetime.localeCompare(a.datetime));
-   return ok(res, { date: bd.label, total: rows.length, recent: rows.slice(0, 200).map(r => ({ time: r.time, datetime: r.datetime, number: r.number, cli: r.cli, client: r.client, message: r.message, range: r.range })) });
- }
+      const bd = businessDayPKT();
+      const rows = await getCachedCDR(bd.from, bd.to);
+      rows.sort((a, b) => b.datetime.localeCompare(a.datetime));
+      return ok(res, { date: bd.label, total: rows.length, recent: rows.slice(0, 200).map(r => ({ time: r.time, datetime: r.datetime, number: r.number, cli: r.cli, client: r.client, message: r.message, range: r.range })) });
+    }
 
     // 6. SEARCH RANGES (real ids + available counts)
      if (url === '/alloc/search-ranges' && req.method === 'POST') {
@@ -2180,45 +2034,28 @@ const r = await fetch(`${SUPABASE_URL}/rest/v1/alloc_events?username=${encodeURI
     }
     // 9. LEADERBOARD
    if (url === '/leaderboard' && req.method === 'POST') {
-const user = getUserFromSession(req.body.session);
-if (!user) return error(res, 401, 'Unauthorized');
-const panel = reqPanel(req);
-const range = (req.body.range || 'today');
-const bd = businessDayPKT();
+      const user = getUserFromSession(req.body.session);
+      if (!user) return error(res, 401, 'Unauthorized');
+      const range = (req.body.range || 'today');
+      const bd = businessDayPKT(); let from = bd.from, to = bd.to;
+      if (range !== 'today') {
+        const days = range === 'week' ? 7 : 30;
+        const pkt = new Date(Date.now() + 5*3600000);
+        const end = pkt.toISOString().slice(0,10);
+        const start = new Date(pkt.getTime() - (days-1)*86400000).toISOString().slice(0,10);
+        from = start + ' 00:00:00'; to = end + ' 23:59:59';
+      }
+      const rows = await getCachedCDR(from, to, range === 'today' ? CDR_TTL : CDR_TTL_WIDE);
+      const counts = {};
+      rows.forEach(r => { const c = lbName(r.client); counts[c] = (counts[c]||0) + 1; });
+      const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+      const users = sorted.slice(0, 50).map(([username,count]) => ({ username, count }));
+      const meKeys = [user.clientName, user.username].map(s=>String(s||'').toLowerCase().trim()).filter(Boolean);
+      let me = null;
+      for (let i=0;i<sorted.length;i++){ const k=sorted[i][0].toLowerCase(); if (meKeys.some(m=> k===m || k.includes(m) || m.includes(k))){ me = { rank:i+1, username:sorted[i][0], count:sorted[i][1] }; break; } }
+      return ok(res, { users, range, me, total: sorted.length });
+    }
 
-// Try leaderboard cache from Supabase (zero scrape)
-if (supaEnabled()) {
-  const cached = await supaCacheGet('leaderboard_cache', { panel, period: range, biz_date: bd.label });
-  if (cached && cached.data && cached.data.users) {
-    return ok(res, Object.assign({}, cached.data, { cached: true }));
-  }
-}
-
-// Compute from CDR cache (still cached, not a raw scrape)
-let from = bd.from, to = bd.to;
-if (range !== 'today') {
-const days = range === 'week' ? 7 : 30;
-const pkt = new Date(Date.now() + 5*3600000);
-const end = pkt.toISOString().slice(0,10);
-const start = new Date(pkt.getTime() - (days-1)*86400000).toISOString().slice(0,10);
-from = start + ' 00:00:00'; to = end + ' 23:59:59';
-}
-const rows = await getCachedCDR(from, to, range === 'today' ? CDR_TTL : CDR_TTL_WIDE, panel);
-const counts = {};
-rows.forEach(r => { const c = lbName(r.client); counts[c] = (counts[c]||0) + 1; });
-const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
-const users = sorted.slice(0, 50).map(([username,count]) => ({ username, count }));
-const meKeys = [user.clientName, user.username].map(s=>String(s||'').toLowerCase().trim()).filter(Boolean);
-let me = null;
-for (let i=0;i<sorted.length;i++){ const k=sorted[i][0].toLowerCase(); if (meKeys.some(m=> k===m || k.includes(m) || m.includes(k))){ me = { rank:i+1, username:sorted[i][0], count:sorted[i][1] }; break; } }
-
-const result = { users, range, me, total: sorted.length };
-
-// Write to Supabase leaderboard cache
-supaCacheSet('leaderboard_cache', { panel, period: range, biz_date: bd.label }, { data: result });
-
-return ok(res, result);
-}
     // 10. CLIENTS LIST
     if (url === '/clients/list' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
@@ -3139,18 +2976,13 @@ if (url === '/admin/withdraw/users' && req.method === 'POST') {
   } catch (e) { return error(res, 500, 'withdraw/users: ' + e.message); }
 }
 
+// ═══ PANEL DATA (read-only, per-panel) ═══
 // ═══ PANEL ROUTES — LaMix-compatible shapes (bridge targets) ═══
 if (url === '/p/ranges' && req.method === 'POST') {
   try {
     const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
     const key = String(req.body.panel||'').toLowerCase(); if (!PANELS[key] || !PANELS[key].base) return error(res, 400, 'Unknown panel');
     const role = await getRole(user.username);
-    // Try Supabase ranges_cache first
-const _rcCached = await supaCacheGet('ranges_cache', { panel: key, username: user.username });
-if (_rcCached && _rcCached.data && _rcCached.data.length) {
-  const _rcAge = Date.now() - new Date(_rcCached.updated_at).getTime();
-  if (_rcAge < 20000) return ok(res, { panel: key, ranges: _rcCached.data, cached: true });
-}
     const data = await scrapePanel(key, 'res/data_smsnumbers.php', { frange:'', fclient:'', sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
     let nums = parsePanelNumbers(key, data);
     const pc = await panelClientFor(user.username, key);
@@ -3166,9 +2998,7 @@ if (_rcCached && _rcCached.data && _rcCached.data.length) {
       if (!m.has(k)) m.set(k, { id:'r_'+norm((n.country||'')+'|'+n.range), title:n.range, country:n.country||'', count:0 });
       m.get(k).count++;
     });
-    const _rcResult = Array.from(m.values());
-supaCacheSet('ranges_cache', { panel: key, username: user.username }, { data: _rcResult });
-return ok(res, { panel:key, ranges: _rcResult });
+    return ok(res, { panel:key, ranges: Array.from(m.values()) });
   } catch(e){ return error(res, 500, 'p/ranges: '+e.message); }
 }
 if (url === '/p/numbers' && req.method === 'POST') {
