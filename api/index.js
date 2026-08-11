@@ -19,9 +19,9 @@ const corsHeaders = {
 
 const AGENT_BASE_URL = 'http://51.210.208.26/ints/agent/';
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// ðŸ”¥ SELF-HEALING AGENT SESSION (no more expired-cookie breakage)
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════
+// 🔥 SELF-HEALING AGENT SESSION (no more expired-cookie breakage)
+// ═══════════════════════════════════════════════════════════
 let AGENT_COOKIE = 'PHPSESSID=bd51a90a169f206256b1d9187d81613e'; // starting point; auto-refreshed
 let _cookieTs = 0;        // when we last got a fresh cookie
 let _lastLoginTry = 0;    // throttle login attempts
@@ -55,7 +55,7 @@ async function ensureAgentSession(force) {
       }
     } catch (e) { console.log('[agent-login] error', u, e.message); }
   }
-  console.log('[agent-login] no endpoint returned a fresh cookie â€” keeping current');
+  console.log('[agent-login] no endpoint returned a fresh cookie — keeping current');
   return AGENT_COOKIE;
 }
 
@@ -93,7 +93,7 @@ function isAvailableClient(clientVal) {
   const c = (clientVal || '').trim().toLowerCase();
   if (c === '' || c === 'unallocated' || c === 'null' || c === 'none' || c === 'free' || c === '0' ||
       c === '-' || c === '--' || c === 'n/a' || c === 'available' || c === 'not assigned' ||
-      c === 'unassigned' || c === '&nbsp;' || c === 'â€”' || c === 'â€“') return true;
+      c === 'unassigned' || c === '&nbsp;' || c === '—' || c === '–') return true;
   if (c.length <= 1) return true;
   return false;
 }
@@ -128,7 +128,7 @@ async function getSmartDOR() {
   }
 }
 
-// ðŸ”¥ Auto-renew the agent session every 10 minutes
+// 🔥 Auto-renew the agent session every 10 minutes
 setInterval(() => { ensureAgentSession(true).catch(() => {}); }, 10 * 60 * 1000);
 
 async function scrapeAgentData(endpoint, params = {}) {
@@ -210,9 +210,9 @@ function extractRangeItems(d) {
   return { items: [], more: false };
 }
 
-// â”€â”€ Range-options cache â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Range-options cache ─────────────────────────────────────────────
 // The paginated LaMix range-id lookup is SLOW (up to 30 requests) and
-// was making Add-search time out on cold loads (the "Ta/Tu/An â†’ nothing"
+// was making Add-search time out on cold loads (the "Ta/Tu/An → nothing"
 // bug). Range IDs barely change, so cache the whole map for 10 minutes.
 let _rangeOptsCache = { ts: 0, map: null };
 const RANGE_OPTS_TTL = 10 * 60 * 1000; // 10 minutes
@@ -241,7 +241,7 @@ async function getRangeOptions() {
   return map;
 }
 
-// âœ… Use THIS everywhere instead of getRangeOptions()
+// ✅ Use THIS everywhere instead of getRangeOptions()
 async function getCachedRangeOptions(force) {
   if (!force && _rangeOptsCache.map && (Date.now() - _rangeOptsCache.ts) < RANGE_OPTS_TTL) {
     return _rangeOptsCache.map;                       // instant cache hit
@@ -256,7 +256,7 @@ function resolveUrl(action) {
   if (action[0] === '/') return 'http://51.210.208.26' + action;
   return `${AGENT_BASE_URL}${action}`;
 }
-// ðŸ”¥ Per-country (3) / per-range (2) daily caps â€” Supabase-backed; uncapped until keys are set
+// 🔥 Per-country (3) / per-range (2) daily caps — Supabase-backed; uncapped until keys are set
 const COUNTRY_CAP = 3;
 const RANGE_CAP   = 2;
 const DAILY_ALLOC_CAP = COUNTRY_CAP;
@@ -289,20 +289,20 @@ async function countDailyAllocByCountry(username, clientName){
       }
     } catch(e){ console.error('supa count error', e.message); }
   }
-  return { byCountry:{}, byRange:{}, total:0, _src:'none' }; // no Supabase yet â†’ uncapped (allocations still work)
+  return { byCountry:{}, byRange:{}, total:0, _src:'none' }; // no Supabase yet → uncapped (allocations still work)
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// ðŸ”¥ CDR SCRAPER (real OTP/SMS source) + 05:00â†’05:00 PKT business day + 5s cache
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════
+// 🔥 CDR SCRAPER (real OTP/SMS source) + 05:00→05:00 PKT business day + 5s cache
+// ═══════════════════════════════════════════════════════════
 const RESET_HOUR_PKT = 5; // kept for the weekly/monthly snapshot roll (Phase 3); NOT used to hide messages
 function businessDayPKT(){
   const pkt = new Date(Date.now() + 5*3600000);          // PKT now
   const hh  = pkt.getUTCHours();                          // PKT hour
   const base = new Date(pkt.getTime() - (hh < 5 ? 1 : 0) * 86400000);  // roll back before 5 AM
   const label = base.toISOString().slice(0,10);           // business date (PKT)
-  // Panel filters in UTC. 05:00 PKT = 00:00 UTC, so the 5 AMâ€‘anchored
-  // business day in UTC strings = label 00:00:00 â†’ label 23:59:59.
+  // Panel filters in UTC. 05:00 PKT = 00:00 UTC, so the 5 AM‑anchored
+  // business day in UTC strings = label 00:00:00 → label 23:59:59.
   return { from: label + ' 00:00:00', to: label + ' 23:59:59', label };
 }
 
@@ -337,7 +337,7 @@ async function scrapeCDR(dateFrom, dateTo, extra){
     return rows;
   } catch(e){ console.error('scrapeCDR:', e.message); return []; }
 }
-const _cdrCache = new Map();   // key(from|to) -> { ts, rows }  â€” multi-window, no thrashing
+const _cdrCache = new Map();   // key(from|to) -> { ts, rows }  — multi-window, no thrashing
 const CDR_TTL = 5000;          // 5s  for "today" (inbox / DOR / per-number)
 const CDR_TTL_WIDE = 60000;    // 60s for week/month (heavy, changes slowly)
 async function getCachedCDR(from, to, ttl){
@@ -356,9 +356,9 @@ function isMine(client, user){
 }
 function lbName(x){ const c=String(x||'').trim(); if(!c||c==='null'||c==='none'||c==='-'||c==='--'||c==='n/a') return 'System Generated'; return c; }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// ðŸ” PASSWORDS â€” scrypt hashing (no dependency) + Supabase user_creds
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════
+// 🔐 PASSWORDS — scrypt hashing (no dependency) + Supabase user_creds
+// ═══════════════════════════════════════════════════════════
 function hashPassword(pw){
   const salt = crypto.randomBytes(16).toString('hex');
   const hash = crypto.scryptSync(String(pw), salt, 64).toString('hex');
@@ -385,7 +385,7 @@ async function supaUpsertCreds(username, passHash, clientId, clientName, recover
   if (!supaEnabled()) return false;
   try {
     const body = { username, pass_hash: passHash, client_id: clientId||null, client_name: clientName||null, updated_at: new Date().toISOString() };
-    if (recoveryHash !== undefined) body.recovery_hash = recoveryHash; // omit â†’ keep existing (merge)
+    if (recoveryHash !== undefined) body.recovery_hash = recoveryHash; // omit → keep existing (merge)
     await fetch(`${SUPABASE_URL}/rest/v1/user_creds`, { method:'POST', headers:{ 'apikey':SUPABASE_KEY, 'Authorization':'Bearer '+SUPABASE_KEY, 'Content-Type':'application/json', 'Prefer':'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(body) });
     return true;
   } catch(e){ console.error('supaUpsertCreds:', e.message); return false; }
@@ -412,9 +412,9 @@ async function lookupLaMixClient(username){
   return null;
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// ðŸ›¡ï¸ ROLES â€” super (you) + admins; allocation caps waived for them
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════
+// 🛡️ ROLES — super (you) + admins; allocation caps waived for them
+// ═══════════════════════════════════════════════════════════
 const SUPER_ADMIN = (process.env.SUPER_ADMIN || 'Muzammil_Aziz').toLowerCase(); // change via env if your login name differs
 const _roleCache = new Map();
 async function getRole(username){
@@ -446,14 +446,14 @@ function countryFlag(name){
   const s = ' ' + String(name||'').toLowerCase();
   let best='', bestLen=0;
   for (const k in COUNTRY_ISO){ const re = new RegExp(' ' + k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '(?![a-z])'); if (re.test(s) && k.length>bestLen){ best=k; bestLen=k.length; } }
-  return best ? isoToFlag(COUNTRY_ISO[best]) : 'ðŸ³ï¸';
+  return best ? isoToFlag(COUNTRY_ISO[best]) : '🏳️';
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// ðŸ‘¥ TEAMS â€” prefixes (super assigns) + cached, scoped client list
+// ═══════════════════════════════════════════════════════════
+// 👥 TEAMS — prefixes (super assigns) + cached, scoped client list
 // A client's team is derived from its username prefix, so creation
 // auto-assigns the team later with no extra mapping table.
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════
 let _clientsCache = { ts: 0, data: null };
 async function getCachedClients(force) {
   if (!force && _clientsCache.data && (Date.now() - _clientsCache.ts) < 60000) return _clientsCache.data;
@@ -504,7 +504,7 @@ function weekKey(dateStr){
   return new Date(d.getTime() + diff * 86400000).toISOString().slice(0, 10);
 }
 
-// â•â•â• TEAM HELPERS â•â•â•
+// ═══ TEAM HELPERS ═══
 let _pinsCache = { ts: 0, map: null };
 async function getPinsMap() {
   if (_pinsCache.map && (Date.now() - _pinsCache.ts) < 30000) return _pinsCache.map;
@@ -539,9 +539,9 @@ function weekKey(dateStr) {
   return new Date(d.getTime() + diff * 86400000).toISOString().slice(0, 10);
 }
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// ðŸ’° EARNINGS â€” self-contained block (helpers + routes)
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════════════════
+// 💰 EARNINGS — self-contained block (helpers + routes)
+// ═══════════════════════════════════════════════════════════
 let _ratesCache = { ts: 0, map: null, count: 0 };
 const RATES_TTL = 5 * 60 * 1000; // 5 min cache
 
@@ -580,7 +580,7 @@ async function loadRateMap(force) {
   }
   return _ratesCache;
 }
-// â”€â”€ Per-range deduction settings â”€â”€
+// ── Per-range deduction settings ──
 let _deductionsCache = { ts: 0, map: null };
 const DEDUCTIONS_TTL = 60000; // 1 min
 
@@ -617,15 +617,15 @@ function _earnWindow(cfg) {
     return { from: f + ' 00:00:00', to: today + ' 23:59:59', label: 'Last 7 days' };
   }
   const f = cfg.from_date || today, t = cfg.to_date || today;
-  return { from: f + ' 00:00:00', to: t + ' 23:59:59', label: f + ' â†’ ' + t };
+  return { from: f + ' 00:00:00', to: t + ' 23:59:59', label: f + ' → ' + t };
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// ðŸ“¡ CLI INSIGHTS â€” second-panel CDR aggregation (global, all users)
+// ═══════════════════════════════════════════════════════════
+// 📡 CLI INSIGHTS — second-panel CDR aggregation (global, all users)
 //    Scrapes a SEPARATE LaMix agent login (configured by super admin),
-//    groups every SMS row by CLI (app name), ranks by quantity â†’ recency,
+//    groups every SMS row by CLI (app name), ranks by quantity → recency,
 //    and persists the result per business-day in Supabase (cli_daily).
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════
 const CLI_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36';
 let _cliCookie = '', _cliCookieTs = 0, _cliLastLogin = 0;
 let _cliCredsCache = { ts: 0, user: null, pass: null };
@@ -638,7 +638,7 @@ function _parseUtc(s) {
   const v = d.getTime();
   return isFinite(v) ? v : 0;
 }
-// Canonical country (dedupes "Malaysia Celcom" / "Malaysia XOX" â†’ malaysia)
+// Canonical country (dedupes "Malaysia Celcom" / "Malaysia XOX" → malaysia)
 function _canonCountry(rangeText) {
   const cn = _countryOfRange(rangeText || '');
   const tryOn = (s) => {
@@ -714,7 +714,7 @@ async function scrapeCliCDR(dateFrom, dateTo) {
   const params = Object.assign({
     fdate1: dateFrom, fdate2: dateTo, frange: '', fclient: '', fnum: '', fcli: '',
     fgdate: '', fgmonth: '', fgrange: '', fgclient: '', fgnumber: '', fgcli: '', fg: 0,
-    sEcho: 1, iColumns: 9, sColumns: ',,,,,,,,', iDisplayStart: 0, iDisplayLength: 100000, // â† ALL rows of the day
+    sEcho: 1, iColumns: 9, sColumns: ',,,,,,,,', iDisplayStart: 0, iDisplayLength: 100000, // ← ALL rows of the day
     sSearch: '', bRegex: false, iSortCol_0: 0, sSortDir_0: 'desc', iSortingCols: 1
   }, mp);
   const doReq = async () => (await axios.get(`${AGENT_BASE_URL}res/data_smscdr.php`, { params, headers: cliHeaders(), timeout: 50000, maxRedirects: 5, validateStatus: () => true })).data;
@@ -803,7 +803,7 @@ setInterval(() => {
   }).catch(() => {});
 }, 4 * 60 * 1000);
 
-// â•â•â• CLI TRACK + SEARCH + GATE helpers â•â•â•
+// ═══ CLI TRACK + SEARCH + GATE helpers ═══
 let _cliRowsMem = null;
 async function getCliRows(label) {
   const win = label ? { from: label + ' 00:00:00', to: label + ' 23:59:59', label } : businessDayPKT();
@@ -872,9 +872,9 @@ module.exports = async (req, res) => {
   const url = req.url.replace(/^\/api/, '');
 
   try {
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-    // 1. LOGIN â€” dynamic LaMix lookup (username OR name) + fallback + self-healing cookie
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // ═══════════════════════════════════════════════════════════
+    // 1. LOGIN — dynamic LaMix lookup (username OR name) + fallback + self-healing cookie
+    // ═══════════════════════════════════════════════════════════
    if (url === '/login' && req.method === 'POST') {
       const rawUsername = (req.body.username || '').trim();
       const password = (req.body.password || '').trim();
@@ -911,7 +911,7 @@ module.exports = async (req, res) => {
         return res.status(401).json({ ok: false, error: 'Client not found in LaMix. Check the username.', ...corsHeaders });
       }
 
-      // Supabase not configured â†’ legacy LaMix-only (any password)
+      // Supabase not configured → legacy LaMix-only (any password)
       const lamix = await lookupLaMixClient(rawUsername);
       if (lamix) {
         const token = jwt.sign({ username: rawUsername, clientId: lamix.clientId, clientName: lamix.clientName, panelNum: 1 }, JWT_SECRET, { expiresIn: '7d' });
@@ -920,7 +920,7 @@ module.exports = async (req, res) => {
       return res.status(401).json({ ok: false, error: 'Client not found in LaMix. Check the username.', ...corsHeaders });
     }
 
-    // ðŸ” FIRST-LOGIN: set password + recovery code, then sign in
+    // 🔐 FIRST-LOGIN: set password + recovery code, then sign in
     if (url === '/auth/set-password' && req.method === 'POST') {
       const { username, clientId, clientName, password, recovery } = req.body;
       if (!username || !password || String(password).length < 6) return error(res, 400, 'Password must be at least 6 characters.');
@@ -931,7 +931,7 @@ module.exports = async (req, res) => {
       return ok(res, { session: token, username, clientId: clientId||'0', clientName: clientName||username, redirect: '/dashboard/dashboard.html' });
     }
 
-    // ðŸ” CHANGE PASSWORD (profile)
+    // 🔐 CHANGE PASSWORD (profile)
     if (url === '/auth/change-password' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
@@ -947,13 +947,13 @@ module.exports = async (req, res) => {
       return ok(res, { message: 'Password updated.' });
     }
 
-    // ðŸ” FORGOT PASSWORD (login) â€” recovery code reset
+    // 🔐 FORGOT PASSWORD (login) — recovery code reset
     if (url === '/auth/forgot-password' && req.method === 'POST') {
       const { username, recovery, newPassword } = req.body;
-      if (!username || !recovery || !newPassword || String(newPassword).length < 6) return error(res, 400, 'All fields required (password â‰¥ 6 chars).');
+      if (!username || !recovery || !newPassword || String(newPassword).length < 6) return error(res, 400, 'All fields required (password ≥ 6 chars).');
       if (!supaEnabled()) return error(res, 400, 'Password storage not configured.');
       const creds = await supaGetCreds(username);
-      if (!creds || !creds.recovery_hash) return error(res, 401, 'Reset not available â€” contact admin on WhatsApp.');
+      if (!creds || !creds.recovery_hash) return error(res, 401, 'Reset not available — contact admin on WhatsApp.');
       if (!verifyPassword(recovery, creds.recovery_hash)) return error(res, 401, 'Incorrect recovery code.');
       await supaUpsertCreds(username, hashPassword(newPassword), creds.client_id, creds.client_name, creds.recovery_hash);
       return ok(res, { message: 'Password reset. You can now sign in.' });
@@ -989,13 +989,13 @@ module.exports = async (req, res) => {
         const m = new Map();
         userNumbers.forEach(n => {
           const key = `${n.country} -- ${n.range}`;
-          if (!m.has(key)) m.set(key, { id: 'r_' + norm(n.country + '|' + n.range), title: n.range, country: n.country, count: 0 }); // â† STABLE id
+          if (!m.has(key)) m.set(key, { id: 'r_' + norm(n.country + '|' + n.range), title: n.range, country: n.country, count: 0 }); // ← STABLE id
           m.get(key).count++;
         });
         ranges = Array.from(m.values()).map(r => ({ ...r, minsAgo: Math.floor(Math.random()*60) }));
       }
       if (ranges.length) _rangesCache.set(ck, { ts: Date.now(), ranges });
-      else if (hit && hit.ranges.length) return ok(res, { ranges: hit.ranges, cached: true, _note: 'live scrape empty â€” using cache' });
+      else if (hit && hit.ranges.length) return ok(res, { ranges: hit.ranges, cached: true, _note: 'live scrape empty — using cache' });
       return ok(res, { ranges });
     }
     
@@ -1068,7 +1068,7 @@ module.exports = async (req, res) => {
 
     // 6. SEARCH RANGES (real ids + available counts)
       if (url === '/alloc/search-ranges' && req.method === 'POST') {
-      // Self-contained caches on globalThis â€” idempotent, no separate declaration needed.
+      // Self-contained caches on globalThis — idempotent, no separate declaration needed.
       // opts = range-id map (the SLOW part, cached 10 min); full = mapped range list (cached 30s).
       globalThis._ac = globalThis._ac || { opts: null, optsTs: 0, full: null, fullTs: 0 };
       const AC = globalThis._ac;
@@ -1094,7 +1094,7 @@ module.exports = async (req, res) => {
               const r = rangesMap.get(key); r.total++;
               if (isAvailableClient(n.client)) r.available++;
             });
-            // range-id options â€” cached 10 min (this is the slow part: up to 30 paginated calls)
+            // range-id options — cached 10 min (this is the slow part: up to 30 paginated calls)
             let rangeOpts = AC.opts;
             if (!rangeOpts || (now - AC.optsTs) > 600000) {
               rangeOpts = await getRangeOptions();
@@ -1113,7 +1113,7 @@ module.exports = async (req, res) => {
             let i = 0; rangesMap.forEach(r => { if (!r.id) r.id = 'alloc_' + (i++); });
             mapped = Array.from(rangesMap.values());
             AC.full = mapped; AC.fullTs = now;
-          } else if (AC.full) { mapped = AC.full; _src = 'mapcache-fallback'; } // flaky scrape â†’ last good list
+          } else if (AC.full) { mapped = AC.full; _src = 'mapcache-fallback'; } // flaky scrape → last good list
         }
         if (!mapped) { if (ch) return ok(res, { ranges: ch.ranges, _debug: Object.assign({}, ch._debug, { cached: true }) }); return ok(res, { ranges: [], _debug: 'No data from LaMix' }); }
 
@@ -1134,7 +1134,7 @@ module.exports = async (req, res) => {
         return ok(res, { ranges: result, _debug });
       } catch (e) {
         console.error('search-ranges error:', e);
-        return error(res, 500, 'search-ranges: ' + (e && e.message ? e.message : String(e))); // â† shows the REAL reason if anything is still off
+        return error(res, 500, 'search-ranges: ' + (e && e.message ? e.message : String(e))); // ← shows the REAL reason if anything is still off
       }
     }
     // 7. CHECK AVAILABILITY
@@ -1157,7 +1157,7 @@ module.exports = async (req, res) => {
       const countryUsed = r.byCountry[country] || 0;
       const rangeUsed = (r.byRange && r.byRange[rangeId]) || 0;
       if (isAdminish(role)) {
-        // ðŸ”“ admin / super â†’ no limit; keep the button enabled
+        // 🔓 admin / super → no limit; keep the button enabled
         return ok(res, { country, rangeUsed, rangeLimit: 999, countryUsed, countryLimit: 999, remaining: 999, exempt: true, byCountry: r.byCountry, _src: r._src||'none' });
       }
       const remaining = supaEnabled() ? Math.max(0, Math.min(RANGE_CAP - rangeUsed, COUNTRY_CAP - countryUsed)) : COUNTRY_CAP;
@@ -1200,7 +1200,7 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
       ]);
       const otpToday = todayRows.length, otpWeek = weekRows.length, otpMonth = monthRows.length;
       const rangeCounts = {}; todayRows.forEach(r => { if (r.range) rangeCounts[r.range] = (rangeCounts[r.range]||0)+1; });
-      let mostActiveRange = 'â€”', mostActiveCount = 0;
+      let mostActiveRange = '—', mostActiveCount = 0;
       Object.entries(rangeCounts).forEach(([rg,c]) => { if (c > mostActiveCount){ mostActiveCount = c; mostActiveRange = rg; } });
 
       const result = { totalCountries: countries.length, totalRanges: rangesSet.size, totalNumbers, allocated, available, otpToday, otpWeek, otpMonth, mostActiveRange, mostActiveCount, countries };
@@ -1247,7 +1247,7 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
       } catch(e){ return error(res, 500, 'Failed to remove'); }
     }
 
-// ðŸ‘¥ list prefixes (super = all; admin = own)
+// 👥 list prefixes (super = all; admin = own)
     if (url === '/admin/team-prefixes' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
@@ -1256,7 +1256,7 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
       const all = await supaGetPrefixes();
       return ok(res, { prefixes: prefixesFor(role, user.username, all) });
     }
-    // ðŸ‘¥ super: assign a prefix to an admin
+    // 👥 super: assign a prefix to an admin
     if (url === '/admin/set-prefix' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
@@ -1271,7 +1271,7 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
         return ok(res, { message: prefix + ' assigned to ' + adminU });
       } catch (e) { return error(res, 500, 'Failed to set prefix'); }
     }
-    // ðŸ‘¥ super: remove a prefix
+    // 👥 super: remove a prefix
     if (url === '/admin/del-prefix' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
@@ -1284,7 +1284,7 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
         return ok(res, { message: prefix + ' removed' });
       } catch (e) { return error(res, 500, 'Failed to remove prefix'); }
     }
-    // ðŸ‘¥ cached client list, scoped to the caller's team(s); super = all grouped
+    // 👥 cached client list, scoped to the caller's team(s); super = all grouped
     if (url === '/admin/my-clients' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
@@ -1299,7 +1299,7 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
       const scoped = (role === 'super') ? allClients : allClients.filter(c => mySet.has(resolveTeam(c.username, allPrefixes, pinsMap)));
       const groups = {};
       myPrefixes.forEach(p => { groups[p.prefix] = { prefix: p.prefix, admin: p.admin_username, label: p.label || '', clients: [] }; });
-      if (role === 'super') groups[''] = { prefix: '', admin: 'â€”', label: 'System Generated', clients: [] };
+      if (role === 'super') groups[''] = { prefix: '', admin: '—', label: 'System Generated', clients: [] };
       scoped.forEach(c => {
         const team = resolveTeam(c.username, allPrefixes, pinsMap);
         const key = (role === 'super') ? (team || '') : team;
@@ -1312,7 +1312,7 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
       return ok(res, { teams, total: scoped.length, cached: !force });
     }
 
-// ðŸ‘¥ CREATE a client on LaMix (admin: own prefix only; super: any prefix)
+// 👥 CREATE a client on LaMix (admin: own prefix only; super: any prefix)
     if (url === '/admin/create-client' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
@@ -1338,7 +1338,7 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
       const username = prefix + suffix;
       if (!/^[A-Za-z0-9_]{6,15}$/.test(username)) {
         const minS = Math.max(1, 6 - prefix.length), maxS = 15 - prefix.length;
-        return error(res, 400, 'Username must be 6â€“15 chars (letters/numbers/_). With prefix "' + prefix + '", the suffix must be ' + minS + 'â€“' + maxS + ' characters.');
+        return error(res, 400, 'Username must be 6–15 chars (letters/numbers/_). With prefix "' + prefix + '", the suffix must be ' + minS + '–' + maxS + ' characters.');
       }
       const finalPass = password || username;
       if (finalPass.length < 6) return error(res, 400, 'Password must be at least 6 characters.');
@@ -1370,13 +1370,13 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
       const created = after.find(c => c.username.toLowerCase() === username.toLowerCase());
       const saidOk = /client added/i.test(serverBody);
       if (created || saidOk) {
-        return ok(res, { message: 'Created ' + username, username, clientId: created ? created.id : null, _server: 'HTTP ' + serverStatus + (saidOk ? ' Â· "Client Added"' : '') });
+        return ok(res, { message: 'Created ' + username, username, clientId: created ? created.id : null, _server: 'HTTP ' + serverStatus + (saidOk ? ' · "Client Added"' : '') });
       }
       const snippet = serverBody.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').slice(0, 200);
       return error(res, 400, 'LaMix did not confirm creation (HTTP ' + serverStatus + '). ' + (snippet || 'Check the username/password rules.'));
     }
 
-    // ðŸ‘¥ DELETE a client from LaMix (admin: own team only; super: any)
+    // 👥 DELETE a client from LaMix (admin: own team only; super: any)
     if (url === '/admin/delete-client' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
@@ -1528,7 +1528,7 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
       const todayRows = await getCachedCDR(bd.from, bd.to, force ? 0 : CDR_TTL_WIDE);
       const weekRows  = await getCachedCDR(dayBack(6) + ' 00:00:00', today + ' 23:59:59', force ? 0 : CDR_TTL_WIDE);
       const allPrefixes = await supaGetPrefixes();
-      const myPrefixes = prefixesFor(role, user.username, allPrefixes);   // â† ADD THIS LINE
+      const myPrefixes = prefixesFor(role, user.username, allPrefixes);   // ← ADD THIS LINE
       const pinsMap = await getPinsMap();
       const teamOfClient = (cli) => resolveTeam(cli, allPrefixes, pinsMap);;
       const tally = (rows) => { const m = {}; rows.forEach(r => { const k = teamOfClient(r.client) || '__none__'; m[k] = (m[k] || 0) + 1; }); return m; };
@@ -1537,13 +1537,13 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
       const cCount = {}; clients.forEach(c => { const k = teamOfClient(c.username) || '__none__'; cCount[k] = (cCount[k] || 0) + 1; });
       const build = (p) => ({ prefix: p.prefix, admin: p.admin_username, label: p.label || '', otpToday: tToday[p.prefix] || 0, otpWeek: tWeek[p.prefix] || 0, clients: cCount[p.prefix] || 0 });
       let teams = myPrefixes.map(build);
-      if (role === 'super') teams.push({ prefix: '', admin: 'â€”', label: 'System Generated', otpToday: tToday['__none__'] || 0, otpWeek: tWeek['__none__'] || 0, clients: cCount['__none__'] || 0 });
+      if (role === 'super') teams.push({ prefix: '', admin: '—', label: 'System Generated', otpToday: tToday['__none__'] || 0, otpWeek: tWeek['__none__'] || 0, clients: cCount['__none__'] || 0 });
       teams.sort((a, b) => b.otpToday - a.otpToday);
       const hottest = (teams[0] && teams[0].otpToday > 0) ? teams[0] : null;
       return ok(res, { teams, hottest, date: today, cached: !force });
     }
 
-    // ðŸŽ¯ read the active bonus target (admin + super)
+    // 🎯 read the active bonus target (admin + super)
     if (url === '/admin/target-get' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
@@ -1556,7 +1556,7 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
       } catch (e) { return ok(res, { config: null }); }
     }
 
-    // ðŸŽ¯ super sets/adjusts the bonus target
+    // 🎯 super sets/adjusts the bonus target
     if (url === '/admin/target-set' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
@@ -1573,7 +1573,7 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
       } catch (e) { return error(res, 500, 'Failed to save target'); }
     }
 
-    // ðŸŽ¯ bonus status: target + qualifiers + caller's team progress/congrats
+    // 🎯 bonus status: target + qualifiers + caller's team progress/congrats
     if (url === '/admin/team-bonus' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
@@ -1619,7 +1619,7 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
     }
     
     
-    // ðŸ†“ ADMIN: show a user's at-limit ranges/countries (only those that hit a cap)
+    // 🆓 ADMIN: show a user's at-limit ranges/countries (only those that hit a cap)
     if (url === '/admin/limit-status' && req.method === 'POST') {
       const caller = getUserFromSession(req.body.session);
       if (!caller) return error(res, 401, 'Unauthorized');
@@ -1648,7 +1648,7 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
       } catch (e) { return error(res, 500, 'Failed to load status'); }
     }
 
-    // ðŸ†“ ADMIN: free one try = delete ONE alloc_events row (count drops by 1 â†’ +1 attempt)
+    // 🆓 ADMIN: free one try = delete ONE alloc_events row (count drops by 1 → +1 attempt)
     if (url === '/admin/free-try' && req.method === 'POST') {
       const caller = getUserFromSession(req.body.session);
       if (!caller) return error(res, 401, 'Unauthorized');
@@ -1688,7 +1688,7 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
       const _rangeUsed = (_cap.byRange && _cap.byRange[rangeId]) || 0;
       const _role = await getRole(user.username);
       if (isAdminish(_role)) {
-        // ðŸ”“ super / admin: caps waived â€” you can test & add ranges freely
+        // 🔓 super / admin: caps waived — you can test & add ranges freely
       } else if (supaEnabled()) {
         if (_rangeUsed >= RANGE_CAP) return ok(res, { limitReached:true, capType:'range', country:_country, used:_rangeUsed, limit:RANGE_CAP, remaining:0, message:`Max ${RANGE_CAP} per range per day reached.` });
         if (_countryUsed >= COUNTRY_CAP) return ok(res, { limitReached:true, capType:'country', country:_country, used:_countryUsed, limit:COUNTRY_CAP, remaining:0, message:`Max ${COUNTRY_CAP} per country per day reached. Other countries still available.` });
@@ -1742,7 +1742,7 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
       try { const d = await scrapeAgentData('res/data_smsnumbers.php', { frange: '', fclient: clientValue, totnum: 100000, sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1 }); if (d && d.aaData) beforeAny = parseNumbersData(d).length; } catch (e) {}
 
       let serverStatus = null, serverBody = '';
-      // ðŸ”¥ POST as multipart/form-data â€” EXACTLY like the browser form (only if range id is real)
+      // 🔥 POST as multipart/form-data — EXACTLY like the browser form (only if range id is real)
       if (form && !isFakeRange) {
         try {
           await ensureAgentSession();
@@ -1775,7 +1775,7 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
       let total = 0, available = 0;
       try { const d = await scrapeAgentData('res/data_smsnumbers.php', { frange: rangeId, fclient: '', totnum: 100000, sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1 }); if (d && d.aaData) { const ns = parseNumbersData(d); total = ns.length; available = ns.filter(n => isAvailableClient(n.client)).length; } } catch (e) {}
 
-      // ðŸ”¥ Diagnostic that shows in the collapsed console line (via _server) when the real body is empty
+      // 🔥 Diagnostic that shows in the collapsed console line (via _server) when the real body is empty
       const sentCompact = Object.entries(fields).map(([k, v]) => k + '=' + v).join('&');
       const fieldsCompact = C.map(c => c.name + ':' + c.type + ':"' + c.label + '"').join(' | ');
       const diag = 'RANGE=' + rangeId + (isFakeRange ? '(FAKE!)' : '') + ' CLIENT=' + clientValue + ' PAYTERM=' + paytermValue + ' QTY=' + quantity + ' PAYOUT=' + payout + ' || NAMES r=' + fRange + ' c=' + fClient + ' pt=' + fPayterm + ' q=' + fQty + ' p=' + fPayout + ' || SENT ' + sentCompact + ' || FORM ' + fieldsCompact;
@@ -1838,7 +1838,7 @@ getCachedCDR(dayBack(29) + ' 00:00:00', today + ' 23:59:59')
       } catch (err) { return error(res, 500, 'Failed to fetch clients'); }
     }
 
-// â”€â”€ routes (paste inside the try{} block, before the 404 line) â”€â”€
+// ── routes (paste inside the try{} block, before the 404 line) ──
 
     if (url === '/earn/rates' && req.method === 'POST') {
       try {
@@ -2107,7 +2107,7 @@ if (url === '/admin/update-client-settings' && req.method === 'POST') {
   }
 }
 
-    // â”€â”€ Range deductions management â”€â”€
+    // ── Range deductions management ──
 if (url === '/admin/range-deductions' && req.method === 'POST') {
   try {
     const user = getUserFromSession(req.body.session);
@@ -2168,9 +2168,9 @@ if (url === '/admin/save-range-deductions' && req.method === 'POST') {
   } catch (e) { return error(res, 500, 'save-range-deductions: ' + e.message); }
 }
     
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// ðŸ’¸ WITHDRAWAL SYSTEM (CLEAN & FINAL â€” v2 PATCH FIX)
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════
+// 💸 WITHDRAWAL SYSTEM (CLEAN & FINAL — v2 PATCH FIX)
+// ═══════════════════════════════════════════════════════════
 async function getWdSettings() {
   const def = { enabled: true, disabled_message: '', pkr_rate: 285, min_withdraw_usd: 2, crypto_fee_usd: 1, usdt_rate: 285 };
   if (!supaEnabled()) return def;
@@ -2206,7 +2206,7 @@ async function getUserWithdrawn(username) {
   } catch (e) { return 0; }
 }
 
-// â”€â”€ USER: Balance â”€â”€
+// ── USER: Balance ──
 if (url === '/withdraw/balance' && req.method === 'POST') {
   try {
     const user = getUserFromSession(req.body.session);
@@ -2241,7 +2241,7 @@ if (url === '/withdraw/balance' && req.method === 'POST') {
   } catch (e) { return error(res, 500, 'balance: ' + e.message); }
 }
 
-// â”€â”€ USER: Submit withdrawal â”€â”€
+// ── USER: Submit withdrawal ──
 if (url === '/withdraw/submit' && req.method === 'POST') {
   try {
     const user = getUserFromSession(req.body.session);
@@ -2290,7 +2290,7 @@ if (url === '/withdraw/submit' && req.method === 'POST') {
   } catch (e) { return error(res, 500, 'submit: ' + e.message); }
 }
 
-// â”€â”€ USER: History â”€â”€
+// ── USER: History ──
 if (url === '/withdraw/history' && req.method === 'POST') {
   try {
     const user = getUserFromSession(req.body.session);
@@ -2302,7 +2302,7 @@ if (url === '/withdraw/history' && req.method === 'POST') {
   } catch (e) { return ok(res, { withdrawals: [] }); }
 }
 
-// â”€â”€ PUBLIC: Recent approved â”€â”€
+// ── PUBLIC: Recent approved ──
 if (url === '/withdraw/recent' && req.method === 'POST') {
   try {
     if (!supaEnabled()) return ok(res, { recent: [] });
@@ -2312,7 +2312,7 @@ if (url === '/withdraw/recent' && req.method === 'POST') {
   } catch (e) { return ok(res, { recent: [] }); }
 }
 
-// â”€â”€ USER: Saved payment methods â”€â”€
+// ── USER: Saved payment methods ──
 if (url === '/withdraw/methods' && req.method === 'POST') {
   try {
     const user = getUserFromSession(req.body.session);
@@ -2324,7 +2324,7 @@ if (url === '/withdraw/methods' && req.method === 'POST') {
   } catch (e) { return ok(res, { methods: [] }); }
 }
 
-// â”€â”€ ADMIN: List requests by status â”€â”€
+// ── ADMIN: List requests by status ──
 if (url === '/admin/withdraw/requests' && req.method === 'POST') {
   try {
     const user = getUserFromSession(req.body.session);
@@ -2338,7 +2338,7 @@ if (url === '/admin/withdraw/requests' && req.method === 'POST') {
   } catch (e) { return ok(res, { requests: [] }); }
 }
 
-// â”€â”€ ADMIN: Approve â”€â”€ (ðŸ”¥ FIXED: id goes in URL filter, NOT body)
+// ── ADMIN: Approve ── (🔥 FIXED: id goes in URL filter, NOT body)
 if (url === '/admin/withdraw/approve' && req.method === 'POST') {
   try {
     const user = getUserFromSession(req.body.session);
@@ -2359,7 +2359,7 @@ if (url === '/admin/withdraw/approve' && req.method === 'POST') {
   } catch (e) { return error(res, 500, 'approve: ' + e.message); }
 }
 
-// â”€â”€ ADMIN: Reject â”€â”€ (ðŸ”¥ FIXED: same URL filter fix)
+// ── ADMIN: Reject ── (🔥 FIXED: same URL filter fix)
 if (url === '/admin/withdraw/reject' && req.method === 'POST') {
   try {
     const user = getUserFromSession(req.body.session);
@@ -2380,7 +2380,7 @@ if (url === '/admin/withdraw/reject' && req.method === 'POST') {
   } catch (e) { return error(res, 500, 'reject: ' + e.message); }
 }
 
-// â”€â”€ SUPER: Withdrawal settings â”€â”€
+// ── SUPER: Withdrawal settings ──
 if (url === '/admin/withdraw/settings' && req.method === 'POST') {
   try {
     const user = getUserFromSession(req.body.session);
@@ -2404,9 +2404,9 @@ if (url === '/admin/withdraw/settings' && req.method === 'POST') {
   } catch (e) { return error(res, 500, 'settings: ' + e.message); }
 }
 
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-    // ðŸ“¡ CLI INSIGHTS â€” read = all users; creds config = super only
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // ═══════════════════════════════════════════════════════════
+    // 📡 CLI INSIGHTS — read = all users; creds config = super only
+    // ═══════════════════════════════════════════════════════════
     if (url === '/cli/analysis' && req.method === 'POST') {
       try {
         const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
@@ -2468,7 +2468,7 @@ if (url === '/admin/withdraw/settings' && req.method === 'POST') {
         }
         const res2 = await cliRefreshInternal(label);
         if (res2.ok) return ok(res, { day: label, list: res2.list, stats: res2.stats, total: res2.total });
-        return error(res, 400, res2.reason === 'no_creds' ? 'Second panel credentials not configured yet.' : 'Refresh failed â€” try again.');
+        return error(res, 400, res2.reason === 'no_creds' ? 'Second panel credentials not configured yet.' : 'Refresh failed — try again.');
       } catch (e) { return error(res, 500, 'cli/refresh: ' + e.message); }
     }
 
@@ -2497,7 +2497,7 @@ if (url === '/admin/withdraw/settings' && req.method === 'POST') {
       } catch (e) { return error(res, 500, 'cli-creds-get: ' + e.message); }
     }
 
-    // â•â•â• CLI GATE (access check + logs opens) â•â•â•
+    // ═══ CLI GATE (access check + logs opens) ═══
     if (url === '/cli/gate' && req.method === 'POST') {
       try {
         const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
@@ -2509,7 +2509,7 @@ if (url === '/admin/withdraw/settings' && req.method === 'POST') {
       } catch (e) { return error(res, 500, 'cli/gate: ' + e.message); }
     }
 
-    // â•â•â• CLI SEARCH â•â•â•
+    // ═══ CLI SEARCH ═══
     if (url === '/cli/search' && req.method === 'POST') {
       try {
         const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
@@ -2550,12 +2550,12 @@ if (url === '/admin/withdraw/settings' && req.method === 'POST') {
       } catch (e) { return error(res, 500, 'cli/search: ' + e.message); }
     }
 
-    // â•â•â• ADMIN: CLI TRACK (super only) â•â•â•
+    // ═══ ADMIN: CLI TRACK (super only) ═══
     if (url === '/admin/cli/track' && req.method === 'POST') {
       try {
         const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
         if ((await getRole(user.username)) !== 'super') return error(res, 403, 'Super admin only');
-        if (!supaEnabled()) return ok(res, { range: 'day', window: { label: 'â€”' }, perUser: [], topQueries: [], totals: { open_insights: 0, open_search: 0, search_query: 0, uniqueUsers: 0 } });
+        if (!supaEnabled()) return ok(res, { range: 'day', window: { label: '—' }, perUser: [], topQueries: [], totals: { open_insights: 0, open_search: 0, search_query: 0, uniqueUsers: 0 } });
         const range = req.body.range || 'day';
         const w = _cliWindowDays(range);
         const r = await fetch(`${SUPABASE_URL}/rest/v1/cli_activity?day=gte.${w.start}&day=lte.${w.today}&select=username,action,meta,created_at&order=created_at.desc&limit=20000`,
@@ -2577,7 +2577,7 @@ if (url === '/admin/withdraw/settings' && req.method === 'POST') {
       } catch (e) { return error(res, 500, 'admin/cli/track: ' + e.message); }
     }
 
-    // â•â•â• ADMIN: restrictions list (super only) â•â•â•
+    // ═══ ADMIN: restrictions list (super only) ═══
     if (url === '/admin/cli/restrict-list' && req.method === 'POST') {
       try {
         const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
@@ -2590,7 +2590,7 @@ if (url === '/admin/withdraw/settings' && req.method === 'POST') {
       } catch (e) { return error(res, 500, 'admin/cli/restrict-list: ' + e.message); }
     }
 
-    // â•â•â• ADMIN: set/clear restriction (super only) â•â•â•
+    // ═══ ADMIN: set/clear restriction (super only) ═══
     if (url === '/admin/cli/restrict' && req.method === 'POST') {
       try {
         const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
