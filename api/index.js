@@ -10,12 +10,12 @@ const JWT_SECRET = process.env.JWT_SECRET || 'zamil-sms-super-secret-key-2024';
 const LAMIX_API_KEY = process.env.LAMIX_API_KEY || '';
 const LAMIX_API_URL = 'http://51.77.216.195/crapi/lamix/viewstats';
 
-const corsHeaders = {
-  // 🚨 LAMIX MAINTENANCE MODE (Global Kill Switch)
-// Set to true to instantly block ALL scraping requests to LaMix
+// 🚨 LAMIX MAINTENANCE MODE (Global Kill Switch)
 const LAMIX_PAUSED = true; 
 const MAINTENANCE_MSG = 'Zamil SMS is temporarily paused due to strict platform restrictions and anti-bot protections on our provider\'s side. Your data and balances are 100% secure. We are working to restore safe access shortly.';
-  'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+
+const corsHeaders = {
+'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
   'Access-Control-Allow-Credentials': 'true',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
@@ -34,6 +34,7 @@ const AGENT_PASS = 'Zamil6262#$&#$&@';
 const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36';
 
 async function ensureAgentSession(force) {
+  if (LAMIX_PAUSED) return null; // 🚨 Kill switch
   const fresh = (Date.now() - _cookieTs) < 20 * 60 * 1000;          // treat cookie as fresh for 20 min
   if (!force && fresh && AGENT_COOKIE) return AGENT_COOKIE;
   if (!force && (Date.now() - _lastLoginTry) < 60 * 1000) return AGENT_COOKIE; // throttle retries
@@ -977,25 +978,26 @@ async function sendNotif(target, type, title, body, createdBy){
 }
 
 module.exports = async (req, res) => {
-  if (req.method === 'OPTIONS') return res.status(200).json({ ...corsHeaders });
-  const url = req.url.replace(/^\/api/, '');
-  // 🚨 MAINTENANCE INTERCEPTOR (Stops LaMix traffic & triggers frontend modal)
-  if (LAMIX_PAUSED) {
-    const blockedRoutes = [
-      '/ranges', '/numbers', '/number-smscount', '/smscount', '/smscount-range', 
-      '/dor', '/alloc/', '/stats', '/leaderboard', '/clients/list', 
-      '/earn/rates', '/earn/compute', '/withdraw/balance', '/withdraw/submit',
-      '/admin/earnings-report', '/admin/range-deductions', '/cli/', '/p/'
-    ];
-    if (blockedRoutes.some(r => url.startsWith(r))) {
-      return res.status(503).json({ 
-        ok: false, error: 'maintenance', maintenance: true,
-        message: MAINTENANCE_MSG, ...corsHeaders 
-      });
-    }
-  }
+if (req.method === 'OPTIONS') return res.status(200).json({ ...corsHeaders });
+const url = req.url.replace(/^\/api/, '');
 
-  try {
+// 🚨 MAINTENANCE INTERCEPTOR (Stops LaMix traffic & triggers frontend modal)
+if (LAMIX_PAUSED) {
+  const blockedRoutes = [
+    '/ranges', '/numbers', '/number-smscount', '/smscount', '/smscount-range', 
+    '/dor', '/alloc/', '/stats', '/leaderboard', '/clients/list', 
+    '/earn/rates', '/earn/compute', '/withdraw/balance', '/withdraw/submit',
+    '/admin/earnings-report', '/admin/range-deductions', '/cli/', '/p/'
+  ];
+  if (blockedRoutes.some(r => url.startsWith(r))) {
+    return res.status(503).json({ 
+      ok: false, error: 'maintenance', maintenance: true,
+      message: MAINTENANCE_MSG, ...corsHeaders 
+    });
+  }
+}
+
+try {
     // ═══════════════════════════════════════════════════════════
     // 1. LOGIN — dynamic LaMix lookup (username OR name) + fallback + self-healing cookie
     // ═══════════════════════════════════════════════════════════
