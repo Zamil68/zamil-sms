@@ -147,7 +147,8 @@ function parseNumbersData(data) {
       range: (row[1] || '').replace(/<[^>]*>/g, '').trim(),
       country: (row[2] || '').replace(/<[^>]*>/g, '').trim(),
       number: (row[3] || '').replace(/<[^>]*>/g, '').trim(),
-      client: (row[5] || '').replace(/<[^>]*>/g, '').trim(),
+myPayout: (row[4] || '').replace(/<[^>]*>/g, '').trim(),
+client: (row[5] || '').replace(/<[^>]*>/g, '').trim(),
       payout: (row[6] || '$0.01').replace(/<[^>]*>/g, '').trim()
     }));
   }
@@ -158,7 +159,8 @@ const norm = s => String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g,
 const PAYTERM_VOCAB = ['daily','weekly','weekly7','biweekly','biweekly30','monthly15','monthly30','monthly45','monthly60'];
 
 async function getAllocForm() {
-  await ensureAgentSession();
+if (_allocFormCache.form && (Date.now() - _allocFormCache.ts) < 600000) return _allocFormCache.form;
+await ensureAgentSession();
   const fetchHtml = async () => (await axios.get(`${AGENT_BASE_URL}SMSBulkAllocations`, { headers: browserHeaders('http://51.210.208.26/ints/agent/SMSBulkAllocations'), timeout: 15000, maxRedirects: 5, validateStatus: () => true })).data;
   try {
     let html = await fetchHtml();
@@ -189,7 +191,7 @@ async function getAllocForm() {
       if (!name || t === 'submit' || t === 'button') return;
       controls.push({ name, type: t, label: labelFor(el), isSelect: false, value: $(el).attr('value') != null ? $(el).attr('value') : '' });
     });
-    return { action, controls };
+    _allocFormCache = { ts: Date.now(), form: { action, controls } }; return _allocFormCache.form;
   } catch (e) { console.error('getAllocForm error:', e.message); return null; }
 }
 
@@ -525,12 +527,6 @@ function resolveTeam(username, allPrefixes, pinsMap) {
   if (pin) { const m = allPrefixes.find(p => String(p.prefix || '').toLowerCase() === String(pin).toLowerCase()); if (m) return m.prefix; }
   return prefixTeam(username, allPrefixes);
 }
-function weekKey(dateStr) {
-  const d = new Date(dateStr + 'T00:00:00Z');
-  const day = d.getUTCDay();
-  const diff = (day === 0 ? -6 : 1 - day);
-  return new Date(d.getTime() + diff * 86400000).toISOString().slice(0, 10);
-}
 
   // ═══════════════════════════════════════════════════════════
 // 💰 EARNINGS — self-contained block (helpers + routes)
@@ -539,30 +535,13 @@ let _ratesCache = { ts: 0, map: null, count: 0 };
 const RATES_TTL = 5 * 60 * 1000; // 5 min cache
 
 async function scrapeRangeRatesFromLamix() {
-  await ensureAgentSession();
-  const doReq = async () => (await axios.get(`${AGENT_BASE_URL}res/data_smsnumbers.php`, {
-    params: { frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 },
-    headers: browserHeaders('http://51.210.208.26/ints/agent/MySMSNumbers'),
-    timeout: 20000, maxRedirects: 5, validateStatus: () => true
-  })).data;
-  try {
-    let data = await doReq();
-    if (looksLikeLogin(data)) { await ensureAgentSession(true); data = await doReq(); }
-    if (!data || !data.aaData) return new Map();
-    const map = new Map();
-    data.aaData.forEach(row => {
-      const range = String(row[1] || '').replace(/<[^>]*>/g, '').trim();
-      const payout = parseFloat(String(row[4] || '0').replace(/<[^>]*>/g, '').replace(/[^0-9.]/g, ''));
-      if (range && isFinite(payout) && payout > 0 && !map.has(norm(range))) {
-        map.set(norm(range), { rate: payout, raw: range });
-      }
-    });
-    console.log('[rates] Scraped', map.size, 'unique range rates from Lamix');
-    return map;
-  } catch (e) {
-    console.error('[rates] Scrape error:', e.message);
-    return new Map();
-  }
+  const rows = await getCachedNumbers(false);
+  const map = new Map();
+  rows.forEach(n => {
+    const rate = parseFloat(String(n.myPayout || '0').replace(/[^0-9.]/g, ''));
+    if (n.range && isFinite(rate) && rate > 0 && !map.has(norm(n.range))) map.set(norm(n.range), { rate, raw: n.range });
+  });
+  return map;
 }
 
 async function loadRateMap(force) {
@@ -788,28 +767,6 @@ async function getCliRows(label) {
   if (stamped.length) _cliRowsMem = { day: win.label, ts: Date.now(), rows: stamped };
   return stamped.length ? stamped : (_cliRowsMem && _cliRowsMem.rows ? _cliRowsMem.rows : []);
 }
-function _parseUtc(s) {
-  if (!s) return 0;
-  const t = String(s).trim().replace(' ', 'T');
-  const d = new Date(t.endsWith('Z') ? t : t + 'Z');
-  return isFinite(d.getTime()) ? d.getTime() : 0;
-}
-function _canonCountry(rangeText) {
-  const cn = _countryOfRange(rangeText || '');
-  const tryOn = (s) => {
-    s = ' ' + String(s || '').toLowerCase();
-    let best = '', bestLen = 0;
-    for (const k in COUNTRY_ISO) {
-      const re = new RegExp(' ' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![a-z])');
-      if (re.test(s) && k.length > bestLen) { best = k; bestLen = k.length; }
-    }
-    return best;
-  };
-  let key = tryOn(cn);
-  if (!key) key = tryOn(rangeText);
-  if (!key) return null;
-  return { key, name: key.replace(/\b\w/g, c => c.toUpperCase()), flag: isoToFlag(COUNTRY_ISO[key]) };
-}
 async function cliIsRestricted(username) {
   if (!supaEnabled()) return { insights: false, search: false };
   try {
@@ -1029,6 +986,19 @@ async function panelClientFor(username, panel){
   return null;
 }
 
+// ═══ SPEED: ONE LaMix numbers scrape per 30s, shared by ALL routes ═══
+let _numCache = { ts: 0, rows: null };
+const NUM_TTL = 30000;
+async function getCachedNumbers(force) {
+  if (!force && _numCache.rows && (Date.now() - _numCache.ts) < NUM_TTL) return _numCache.rows;
+  const data = await scrapeAgentData('res/data_smsnumbers.php', { frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
+  if (data && data.aaData) _numCache = { ts: Date.now(), rows: parseNumbersData(data) };
+  return _numCache.rows || [];
+}
+setInterval(() => { getCachedNumbers(true).catch(()=>{}); }, 30000);          // numbers always warm
+setInterval(() => { const bd = businessDayPKT(); scrapeCDR(bd.from, bd.to).then(rows => { _cdrCache.set(bd.from+'|'+bd.to, { ts: Date.now(), rows }); }).catch(()=>{}); }, 15000); // CDR always warm
+let _allocFormCache = { ts: 0, form: null };   // cache LaMix allocate form (HTML rarely changes)
+
 module.exports = async (req, res) => {
 if (req.method === 'OPTIONS') return res.status(200).json({ ...corsHeaders });
 const url = req.url.replace(/^\/api/, '');
@@ -1159,10 +1129,9 @@ if (req.body && req.body.session) {
       const hit = _rangesCache.get(ck);
       if (!force && hit && hit.ranges.length && (Date.now() - hit.ts) < 20000) return ok(res, { ranges: hit.ranges, cached: true });
 
-      const data = await scrapeAgentData('res/data_smsnumbers.php', { frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
       let ranges = [];
-      if (data && data.aaData) {
-        const allNumbers = parseNumbersData(data);
+   {
+     const allNumbers = await getCachedNumbers(force);;
         const t1 = (user.clientName||'').toLowerCase().trim(), t2 = (user.username||'').toLowerCase().trim();
         const userNumbers = allNumbers.filter(n => { const c=(n.client||'').toLowerCase().trim(); return c && (c===t1||c===t2||c.includes(t1)||c.includes(t2)); });
         const m = new Map();
@@ -1182,9 +1151,8 @@ if (req.body && req.body.session) {
     if (url === '/numbers' && req.method === 'POST') {
       const user = getUserFromSession(req.body.session);
       if (!user) return error(res, 401, 'Unauthorized');
-      const data = await scrapeAgentData('res/data_smsnumbers.php', { frange: '', fclient: '', totnum: 100000, sEcho: 1, iColumns: 8, iDisplayStart: 0, iDisplayLength: 100000, sSearch: '', bRegex: false, iSortingCols: 1 });
-      if (!data || !data.aaData) return ok(res, { numbers: [] });
-      const allNumbers = parseNumbersData(data);
+     const allNumbers = await getCachedNumbers(false);
+   if (!allNumbers.length) return ok(res, { numbers: [] });
       const target1 = (user.clientName || '').toLowerCase().trim();
       const target2 = (user.username || '').toLowerCase().trim();
       const reqTitle = (req.body.rangeTitle || '').toLowerCase().trim();
@@ -1264,10 +1232,8 @@ if (req.body && req.body.session) {
         let mapped = null, _src = 'live';
         if (AC.full && (now - AC.fullTs) < 30000) { mapped = AC.full; _src = 'mapcache'; }
         else {
-          let data = await scrapeAgentData('res/data_smsnumbers.php', { frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 });
-          if (!data || !data.aaData) { await ensureAgentSession(true); data = await scrapeAgentData('res/data_smsnumbers.php', { frange:'', fclient:'', totnum:100000, sEcho:1, iColumns:8, iDisplayStart:0, iDisplayLength:100000, sSearch:'', bRegex:false, iSortingCols:1 }); }
-          if (data && data.aaData) {
-            const allNumbers = parseNumbersData(data);
+         const allNumbers = await getCachedNumbers(false);
+       if (allNumbers.length) {
             const rangesMap = new Map();
             allNumbers.forEach(n => {
               const key = `${n.country} -- ${n.range}`;
