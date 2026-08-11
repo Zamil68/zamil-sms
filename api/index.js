@@ -867,6 +867,24 @@ function _cliWindowDays(range) {
   return { start, today, label: range === 'week' ? 'Last 7 days' : range === 'month' ? 'Last 30 days' : 'Today' };
 }
 
+// ═══ GLOBAL NOTIFICATIONS ═══
+async function sendNotif(target, type, title, body, createdBy){
+  if (!supaEnabled()) return;
+  try { 
+    await fetch(`${SUPABASE_URL}/rest/v1/app_notifs`, { 
+      method:'POST', 
+      headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body: JSON.stringify({ 
+        target: String(target||'*').toLowerCase(), 
+        type: type||'info', 
+        title: String(title||'').slice(0,120), 
+        body: String(body||'').slice(0,1000), 
+        created_by: createdBy||'system' 
+      }) 
+    }); 
+  } catch(e){}
+}
+
 module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).json({ ...corsHeaders });
   const url = req.url.replace(/^\/api/, '');
@@ -2286,6 +2304,7 @@ if (url === '/withdraw/submit' && req.method === 'POST') {
         })
       });
     }
+    sendNotif(SUPER_ADMIN, 'money', 'New withdrawal request', user.username + ' requested $' + amt + ' via ' + method, user.username);
     return ok(res, { message: 'Submitted!' });
   } catch (e) { return error(res, 500, 'submit: ' + e.message); }
 }
@@ -2353,6 +2372,7 @@ if (url === '/admin/withdraw/approve' && req.method === 'POST') {
       body: JSON.stringify({ status: 'approved', admin_message: String(req.body.message || 'Payment sent. Thank you!'), processed_by: user.username, processed_at: new Date().toISOString() })
     });
     const updated = await cr.json();
+    sendNotif(updated[0].username, 'success', 'Withdrawal Approved', 'Your withdrawal of $' + updated[0].amount_usd + ' has been approved. ' + String(req.body.message || ''), user.username);
     if (!cr.ok) return error(res, 500, 'DB update failed: HTTP ' + cr.status + ' ' + JSON.stringify(updated).slice(0, 200));
     if (!Array.isArray(updated) || updated.length === 0) return error(res, 404, 'Withdrawal #' + id + ' not found.');
     return ok(res, { message: 'Approved!', updated: updated.length });
@@ -2374,6 +2394,7 @@ if (url === '/admin/withdraw/reject' && req.method === 'POST') {
       body: JSON.stringify({ status: 'rejected', admin_message: String(req.body.message || 'Rejected'), processed_by: user.username, processed_at: new Date().toISOString() })
     });
     const updated = await cr.json();
+    sendNotif(updated[0].username, 'warn', 'Withdrawal Rejected', 'Your withdrawal of $' + updated[0].amount_usd + ' was rejected. ' + String(req.body.message || ''), user.username);
     if (!cr.ok) return error(res, 500, 'DB update failed: HTTP ' + cr.status + ' ' + JSON.stringify(updated).slice(0, 200));
     if (!Array.isArray(updated) || updated.length === 0) return error(res, 404, 'Withdrawal #' + id + ' not found.');
     return ok(res, { message: 'Rejected.', updated: updated.length });
@@ -2609,6 +2630,69 @@ if (url === '/admin/withdraw/settings' && req.method === 'POST') {
         return ok(res, { message: 'Restriction saved', username });
       } catch (e) { return error(res, 500, 'admin/cli/restrict: ' + e.message); }
     }
+
+// ═══ NOTIFICATIONS (bell) — read tracking + super delete ═══
+if (url === '/notifs/list' && req.method === 'POST') {
+  try {
+    const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+    const role = await getRole(user.username);
+    if (!supaEnabled()) return ok(res, { notifs: [], role, unread: 0 });
+    const un = user.username.toLowerCase();
+    const H = { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY };
+    let notifs = [];
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/app_notifs?or=${encodeURIComponent('(target.eq.*,target.eq.' + un + ')')}&order=created_at.desc&limit=30&select=*`, { headers: H });
+      const j = await r.json();
+      if (Array.isArray(j)) notifs = j;
+    } catch (e) {}
+    let reads = [];
+    try {
+      const rr = await fetch(`${SUPABASE_URL}/rest/v1/app_notif_reads?select=username,notif_id`, { headers: H });
+      const j2 = await rr.json();
+      if (Array.isArray(j2)) reads = j2;
+    } catch (e) {}
+    const byNotif = {}; const mine = new Set();
+    reads.forEach(x => { (byNotif[x.notif_id] = byNotif[x.notif_id] || []).push(x.username); if (x.username === un) mine.add(x.notif_id); });
+    const list = notifs.map(n => ({ id: n.id, type: n.type || 'info', title: n.title || '', body: n.body || '', at: n.created_at, by: n.created_by || '', read: mine.has(n.id), readBy: byNotif[n.id] || [] }));
+    return ok(res, { role, notifs: list, unread: list.filter(n => !n.read).length });
+  } catch (e) { return ok(res, { notifs: [], role: 'none', unread: 0 }); }
+}
+
+if (url === '/notifs/mark-read' && req.method === 'POST') {
+  try {
+    const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+    if (!supaEnabled()) return ok(res);
+    const un = user.username.toLowerCase();
+    const ids = Array.isArray(req.body.ids) ? req.body.ids : [];
+    for (const id of ids.slice(0, 50)) {
+      await fetch(`${SUPABASE_URL}/rest/v1/app_notif_reads`, { method: 'POST', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ username: un, notif_id: id }) });
+    }
+    return ok(res);
+  } catch (e) { return ok(res); }
+}
+
+if (url === '/notifs/send' && req.method === 'POST') {
+  try {
+    const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+    if ((await getRole(user.username)) !== 'super') return error(res, 403, 'Super admin only');
+    const bodyText = String(req.body.body || '').trim(); if (!bodyText) return error(res, 400, 'Message required');
+    if (!supaEnabled()) return error(res, 400, 'Supabase required.');
+    await fetch(`${SUPABASE_URL}/rest/v1/app_notifs`, { method: 'POST', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' }, body: JSON.stringify({ type: req.body.type || 'info', title: req.body.title || '', body: bodyText, target: String(req.body.target || '*').toLowerCase(), created_by: user.username }) });
+    return ok(res, { pushed: true });
+  } catch (e) { return error(res, 500, 'notifs/send: ' + e.message); }
+}
+
+if (url === '/notifs/delete' && req.method === 'POST') {
+  try {
+    const user = getUserFromSession(req.body.session); if (!user) return error(res, 401, 'Unauthorized');
+    if ((await getRole(user.username)) !== 'super') return error(res, 403, 'Super admin only');
+    const id = parseInt(req.body.id); if (!id || isNaN(id)) return error(res, 400, 'Valid id required');
+    const H = { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY };
+    await fetch(`${SUPABASE_URL}/rest/v1/app_notif_reads?notif_id=eq.${id}`, { method: 'DELETE', headers: H });
+    await fetch(`${SUPABASE_URL}/rest/v1/app_notifs?id=eq.${id}`, { method: 'DELETE', headers: H });
+    return ok(res, { deleted: true });
+  } catch (e) { return error(res, 500, 'notifs/delete: ' + e.message); }
+}
     
  return error(res, 404, 'Route not found');
   } catch (err) {
