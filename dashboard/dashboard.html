@@ -6,9 +6,36 @@
     <meta name="theme-color" content="#06080F">
     <title>Zamil SMS — Dashboard</title>
     <link rel="icon" type="image/x-icon" href="/branding/favicon.ico">
-    <link rel="stylesheet" href="common.css?v=20260806">
-    <link rel="stylesheet" href="/dashboard/dashboard.css?v=20260806">
-    <link rel="stylesheet" href="/dashboard/pages.css?v=20260806">
+    <link rel="stylesheet" href="common.css?v=20260808">
+    <link rel="stylesheet" href="/dashboard/dashboard.css?v=20260808">
+    <link rel="stylesheet" href="/dashboard/pages.css?v=20260808">
+    <script>
+(function(){
+  var FIXED = sessionStorage.getItem('cssfix');
+  function cssApplied(){
+    try{
+      var b = document.querySelector('.bottom-nav') || document.querySelector('.header');
+      if(!b) return true;                      // not a styled page
+      return getComputedStyle(b).position === 'fixed' ||
+             getComputedStyle(document.body).getPropertyValue('--accent').trim() !== '';
+    }catch(e){ return true; }
+  }
+  window.addEventListener('load', function(){
+    setTimeout(function(){
+      if(!cssApplied()){
+        if(!FIXED){                            // auto-fix once (no loop)
+          sessionStorage.setItem('cssfix','1');
+          var u = new URL(location.href);
+          u.searchParams.set('cb', Date.now()); // bust the poisoned cache
+          location.replace(u.toString());
+        }
+      } else {
+        sessionStorage.removeItem('cssfix');
+      }
+    }, 700);
+  });
+})();
+</script>
     <script>
     /* ══ Inactivity cache-killer: 1h idle → purge data caches + force fresh load ══ */
     (function(){
