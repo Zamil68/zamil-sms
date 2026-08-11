@@ -10,12 +10,12 @@ const JWT_SECRET = process.env.JWT_SECRET || 'zamil-sms-super-secret-key-2024';
 const LAMIX_API_KEY = process.env.LAMIX_API_KEY || '';
 const LAMIX_API_URL = 'http://51.77.216.195/crapi/lamix/viewstats';
 
-// 🚨 LAMIX MAINTENANCE MODE (Global Kill Switch)
-const LAMIX_PAUSED = true; 
-const MAINTENANCE_MSG = 'Zamil SMS is temporarily paused due to strict platform restrictions and anti-bot protections on our provider\'s side. Your data and balances are 100% secure. We are working to restore safe access shortly.';
+// 🚨 LAMIX KILL SWITCH
+const LAMIX_PAUSED = true; // ✅ KEEP TRUE! Blocks old central scraping to prevent IP bans.
+const MAINTENANCE_MSG = 'The main dashboard is paused to prevent IP bans. Please use the Client Portal.';
 
 const corsHeaders = {
-'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+  'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
   'Access-Control-Allow-Credentials': 'true',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
@@ -2817,6 +2817,95 @@ if (url === '/notifs/delete' && req.method === 'POST') {
     await fetch(`${SUPABASE_URL}/rest/v1/app_notifs?id=eq.${id}`, { method: 'DELETE', headers: H });
     return ok(res, { deleted: true });
   } catch (e) { return error(res, 500, 'notifs/delete: ' + e.message); }
+}
+
+  // ═══════════════════════════════════════════════════════════
+// 📱 LAMIX CLIENT PORTAL — per-user session pass-through (ban-safe)
+// ═══════════════════════════════════════════════════════════
+const LM_HOST = 'http://51.210.208.26';
+const LM_CLIENT = LM_HOST + '/ints/client/';
+const _lmThrottle = new Map();
+function lmHdrs(cookie, referer) {
+  return { 'Accept': 'application/json, text/javascript, */*; q=0.01', 'Accept-Language': 'en-US,en;q=0.9,ja;q=0.8',
+    'Connection': 'keep-alive', 'Cookie': cookie, 'Referer': referer || (LM_CLIENT + 'MySMSNumbers'),
+    'User-Agent': UA, 'X-Requested-With': 'XMLHttpRequest' };
+}
+function lmStrip(s){ return String(s==null?'':s).replace(/<[^>]*>/g,'').replace(/\s+/g,' ').trim(); }
+function lmThrottleOk(sess, p){ const tk = String(sess).slice(-10)+'|'+p; const now = Date.now();
+  if (now - (_lmThrottle.get(tk)||0) < 5000) return false; _lmThrottle.set(tk, now);
+  if (_lmThrottle.size > 3000) _lmThrottle.clear(); return true; }
+
+// ── LM 1: captcha question + session cookie ──
+if (url === '/lm/captcha' && req.method === 'POST') {
+  try {
+    const r = await axios.get(LM_HOST + '/ints/login', { headers: { 'User-Agent': UA }, timeout: 10000, validateStatus: () => true });
+    const html = String(r.data || '');
+    let cookie = '';
+    const sc = r.headers['set-cookie'];
+    if (sc) { const m = (Array.isArray(sc) ? sc.join('; ') : String(sc)).match(/PHPSESSID=([^;]+)/); if (m) cookie = 'PHPSESSID=' + m[1]; }
+    const q = html.match(/What is (\d+)\s*\+\s*(\d+)/i);
+    return ok(res, { cookie, question: q ? ('What is ' + q[1] + ' + ' + q[2] + ' = ?') : '' });
+  } catch (e) { return error(res, 500, 'lm/captcha: ' + e.message); }
+}
+
+// ── LM 2: login with user's OWN LaMix client credentials ──
+if (url === '/lm/login' && req.method === 'POST') {
+  try {
+    const username = String(req.body.username || '').trim();
+    const password = String(req.body.password || '');
+    const answer = String(req.body.answer || '').trim();
+    const preCookie = String(req.body.cookie || '');
+    if (!username || !password || !answer) return error(res, 400, 'Username, password and captcha answer required');
+    const body = new URLSearchParams({ username: username, password: password, capt: answer }).toString();
+    const lr = await axios.post(LM_HOST + '/ints/signin', body, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': UA, 'Cookie': preCookie, 'Referer': LM_HOST + '/ints/login', 'Origin': LM_HOST },
+      maxRedirects: 0, validateStatus: () => true, timeout: 12000 });
+    let sess = preCookie;
+    const sc = lr.headers['set-cookie'];
+    if (sc) { const m = (Array.isArray(sc) ? sc.join('; ') : String(sc)).match(/PHPSESSID=([^;]+)/); if (m) sess = 'PHPSESSID=' + m[1]; }
+    const chk = await axios.get(LM_CLIENT + 'SMSDashboard', { headers: { 'User-Agent': UA, 'Cookie': sess }, maxRedirects: 0, timeout: 10000, validateStatus: () => true });
+    const h = String(chk.data || '');
+    if (/What is/i.test(h) || h.indexOf('My SMS Numbers') < 0) return error(res, 401, 'Login failed — check username, password and captcha answer.');
+    return ok(res, { lmSession: sess, username });
+  } catch (e) { return error(res, 500, 'lm/login: ' + e.message); }
+}
+
+// ── LM 3: My Numbers (all, grouped) — 6 columns ──
+if (url === '/lm/numbers' && req.method === 'POST') {
+  try {
+    const sess = String(req.body.lmSession || '');
+    if (!sess) return error(res, 401, 'LaMix session required');
+    if (!lmThrottleOk(sess, 'numbers')) return ok(res, { throttled: true });
+    const params = { frange: '', fclient: '', sEcho: 1, iColumns: 6, iDisplayStart: 0, iDisplayLength: 10000, sSearch: '', bRegex: false, iSortCol_0: 0, sSortDir_0: 'asc', iSortingCols: 1, _: Date.now() };
+    for (let i = 0; i < 6; i++) { params['mDataProp_'+i] = i; params['sSearch_'+i] = ''; params['bRegex_'+i] = false; params['bSearchable_'+i] = true; params['bSortable_'+i] = true; }
+    const r = await axios.get(LM_CLIENT + 'res/data_smsnumbers.php', { params, headers: lmHdrs(sess), timeout: 20000, validateStatus: () => true });
+    const d = r.data;
+    if (!d || !d.aaData) return ok(res, { sessionExpired: true, numbers: [], ranges: [] });
+    const nums = d.aaData.filter(row => Array.isArray(row) && /^\d{7,15}$/.test(String(row[2]||''))).map(row => ({
+      range: lmStrip(row[0]), prefix: lmStrip(row[1]), number: lmStrip(row[2]),
+      payterm: lmStrip(row[3]), payout: lmStrip(row[4]), limits: lmStrip(row[5]) }));
+    const m = new Map();
+    nums.forEach(n => { if (!m.has(n.range)) m.set(n.range, { range: n.range, prefix: n.prefix, count: 0 }); m.get(n.range).count++; });
+    return ok(res, { numbers: nums, ranges: Array.from(m.values()), total: parseInt(d.iTotalRecords) || nums.length });
+  } catch (e) { return error(res, 500, 'lm/numbers: ' + e.message); }
+}
+
+// ── LM 4: CDR live OTP feed (today) — 7 columns ──
+if (url === '/lm/cdr' && req.method === 'POST') {
+  try {
+    const sess = String(req.body.lmSession || '');
+    if (!sess) return error(res, 401, 'LaMix session required');
+    if (!lmThrottleOk(sess, 'cdr')) return ok(res, { throttled: true });
+    const t = new Date().toISOString().slice(0, 10);
+    const params = { fdate1: t + ' 00:00:00', fdate2: t + ' 23:59:59', frange: '', fnum: '', fcli: '', fgdate: '', fgmonth: '', fgrange: '', fgnumber: '', fgcli: '', fg: 0, sEcho: 1, iColumns: 7, iDisplayStart: 0, iDisplayLength: 300, sSearch: '', bRegex: false, iSortCol_0: 0, sSortDir_0: 'desc', iSortingCols: 1, _: Date.now() };
+    for (let i = 0; i < 7; i++) { params['mDataProp_'+i] = i; params['sSearch_'+i] = ''; params['bRegex_'+i] = false; params['bSearchable_'+i] = true; params['bSortable_'+i] = true; }
+    const r = await axios.get(LM_CLIENT + 'res/data_smscdr.php', { params, headers: lmHdrs(sess, LM_CLIENT + 'SMSCDRStats'), timeout: 20000, validateStatus: () => true });
+    const d = r.data;
+    if (!d || !d.aaData) return ok(res, { sessionExpired: true, rows: [], total: 0 });
+    const rows = d.aaData.filter(row => Array.isArray(row) && /^\d{4}-\d{2}-\d{2}/.test(String(row[0]||''))).map(row => ({
+      dt: String(row[0]), range: lmStrip(row[1]), number: lmStrip(row[2]), cli: lmStrip(row[3]), message: lmStrip(row[4]) }));
+    return ok(res, { rows, total: parseInt(d.iTotalRecords) || rows.length, day: t });
+  } catch (e) { return error(res, 500, 'lm/cdr: ' + e.message); }
 }
     
  return error(res, 404, 'Route not found');
